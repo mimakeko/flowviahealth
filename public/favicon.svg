@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 48">
+  <!-- TODO: Replace with final vector logo asset. -->
+  <rect width="52" height="48" rx="10" fill="#F5F7FA"/>
+  <g fill="none" stroke="#00B2A9" stroke-width="3.5" stroke-linecap="round">
+    <path d="M7 27C7 14 16 7 29 7H42"/><path d="M13 35C13 23 21 16 33 16H42"/><path d="M20 43C20 32 27 25 38 25H42"/>
+  </g>
+  <circle cx="42" cy="7" r="3.5" fill="#1D4EDB"/><circle cx="42" cy="16" r="3.5" fill="#00B2A9"/><circle cx="42" cy="25" r="3.5" fill="#1D4EDB"/>
+</svg>
