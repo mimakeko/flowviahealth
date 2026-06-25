@@ -1,7 +1,16 @@
 node_modules/
+node_modules
 .next/
+.next
 .vercel/
 .DS_Store
 *.log
 .env*
 !.env.example
+*.zip
+*.tar
+*.tar.gz
+*.7z
+out
+dist
+qa-screenshots/

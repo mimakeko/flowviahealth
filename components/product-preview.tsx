@@ -1,5 +1,5 @@
 import { Bell, CalendarDays, CheckCircle2, LayoutDashboard, MessageSquareText, UsersRound } from "lucide-react";
-import { FlowPathIcon } from "./logo";
+import { FlowviaMark } from "./logo";
 
 const visits = [
   ["9:00 AM", "Olivia Johnson", "OT follow-up", "Completed", "success"],
@@ -20,7 +20,7 @@ export function ProductPreview({ compact = false }: { compact?: boolean }) {
         </div>
         <div className={`flex bg-mist ${compact ? "min-h-[390px]" : "min-h-[475px]"}`}>
           <aside className="hidden w-[126px] shrink-0 bg-ink px-3 py-4 text-white sm:block">
-            <FlowPathIcon className="mb-6 h-8 w-9 text-teal" />
+            <FlowviaMark className="mb-6 h-8 w-8" />
             {nav.map(([Icon, label], index) => <div key={label} className={`mb-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-[9px] ${index === 0 ? "bg-white/10 text-teal" : "text-white/60"}`}><Icon size={12}/>{label}</div>)}
           </aside>
           <div className="min-w-0 flex-1 p-3 sm:p-4">

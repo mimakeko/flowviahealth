@@ -4,7 +4,7 @@ import { ArrowRight, BellRing, CalendarCheck2, ChevronRight, GitBranch, Messages
 import { ProductPreview } from "@/components/product-preview";
 import { ProductShowcase } from "@/components/product-showcase";
 import { featureIcons, trustIcons } from "@/components/icons";
-import { FlowPathIcon, LogoLockup } from "@/components/logo";
+import { FlowviaMark, LogoLockup } from "@/components/logo";
 
 export const metadata: Metadata = {
   title: "Smarter Care Coordination for Home Health Therapy",
@@ -52,7 +52,7 @@ export default function HomePage() {
             <h1 className="display-title max-w-[660px]">Smarter care coordination for <span className="text-teal">home health therapy.</span></h1>
             <p className="body-lg mt-7 max-w-xl">Flowvia Health helps healthcare teams coordinate scheduling, patient communication, appointment reminders, and care-team workflows through modern healthcare technology.</p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row"><Link href="/sms-consent" className="btn-primary">View SMS Consent <ArrowRight size={16}/></Link><Link href="#product-previews" className="btn-secondary">See Platform Preview</Link></div>
-            <div className="mt-8 flex items-center gap-3 text-sm text-slate-500"><FlowPathIcon className="h-5 w-6 text-teal"/><span>Smarter care coordination. Better outcomes.</span></div>
+            <div className="mt-8 flex items-center gap-3 text-sm text-slate-500"><FlowviaMark className="h-5 w-5"/><span>Smarter care coordination. Better outcomes.</span></div>
           </div>
           <div className="relative z-10"><ProductPreview compact /></div>
         </div>
@@ -60,7 +60,7 @@ export default function HomePage() {
 
       <section className="border-b border-line bg-ice/55">
         <div className="container-page grid items-center gap-12 py-16 lg:grid-cols-[.65fr_1.35fr] lg:py-20">
-          <div aria-hidden="true" className="relative mx-auto flex h-52 w-64 items-center justify-center"><FlowPathIcon className="h-32 w-36 text-teal opacity-90"/><span className="absolute left-2 top-7 h-2 w-2 rounded-full bg-teal"/><span className="absolute bottom-8 right-3 h-3 w-3 rounded-full bg-blue"/><span className="absolute left-3 top-9 w-14 border-t border-dashed border-teal/50"/><span className="absolute bottom-9 right-5 w-14 border-t border-dashed border-blue/40"/></div>
+          <div aria-hidden="true" className="relative mx-auto flex h-52 w-64 items-center justify-center"><FlowviaMark className="h-32 w-32 opacity-90"/><span className="absolute left-2 top-7 h-2 w-2 rounded-full bg-teal"/><span className="absolute bottom-8 right-3 h-3 w-3 rounded-full bg-blue"/><span className="absolute left-3 top-9 w-14 border-t border-dashed border-teal/50"/><span className="absolute bottom-9 right-5 w-14 border-t border-dashed border-blue/40"/></div>
           <div><p className="eyebrow">The coordination challenge</p><h2 className="section-title mt-4 max-w-3xl">Too much care-team time is lost between the visits.</h2><p className="body-lg mt-6 max-w-3xl">Home health therapy teams spend too much time coordinating schedules, confirming visits, following up with patients, and managing fragmented communication. Flowvia Health is being designed to simplify those workflows.</p></div>
         </div>
       </section>
@@ -78,7 +78,7 @@ export default function HomePage() {
 
       <section className="section-space bg-ink text-white">
         <div className="container-page">
-          <div className="grid gap-10 lg:grid-cols-[.72fr_1.28fr] lg:items-end"><div><FlowPathIcon className="h-14 w-16 text-teal"/><h2 className="mt-7 text-3xl font-semibold leading-tight tracking-[-.03em] sm:text-4xl">Built for Healthcare Communication</h2></div><p className="max-w-2xl text-lg leading-8 text-white/65">Focused communication tools for the operational moments that keep home health therapy moving.</p></div>
+          <div className="grid gap-10 lg:grid-cols-[.72fr_1.28fr] lg:items-end"><div><FlowviaMark className="h-14 w-14"/><h2 className="mt-7 text-3xl font-semibold leading-tight tracking-[-.03em] sm:text-4xl">Built for Healthcare Communication</h2></div><p className="max-w-2xl text-lg leading-8 text-white/65">Focused communication tools for the operational moments that keep home health therapy moving.</p></div>
           <div className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-2 lg:grid-cols-3">{communication.map(([title,copy,Icon])=><article key={title} className="bg-ink p-7"><Icon className="text-teal" size={25} strokeWidth={1.7}/><h3 className="mt-6 font-semibold">{title}</h3><p className="mt-3 text-sm leading-6 text-white/55">{copy}</p></article>)}</div>
         </div>
       </section>
