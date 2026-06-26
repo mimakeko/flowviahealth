@@ -2,15 +2,19 @@ import { NextResponse } from "next/server";
 import {
   CONTACT_FROM_EMAIL,
   CONTACT_TO_EMAIL,
-  escapeHtml,
   getClientKey,
   getResendClient,
   isRateLimited,
   isReasonableLength,
   isValidEmail,
-  renderRows,
   textField,
 } from "@/lib/email";
+import {
+  buildSubmissionSubject,
+  FLOWVIA_EMAIL_BRAND,
+  renderAutoReplyEmail,
+  renderSubmissionEmail,
+} from "@/lib/email-design-system";
 
 export const runtime = "nodejs";
 
@@ -53,45 +57,57 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email service is not configured." }, { status: 500 });
     }
 
-    const html = `
-      <div style="font-family:Inter,Arial,sans-serif;color:#0A2540;line-height:1.5;">
-        <h1 style="font-size:20px;margin:0 0 16px;">New Flowvia Health website inquiry</h1>
-        <table style="border-collapse:collapse;width:100%;max-width:680px;">${renderRows([
-          ["Name", name],
-          ["Email", email],
-          ["Phone", phone],
-          ["Organization", organization],
-          ["PHI acknowledgement", "Confirmed"],
-        ])}</table>
-        <h2 style="font-size:16px;margin:24px 0 8px;">Message</h2>
-        <p style="white-space:pre-wrap;background:#F5F7FA;border:1px solid #e5e7eb;border-radius:12px;padding:16px;">${escapeHtml(message)}</p>
-        <p style="font-size:12px;color:#64748b;">Do not reply with protected health information unless an appropriate secure workflow is in place.</p>
-      </div>
-    `;
+    const submittedAt = new Date();
+    const fields = [
+      ["Name", name],
+      ["Email", email],
+      ["Phone", phone],
+      ["Organization", organization],
+      ["PHI acknowledgement", "Confirmed"],
+    ].map(([label, value]) => ({ label, value }));
 
-    const autoReplyHtml = `
-      <div style="font-family:Inter,Arial,sans-serif;color:#0A2540;line-height:1.5;">
-        <h1 style="font-size:20px;margin:0 0 16px;">Thank you for contacting Flowvia Health</h1>
-        <p>We received your message and will review it as soon as practical.</p>
-        <p>Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC.</p>
-        <p>For support, email <a href="mailto:support@flowviahealth.com">support@flowviahealth.com</a>. For privacy or SMS consent questions, email <a href="mailto:privacy@flowviahealth.com">privacy@flowviahealth.com</a>.</p>
-        <p style="font-size:13px;color:#64748b;">Please do not send protected health information, medical records, diagnoses, treatment details, or emergency requests through this public website channel.</p>
-      </div>
-    `;
+    const internalEmail = renderSubmissionEmail({
+      brand: FLOWVIA_EMAIL_BRAND,
+      title: "New Contact Form Submission",
+      eyebrow: "Flowvia Health Contact",
+      fields,
+      sections: [{ label: "Message", value: message }],
+      submittedAt,
+      notice:
+        "Do not reply with protected health information unless an appropriate secure workflow is in place. Flowvia Health is developed and operated by Onzeon Holdings LLC.",
+    });
+
+    const autoReplyEmail = renderAutoReplyEmail({
+      brand: FLOWVIA_EMAIL_BRAND,
+      title: "Thank you for contacting Flowvia Health",
+      intro:
+        "We received your message and will review it as soon as practical.",
+      paragraphs: [
+        "Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC.",
+        "For support, email support@flowviahealth.com. For privacy or SMS consent questions, email privacy@flowviahealth.com.",
+        "Please do not send protected health information, medical records, diagnoses, treatment details, or emergency requests through this public website channel.",
+      ],
+    });
 
     const [internalResult, autoReplyResult] = await Promise.all([
       resend.emails.send({
         from: CONTACT_FROM_EMAIL,
         to: CONTACT_TO_EMAIL,
         replyTo: email,
-        subject: "New Flowvia Health website inquiry",
-        html,
+        subject: buildSubmissionSubject({
+          title: "New Contact Form Submission",
+          brandName: "Flowvia Health",
+        }),
+        html: internalEmail.html,
+        text: internalEmail.text,
       }),
       resend.emails.send({
         from: CONTACT_FROM_EMAIL,
         to: email,
-        subject: "We received your message | Flowvia Health",
-        html: autoReplyHtml,
+        replyTo: email,
+        subject: "Message Received | Flowvia Health",
+        html: autoReplyEmail.html,
+        text: autoReplyEmail.text,
       }),
     ]);
 

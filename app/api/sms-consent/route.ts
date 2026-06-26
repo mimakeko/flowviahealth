@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
 import {
   CONTACT_FROM_EMAIL,
-  escapeHtml,
   getClientKey,
   getResendClient,
   isRateLimited,
   isReasonableLength,
   isValidEmail,
-  renderRows,
   textField,
 } from "@/lib/email";
+import {
+  buildSubmissionSubject,
+  FLOWVIA_EMAIL_BRAND,
+  renderAutoReplyEmail,
+  renderSubmissionEmail,
+} from "@/lib/email-design-system";
 
 export const runtime = "nodejs";
 
@@ -45,47 +49,60 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email service is not configured." }, { status: 500 });
     }
 
-    const html = `
-      <div style="font-family:Inter,Arial,sans-serif;color:#0A2540;line-height:1.5;">
-        <h1 style="font-size:20px;margin:0 0 16px;">New Flowvia Health SMS consent request</h1>
-        <table style="border-collapse:collapse;width:100%;max-width:680px;">${renderRows([
-          ["Full name", fullName],
-          ["Mobile number", mobileNumber],
-          ["Email", email],
-          ["SMS consent checkbox", "Confirmed"],
-          ["PHI disclaimer checkbox", "Confirmed"],
-        ])}</table>
-        <p style="margin-top:24px;font-size:13px;color:#64748b;">No SMS was sent from this request. SMS sending should remain disabled unless a future ENABLE_SMS_SEND=true workflow is explicitly implemented.</p>
-        <h2 style="font-size:16px;margin:24px 0 8px;">Visible confirmation SMS example</h2>
-        <p style="white-space:pre-wrap;background:#F5F7FA;border:1px solid #e5e7eb;border-radius:12px;padding:16px;">${escapeHtml(CONFIRMATION_EXAMPLE)}</p>
-      </div>
-    `;
+    const submittedAt = new Date();
+    const internalEmail = renderSubmissionEmail({
+      brand: FLOWVIA_EMAIL_BRAND,
+      title: "New SMS Consent Request",
+      eyebrow: "Flowvia Health SMS Consent",
+      fields: [
+        { label: "Full name", value: fullName },
+        { label: "Mobile number", value: mobileNumber },
+        { label: "Email", value: email },
+        { label: "SMS consent checkbox", value: "Confirmed" },
+        { label: "PHI disclaimer checkbox", value: "Confirmed" },
+      ],
+      sections: [
+        { label: "Visible confirmation SMS example", value: CONFIRMATION_EXAMPLE },
+      ],
+      submittedAt,
+      notice:
+        "No SMS was sent from this request. SMS sending should remain disabled unless a future ENABLE_SMS_SEND=true workflow is explicitly implemented.",
+    });
 
     const sends = [
       resend.emails.send({
         from: CONTACT_FROM_EMAIL,
         to: SMS_CONSENT_TO_EMAIL,
         replyTo: email || undefined,
-        subject: "New Flowvia Health SMS consent request",
-        html,
+        subject: buildSubmissionSubject({
+          title: "New SMS Consent Request",
+          brandName: "Flowvia Health",
+        }),
+        html: internalEmail.html,
+        text: internalEmail.text,
       }),
     ];
 
     if (email) {
+      const autoReplyEmail = renderAutoReplyEmail({
+        brand: FLOWVIA_EMAIL_BRAND,
+        title: "Flowvia Health SMS consent request received",
+        intro:
+          "Flowvia Health received your SMS consent request. SMS consent is not active until a confirmation text is sent and you confirm participation.",
+        paragraphs: [
+          `Example confirmation message: ${CONFIRMATION_EXAMPLE}`,
+          "Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC. Do not send protected health information through public website email or forms.",
+        ],
+      });
+
       sends.push(
         resend.emails.send({
           from: CONTACT_FROM_EMAIL,
           to: email,
-          subject: "Flowvia Health SMS consent request received",
-          html: `
-            <div style="font-family:Inter,Arial,sans-serif;color:#0A2540;line-height:1.5;">
-              <h1 style="font-size:20px;margin:0 0 16px;">SMS consent request received</h1>
-              <p>Flowvia Health received your SMS consent request. SMS consent is not active until a confirmation text is sent and you confirm participation.</p>
-              <p>Example confirmation message:</p>
-              <p style="white-space:pre-wrap;background:#F5F7FA;border:1px solid #e5e7eb;border-radius:12px;padding:16px;">${escapeHtml(CONFIRMATION_EXAMPLE)}</p>
-              <p style="font-size:13px;color:#64748b;">Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC. Do not send protected health information through public website email or forms.</p>
-            </div>
-          `,
+          replyTo: email,
+          subject: "SMS Consent Request Received | Flowvia Health",
+          html: autoReplyEmail.html,
+          text: autoReplyEmail.text,
         }),
       );
     }

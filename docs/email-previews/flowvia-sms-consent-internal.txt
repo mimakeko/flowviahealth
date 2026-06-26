@@ -1,0 +1,30 @@
+New SMS Consent Request
+
+Full name
+Cleverson De Moura Souza
+
+Mobile number
+949-555-0184
+
+Email
+onzeon@icloud.com
+
+SMS consent checkbox
+Confirmed
+
+PHI disclaimer checkbox
+Confirmed
+
+Visible confirmation SMS example
+Flowvia Health: Please reply YES to confirm you want to receive SMS appointment reminders, scheduling updates, and care coordination messages. Message frequency varies. Message and data rates may apply. Reply STOP to cancel or HELP for assistance. Terms: https://flowviahealth.com/terms Privacy: https://flowviahealth.com/privacy
+
+Submitted
+June 26, 2026 at 5:35 PM CDT
+
+No SMS was sent from this request. SMS sending should remain disabled unless a future ENABLE_SMS_SEND=true workflow is explicitly implemented.
+
+Flowvia Health
+Developed and operated by Onzeon Holdings LLC
+https://flowviahealth.com
+hello@flowviahealth.com
+support@flowviahealth.com
