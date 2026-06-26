@@ -48,7 +48,7 @@ export function SmsConsentForm() {
       <div className="rounded-xl border border-line bg-mist/70 p-4">
         <label htmlFor="sms-opt-in" className="flex cursor-pointer items-start gap-3 text-sm leading-6 text-slate-700">
           <input id="sms-opt-in" name="smsOptIn" type="checkbox" required className="mt-1 h-5 w-5 shrink-0 accent-blue" />
-          <span>I agree to receive SMS messages from Flowvia Health regarding appointment reminders, scheduling updates, care coordination, patient communication, and related service notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for assistance. I agree to the <Link href="/terms" className="font-medium text-blue underline">Terms of Service</Link> and <Link href="/privacy" className="font-medium text-blue underline">Privacy Policy</Link>.</span>
+          <span>I agree to receive SMS messages from Flowvia Health, developed and operated by Onzeon Holdings LLC, regarding appointment reminders, scheduling updates, care coordination, patient communication, and related service notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for assistance. I agree to the <Link href="/terms" className="font-medium text-blue underline">Terms of Service</Link> and <Link href="/privacy" className="font-medium text-blue underline">Privacy Policy</Link>.</span>
         </label>
       </div>
       <div className="rounded-xl border border-line bg-mist/70 p-4">

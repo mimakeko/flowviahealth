@@ -50,9 +50,9 @@ export default function HomePage() {
           <div className="relative z-10">
             <div className="mb-8"><LogoLockup /></div>
             <h1 className="display-title max-w-[660px]">Smarter care coordination for <span className="text-teal">home health therapy.</span></h1>
-            <p className="body-lg mt-7 max-w-xl">Flowvia Health helps healthcare teams coordinate scheduling, patient communication, appointment reminders, and care-team workflows through modern healthcare technology.</p>
+            <p className="body-lg mt-7 max-w-xl">Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC. It helps healthcare teams coordinate scheduling, patient communication, appointment reminders, and care-team workflows.</p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row"><Link href="/sms-consent" className="btn-primary">View SMS Consent <ArrowRight size={16}/></Link><Link href="#product-previews" className="btn-secondary">See Platform Preview</Link></div>
-            <div className="mt-8 flex items-center gap-3 text-sm text-slate-500"><FlowviaMark className="h-5 w-5"/><span>Smarter care coordination. Better outcomes.</span></div>
+            <div className="mt-8 flex flex-col gap-2 text-sm text-slate-500 sm:flex-row sm:items-center sm:gap-3"><FlowviaMark className="h-5 w-5"/><span>Developed and operated by Onzeon Holdings LLC.</span><Link href="https://www.onzeonholdings.com" className="font-semibold text-blue underline">Onzeon Holdings</Link></div>
           </div>
           <div className="relative z-10"><ProductPreview compact /></div>
         </div>
@@ -61,7 +61,7 @@ export default function HomePage() {
       <section className="border-b border-line bg-ice/55">
         <div className="container-page grid items-center gap-12 py-16 lg:grid-cols-[.65fr_1.35fr] lg:py-20">
           <div aria-hidden="true" className="relative mx-auto flex h-52 w-64 items-center justify-center"><FlowviaMark className="h-32 w-32 opacity-90"/><span className="absolute left-2 top-7 h-2 w-2 rounded-full bg-teal"/><span className="absolute bottom-8 right-3 h-3 w-3 rounded-full bg-blue"/><span className="absolute left-3 top-9 w-14 border-t border-dashed border-teal/50"/><span className="absolute bottom-9 right-5 w-14 border-t border-dashed border-blue/40"/></div>
-          <div><p className="eyebrow">The coordination challenge</p><h2 className="section-title mt-4 max-w-3xl">Too much care-team time is lost between the visits.</h2><p className="body-lg mt-6 max-w-3xl">Home health therapy teams spend too much time coordinating schedules, confirming visits, following up with patients, and managing fragmented communication. Flowvia Health is being designed to simplify those workflows.</p></div>
+          <div><p className="eyebrow">The coordination challenge</p><h2 className="section-title mt-4 max-w-3xl">Too much care-team time is lost between the visits.</h2><p className="body-lg mt-6 max-w-3xl">Home health therapy teams spend too much time coordinating schedules, confirming visits, following up with patients, and managing fragmented communication. Flowvia Health is built by Onzeon Holdings LLC to simplify those workflows.</p></div>
         </div>
       </section>
 

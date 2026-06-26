@@ -1,6 +1,8 @@
 # Flowvia Health
 
-Production-ready static marketing and compliance website for Flowvia Health, built with Next.js, TypeScript, and Tailwind CSS.
+Production-ready marketing and compliance website for Flowvia Health, a
+healthcare technology platform developed and operated by Onzeon Holdings LLC.
+Built with Next.js, TypeScript, Tailwind CSS, and Resend-backed contact routes.
 
 ## Local development
 
@@ -40,7 +42,16 @@ Optional environment variables:
 - `/hipaa`
 - `/contact`
 
-The contact form sends general inquiries to Flowvia Health support through Resend and does not store submissions in a database. The SMS consent form emails consent requests to Flowvia Health support and does not send SMS.
+The contact form sends general inquiries to Flowvia Health support through
+Resend, sends an autoresponder to the submitter, and does not store submissions
+in a database. The SMS consent form emails consent requests to Flowvia Health
+support, sends an autoresponder when the submitter provides an email address,
+and does not send SMS.
+
+## Corporate relationship
+
+Flowvia Health is developed and operated by Onzeon Holdings LLC.
+Parent company website: `https://www.onzeonholdings.com`.
 
 ## Branding
 

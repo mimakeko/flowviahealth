@@ -8,19 +8,30 @@ import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
 
 const siteUrl = "https://flowviahealth.com";
+const parentCompanyUrl = "https://www.onzeonholdings.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: { default: "Flowvia Health | Smarter Care Coordination", template: "%s | Flowvia Health" },
-  description: "Healthcare workflow and patient communication technology for home health therapy coordination.",
+  description: "Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC for home health therapy coordination, patient communication, and care-team workflows.",
+  keywords: [
+    "Flowvia Health",
+    "Onzeon Holdings LLC",
+    "healthcare technology platform",
+    "home health therapy",
+    "patient communication",
+    "appointment reminders",
+    "care coordination",
+    "SMS consent",
+  ],
   openGraph: {
     type: "website",
     url: siteUrl,
     siteName: "Flowvia Health",
     title: "Flowvia Health | Smarter Care Coordination",
-    description: "Modern scheduling, patient communication, and care-team workflow technology for home health therapy.",
+    description: "Healthcare technology developed and operated by Onzeon Holdings LLC for scheduling, patient communication, and care-team workflow coordination.",
   },
-  twitter: { card: "summary_large_image", title: "Flowvia Health", description: "Smarter care coordination for home health therapy." },
+  twitter: { card: "summary_large_image", title: "Flowvia Health", description: "Healthcare technology developed and operated by Onzeon Holdings LLC." },
   robots: { index: true, follow: true },
   icons: {
     icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
@@ -28,10 +39,53 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
+const organizationSchema = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Flowvia Health",
+  url: siteUrl,
+  email: "support@flowviahealth.com",
+  parentOrganization: {
+    "@type": "Organization",
+    name: "Onzeon Holdings LLC",
+    url: parentCompanyUrl,
+  },
+  contactPoint: [
+    {
+      "@type": "ContactPoint",
+      contactType: "customer support",
+      email: "support@flowviahealth.com",
+      url: `${siteUrl}/contact`,
+    },
+    {
+      "@type": "ContactPoint",
+      contactType: "privacy and SMS consent",
+      email: "privacy@flowviahealth.com",
+      url: `${siteUrl}/privacy`,
+    },
+  ],
+  makesOffer: {
+    "@type": "Offer",
+    itemOffered: {
+      "@type": "SoftwareApplication",
+      name: "Flowvia Health",
+      applicationCategory: "HealthcareApplication",
+      operatingSystem: "Web",
+      description:
+        "Healthcare workflow and patient communication technology for home health therapy coordination.",
+    },
+  },
+};
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body>
+        <script
+          type="application/ld+json"
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+        />
         <a href="#main-content" className="sr-only z-[100] rounded bg-white px-4 py-2 text-blue focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to content</a>
         <SiteHeader />
         <main id="main-content">{children}</main>
