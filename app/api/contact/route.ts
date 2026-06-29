@@ -74,7 +74,7 @@ export async function POST(request: Request) {
       sections: [{ label: "Message", value: message }],
       submittedAt,
       notice:
-        "Do not reply with protected health information unless an appropriate secure workflow is in place. Flowvia Health is developed and operated by Onzeon Holdings LLC.",
+        "Do not reply with protected health information unless an appropriate secure workflow is in place. Flowvia Health is owned, developed, and operated by Onzeon Holdings LLC.",
     });
 
     const autoReplyEmail = renderAutoReplyEmail({
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       intro:
         "We received your message and will review it as soon as practical.",
       paragraphs: [
-        "Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC.",
+        "Flowvia Health is a healthcare technology platform owned, developed, and operated by Onzeon Holdings LLC.",
         "For support, email support@flowviahealth.com. For privacy or SMS consent questions, email privacy@flowviahealth.com.",
         "Please do not send protected health information, medical records, diagnoses, treatment details, or emergency requests through this public website channel.",
       ],

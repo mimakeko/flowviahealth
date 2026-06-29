@@ -5,7 +5,7 @@ Project: Flowvia Health
 
 ## Public Positioning
 
-Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC. It is the live flagship product in the current Onzeon portfolio.
+Flowvia Health is a healthcare technology platform owned, developed, and operated by Onzeon Holdings LLC. It is the live flagship product in the current Onzeon portfolio.
 
 ## Implemented Locations
 

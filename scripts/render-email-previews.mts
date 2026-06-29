@@ -15,7 +15,7 @@ mkdirSync(outputDir, { recursive: true });
 
 const submittedAt = new Date("2026-06-26T17:35:00-05:00");
 const confirmationExample =
-  "Flowvia Health: Please reply YES to confirm you want to receive SMS appointment reminders, scheduling updates, and care coordination messages. Message frequency varies. Message and data rates may apply. Reply STOP to cancel or HELP for assistance. Terms: https://flowviahealth.com/terms Privacy: https://flowviahealth.com/privacy";
+  "Flowvia Health: Please reply YES to confirm you want to receive transactional healthcare SMS messages for appointment reminders, appointment confirmations, scheduling updates, therapist arrival notifications, care coordination, patient inquiries, and service notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for assistance. Terms: https://flowviahealth.com/terms Privacy: https://flowviahealth.com/privacy";
 
 const contactInternal = renderSubmissionEmail({
   brand: FLOWVIA_EMAIL_BRAND,
@@ -31,7 +31,7 @@ const contactInternal = renderSubmissionEmail({
   sections: [{ label: "Message", value: "Is this working?" }],
   submittedAt,
   notice:
-    "Do not reply with protected health information unless an appropriate secure workflow is in place. Flowvia Health is developed and operated by Onzeon Holdings LLC.",
+    "Do not reply with protected health information unless an appropriate secure workflow is in place. Flowvia Health is owned, developed, and operated by Onzeon Holdings LLC.",
 });
 
 const contactAutoReply = renderAutoReplyEmail({
@@ -39,7 +39,7 @@ const contactAutoReply = renderAutoReplyEmail({
   title: "Thank you for contacting Flowvia Health",
   intro: "We received your message and will review it as soon as practical.",
   paragraphs: [
-    "Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC.",
+    "Flowvia Health is a healthcare technology platform owned, developed, and operated by Onzeon Holdings LLC.",
     "For support, email support@flowviahealth.com. For privacy or SMS consent questions, email privacy@flowviahealth.com.",
     "Please do not send protected health information, medical records, diagnoses, treatment details, or emergency requests through this public website channel.",
   ],
@@ -59,17 +59,17 @@ const smsInternal = renderSubmissionEmail({
   sections: [{ label: "Visible confirmation SMS example", value: confirmationExample }],
   submittedAt,
   notice:
-    "No SMS was sent from this request. SMS sending should remain disabled unless a future ENABLE_SMS_SEND=true workflow is explicitly implemented.",
+    "This request records a voluntary SMS enrollment request from https://flowviahealth.com/sms-consent. The public form does not instantly send an SMS; transactional SMS is enabled only after the enrollment and confirmation process is completed.",
 });
 
 const smsAutoReply = renderAutoReplyEmail({
   brand: FLOWVIA_EMAIL_BRAND,
   title: "Flowvia Health SMS consent request received",
   intro:
-    "Flowvia Health received your SMS consent request. SMS consent is not active until a confirmation text is sent and you confirm participation.",
+    "Flowvia Health received your voluntary SMS enrollment request. SMS consent is not active until the enrollment and confirmation process is completed.",
   paragraphs: [
     `Example confirmation message: ${confirmationExample}`,
-    "Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC. Do not send protected health information through public website email or forms.",
+    "Flowvia Health is a healthcare workflow, scheduling, care coordination, and transactional healthcare messaging platform owned, developed, and operated by Onzeon Holdings LLC. Do not send protected health information through public website email or forms.",
   ],
 });
 

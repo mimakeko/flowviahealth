@@ -33,7 +33,7 @@ The working Resend contact and SMS consent flows were preserved. This pass repla
 ## Branding Improvements
 
 - Header uses Flowvia Health branding with a blue accent mark.
-- Footer states: Flowvia Health is developed and operated by Onzeon Holdings LLC.
+- Footer states: Flowvia Health is owned, developed, and operated by Onzeon Holdings LLC.
 - Footer includes Flowvia contact details and the Flowvia website.
 - Autoresponders reinforce the relationship with Onzeon Holdings LLC.
 

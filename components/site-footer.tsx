@@ -27,7 +27,7 @@ export function SiteFooter() {
           {footerEmails.map(([label, email]) => <a key={email} href={`mailto:${email}`} className="transition hover:text-teal">{label}: {email}</a>)}
         </div>
         <div className="mt-6 flex flex-col justify-between gap-3 border-t border-white/10 pt-6 text-xs leading-5 text-white/50 sm:flex-row sm:items-center">
-          <p>© 2026 Onzeon Holdings LLC. Flowvia Health is developed and operated by Onzeon Holdings LLC.</p>
+          <p>© 2026 Onzeon Holdings LLC. Flowvia Health is owned, developed, and operated by Onzeon Holdings LLC.</p>
           <p>This website is for product information only. Do not submit protected health information.</p>
         </div>
       </div>

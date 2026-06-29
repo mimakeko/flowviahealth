@@ -13,11 +13,14 @@ const parentCompanyUrl = "https://www.onzeonholdings.com";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: { default: "Flowvia Health | Smarter Care Coordination", template: "%s | Flowvia Health" },
-  description: "Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC for home health therapy coordination, patient communication, and care-team workflows.",
+  description: "Flowvia Health is a healthcare workflow, scheduling, care coordination, and transactional healthcare messaging platform owned, developed, and operated by Onzeon Holdings LLC.",
   keywords: [
     "Flowvia Health",
     "Onzeon Holdings LLC",
-    "healthcare technology platform",
+    "healthcare workflow platform",
+    "scheduling platform",
+    "care coordination platform",
+    "transactional healthcare messaging",
     "home health therapy",
     "patient communication",
     "appointment reminders",
@@ -29,9 +32,9 @@ export const metadata: Metadata = {
     url: siteUrl,
     siteName: "Flowvia Health",
     title: "Flowvia Health | Smarter Care Coordination",
-    description: "Healthcare technology developed and operated by Onzeon Holdings LLC for scheduling, patient communication, and care-team workflow coordination.",
+    description: "Healthcare workflow, scheduling, care coordination, and transactional healthcare messaging owned, developed, and operated by Onzeon Holdings LLC.",
   },
-  twitter: { card: "summary_large_image", title: "Flowvia Health", description: "Healthcare technology developed and operated by Onzeon Holdings LLC." },
+  twitter: { card: "summary_large_image", title: "Flowvia Health", description: "Healthcare workflow, scheduling, care coordination, and transactional healthcare messaging owned, developed, and operated by Onzeon Holdings LLC." },
   robots: { index: true, follow: true },
   icons: {
     icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
@@ -72,7 +75,7 @@ const organizationSchema = {
       applicationCategory: "HealthcareApplication",
       operatingSystem: "Web",
       description:
-        "Healthcare workflow and patient communication technology for home health therapy coordination.",
+        "Healthcare workflow, scheduling, care coordination, and transactional healthcare messaging platform for home health therapy coordination.",
     },
   },
 };

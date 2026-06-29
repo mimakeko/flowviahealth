@@ -14,12 +14,12 @@ Project: Flowvia Health
 ## Standard Controls
 
 - Required contact fields: name, valid email, message, PHI acknowledgement.
-- SMS consent requires full name, mobile number, opt-in, and PHI disclaimer.
+- SMS enrollment requires full name, mobile number, explicit user-initiated SMS consent, and PHI disclaimer before the server accepts the request. The public SMS consent checkbox remains visible, unchecked by default, and not browser-forced.
 - Abuse controls: honeypot/minimum submit time on contact, in-memory rate limiting, maximum field lengths.
 - Safety controls: HTML escaping, generic errors to users, server-side logging without secrets.
 - Contact route sends internal notification and submitter autoresponder.
 - SMS consent route sends internal notification and submitter autoresponder when email is supplied.
-- No SMS is sent from the public SMS consent form.
+- The public SMS consent form records a voluntary enrollment request. It does not instantly send an SMS; transactional SMS is enabled only after enrollment and confirmation are completed.
 
 ## Remaining Verification
 

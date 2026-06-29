@@ -50,9 +50,9 @@ export default function HomePage() {
           <div className="relative z-10">
             <div className="mb-8"><LogoLockup /></div>
             <h1 className="display-title max-w-[660px]">Smarter care coordination for <span className="text-teal">home health therapy.</span></h1>
-            <p className="body-lg mt-7 max-w-xl">Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC. It helps healthcare teams coordinate scheduling, patient communication, appointment reminders, and care-team workflows.</p>
+            <p className="body-lg mt-7 max-w-xl">Flowvia Health is a healthcare technology platform owned, developed, and operated by Onzeon Holdings LLC. It helps healthcare teams coordinate scheduling, patient communication, appointment reminders, and care-team workflows.</p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row"><Link href="/sms-consent" className="btn-primary">View SMS Consent <ArrowRight size={16}/></Link><Link href="#product-previews" className="btn-secondary">See Platform Preview</Link></div>
-            <div className="mt-8 flex flex-col gap-2 text-sm text-slate-500 sm:flex-row sm:items-center sm:gap-3"><FlowviaMark className="h-5 w-5"/><span>Developed and operated by Onzeon Holdings LLC.</span><Link href="https://www.onzeonholdings.com" className="font-semibold text-blue underline">Onzeon Holdings</Link></div>
+            <div className="mt-8 flex flex-col gap-2 text-sm text-slate-500 sm:flex-row sm:items-center sm:gap-3"><FlowviaMark className="h-5 w-5"/><span>Owned, developed, and operated by Onzeon Holdings LLC.</span><Link href="https://www.onzeonholdings.com" className="font-semibold text-blue underline">Onzeon Holdings</Link></div>
           </div>
           <div className="relative z-10"><ProductPreview compact /></div>
         </div>

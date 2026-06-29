@@ -18,7 +18,7 @@ import {
 export const runtime = "nodejs";
 
 const SMS_CONSENT_TO_EMAIL = "support@flowviahealth.com";
-const CONFIRMATION_EXAMPLE = "Flowvia Health: Please reply YES to confirm you want to receive SMS appointment reminders, scheduling updates, and care coordination messages. Message frequency varies. Message and data rates may apply. Reply STOP to cancel or HELP for assistance. Terms: https://flowviahealth.com/terms Privacy: https://flowviahealth.com/privacy";
+const CONFIRMATION_EXAMPLE = "Flowvia Health: Please reply YES to confirm you want to receive transactional healthcare SMS messages for appointment reminders, appointment confirmations, scheduling updates, therapist arrival notifications, care coordination, patient inquiries, and service notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for assistance. Terms: https://flowviahealth.com/terms Privacy: https://flowviahealth.com/privacy";
 
 export async function POST(request: Request) {
   try {
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       !phiDisclaimer ||
       (email && !isValidEmail(email))
     ) {
-      return NextResponse.json({ error: "Please complete the required fields." }, { status: 400 });
+      return NextResponse.json({ error: "To enroll, enter your mobile number and provide explicit SMS consent." }, { status: 400 });
     }
 
     if (isRateLimited(getClientKey(request, email || mobileNumber))) {
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
       ],
       submittedAt,
       notice:
-        "No SMS was sent from this request. SMS sending should remain disabled unless a future ENABLE_SMS_SEND=true workflow is explicitly implemented.",
+        "This request records a voluntary SMS enrollment request from https://flowviahealth.com/sms-consent. The public form does not instantly send an SMS; transactional SMS is enabled only after the enrollment and confirmation process is completed.",
     });
 
     const sends = [
@@ -88,10 +88,10 @@ export async function POST(request: Request) {
         brand: FLOWVIA_EMAIL_BRAND,
         title: "Flowvia Health SMS consent request received",
         intro:
-          "Flowvia Health received your SMS consent request. SMS consent is not active until a confirmation text is sent and you confirm participation.",
+          "Flowvia Health received your voluntary SMS enrollment request. SMS consent is not active until the enrollment and confirmation process is completed.",
         paragraphs: [
           `Example confirmation message: ${CONFIRMATION_EXAMPLE}`,
-          "Flowvia Health is a healthcare technology platform developed and operated by Onzeon Holdings LLC. Do not send protected health information through public website email or forms.",
+          "Flowvia Health is a healthcare workflow, scheduling, care coordination, and transactional healthcare messaging platform owned, developed, and operated by Onzeon Holdings LLC. Do not send protected health information through public website email or forms.",
         ],
       });
 

@@ -5,8 +5,8 @@ Project: Flowvia Health
 
 ## Improvements Completed
 
-- Flowvia Health now states it is developed and operated by Onzeon Holdings LLC.
-- SMS consent page includes opt-in disclosure, STOP/HELP language, message frequency, data rates, and no-sale/no-sharing language for mobile/SMS consent data.
+- Flowvia Health now states it is owned, developed, and operated by Onzeon Holdings LLC.
+- SMS consent page includes voluntary opt-in disclosure, STOP/HELP language, message frequency, data rates, no-sale/no-sharing language for mobile/SMS consent data, and the official opt-in URL.
 - Privacy Policy includes SMS consent, mobile-number privacy, no sale/sharing, and parent-company relationship.
 - Terms include SMS program terms, no emergency use, no medical advice, and parent-company relationship.
 - HIPAA page clarifies the public website boundary and future compliance dependency.
@@ -24,5 +24,5 @@ Project: Flowvia Health
 
 - Fix `www.flowviahealth.com` TLS/domain configuration.
 - Verify Resend production delivery and autoresponders.
-- Capture screenshots of SMS consent, privacy, terms, and contact pages for Twilio submission.
+- Capture screenshots of SMS consent, privacy, terms, and contact pages for Telnyx/Twilio submission.
 - Consider DMARC enforcement after all senders are aligned.
