@@ -5,7 +5,8 @@ import { useState } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 
 const PHI_DISCLAIMER = "I understand this SMS consent request form is for communication preferences only and should not be used to submit protected health information, medical records, diagnoses, treatment details, or emergency requests.";
-const SMS_DISCLOSURE = "By checking this box, I expressly consent to enroll in Flowvia Health SMS Notifications and receive transactional healthcare text messages from Flowvia Health, owned, developed, and operated by Onzeon Holdings LLC, related to appointment reminders, appointment confirmations, scheduling updates, therapist arrival notifications, care coordination, responses to scheduling questions, patient inquiries, and other healthcare service notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for assistance. Consent is not a condition of receiving healthcare services.";
+const SMS_DISCLOSURE_OPENING = "By checking this box, I expressly consent to enroll in Flowvia Health SMS Notifications";
+const SMS_DISCLOSURE = "and receive transactional healthcare text messages from Flowvia Health, owned, developed, and operated by Onzeon Holdings LLC, related to appointment reminders, appointment confirmations, scheduling updates, therapist arrival notifications, care coordination, responses to scheduling questions, patient inquiries, and other healthcare service notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for assistance. Consent is not a condition of receiving healthcare services.";
 
 export function SmsConsentForm() {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -60,7 +61,7 @@ export function SmsConsentForm() {
       <div className="rounded-xl border border-line bg-mist/70 p-4">
         <label htmlFor="sms-opt-in" className="flex cursor-pointer items-start gap-3 text-sm leading-6 text-slate-700">
           <input id="sms-opt-in" name="smsOptIn" type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-blue" />
-          <span>{SMS_DISCLOSURE} I agree to the <Link href="/terms" className="font-medium text-blue underline">Terms of Service</Link> and <Link href="/privacy" className="font-medium text-blue underline">Privacy Policy</Link>.</span>
+          <span><strong className="font-semibold text-ink">{SMS_DISCLOSURE_OPENING}</strong> {SMS_DISCLOSURE} I agree to the <Link href="/terms" className="font-medium text-blue underline">Terms of Service</Link> and <Link href="/privacy" className="font-medium text-blue underline">Privacy Policy</Link>.</span>
         </label>
       </div>
       <div className="rounded-xl border border-line bg-mist/70 p-4">

@@ -28,7 +28,7 @@ export default function SmsConsentPage() {
             <p className="mt-6 text-sm leading-6 text-slate-500">Review our <Link href="/privacy" className="font-semibold text-blue underline">Privacy Policy</Link> and <Link href="/terms" className="font-semibold text-blue underline">Terms of Service</Link>. SMS help/support: <a href="mailto:support@flowviahealth.com" className="font-semibold text-blue underline">support@flowviahealth.com</a>. SMS privacy/consent questions: <a href="mailto:privacy@flowviahealth.com" className="font-semibold text-blue underline">privacy@flowviahealth.com</a>.</p>
           </div>
           <div className="rounded-[24px] border border-line bg-white p-6 shadow-soft sm:p-9">
-            <div className="mb-8 border-b border-line pb-6"><p className="eyebrow">Opt in</p><h2 className="mt-3 text-2xl font-semibold tracking-[-.025em]">Provide your consent</h2><p className="mt-2 text-sm leading-6 text-slate-500">All fields marked required must be completed. Submitting this form does not instantly send an SMS; it starts the enrollment process for Flowvia Health transactional healthcare messaging.</p></div>
+            <div className="mb-8 border-b border-line pb-6"><p className="eyebrow">Opt in</p><h2 className="mt-3 text-2xl font-semibold tracking-[-.025em]">Provide your consent</h2><p className="mt-2 text-sm leading-6 text-slate-500">To enroll in Flowvia Health transactional SMS notifications, provide your mobile phone number and check the consent box below. Email is optional. Submitting this form begins the enrollment process and does not immediately send SMS messages.</p></div>
             <SmsConsentForm />
           </div>
         </div>
