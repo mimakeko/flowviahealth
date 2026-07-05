@@ -44,7 +44,12 @@ Internal dashboard/admin/workspace routes:
 - `/admin/referrals`: admin referral operations queue.
 - `/admin/referrals/new`: manual fake-data referral intake for pilot testing.
 - `/admin/referrals/[id]`: referral detail, assignment, visit, and audit view.
+- `/admin/visits`: admin visit operations queue.
+- `/admin/visits/new`: manual fake-data visit scheduling.
+- `/admin/visits/[id]`: visit lifecycle detail and audit view.
 - `/admin/messages`: read-only SMS consent/message ledger.
+- `/admin/health`: admin-only cloud pilot health center.
+- `/admin/audit`: admin-only audit trail with safe metadata summaries.
 - `/my-work`: therapist demo worklist.
 
 Internal routes use the shared dashboard shell and sidebar after pilot login. Public pages use the public website header/footer.
@@ -154,6 +159,11 @@ Protected routes:
 - `/admin/referrals`
 - `/admin/referrals/new`
 - `/admin/referrals/[id]`
+- `/admin/visits`
+- `/admin/visits/new`
+- `/admin/visits/[id]`
+- `/admin/health`
+- `/admin/audit`
 - `/my-work`
 
 Public or webhook routes that remain unprotected:
@@ -198,6 +208,19 @@ Also run readiness guardrails:
 pnpm cloud:readiness
 pnpm hipaa:readiness
 ```
+
+## Daily pilot workflow
+
+Admins should run each pilot day from the internal dashboard shell:
+
+1. Open `/admin/health` and confirm deploy target, data mode, database pooler mode, webhook signing, Telnyx readiness, SMS store mode, AI mock/no-PHI state, and latest activity timestamps.
+2. Open `/admin/messages` and review the Message Ledger for consent state, masked phone values, latest inbound keyword, webhook activity, and delivery status. Do not use bulk messaging.
+3. Open `/admin/referrals`, filter for `New`, `Contacted`, or `Needs scheduling`, then assign therapists and schedule visits from referral detail pages.
+4. Open `/admin/visits`, filter for `Upcoming`, `Needs scheduling`, or in-progress statuses, then update only operational lifecycle status and no-PHI notes.
+5. Have therapists use `/my-work` for their assigned referrals and visits. Therapist actions remain limited to operational status and notes; no assignment, SMS send, or bulk controls are exposed.
+6. Open `/admin/audit` and review recent audit events for expected status changes, assignment changes, visit updates, SMS consent events, and permission denials.
+7. Keep all notes free of PHI: no diagnosis, symptoms, treatment details, medication, emergency details, wound details, therapy plans, pain scores, full addresses, or clinical narratives.
+8. Keep real SMS testing personal-number-only. `FLOWVIA_ALLOW_REAL_SMS_TEST` must stay `false` except during an explicit controlled owner-phone test window.
 
 ## Supabase staging checks
 

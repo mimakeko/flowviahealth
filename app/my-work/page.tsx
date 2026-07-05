@@ -59,6 +59,29 @@ type TherapistWorkReferral = {
   zip: string | null;
 };
 
+function isSameOperationsDay(value: Date | string | null | undefined) {
+  if (!value) return false;
+  const itemDate = new Date(value);
+  const now = new Date();
+  return itemDate.toDateString() === now.toDateString();
+}
+
+function referralWorkLabel(referral: TherapistWorkReferral) {
+  if (referral.status === "new") return "Needs contact";
+  if (referral.status === "contacted") return "Ready to schedule";
+  if (referral.status === "scheduled") return "Upcoming visit";
+  if (referral.status === "active") return "In progress";
+  if (referral.status === "completed") return "Completed recently";
+  return statusLabel(referral.status);
+}
+
+function visitWorkLabel(visit: TherapistWorkVisit) {
+  if (visit.status === "scheduled") return "Upcoming visit";
+  if (visit.status === "in_progress") return "In progress";
+  if (visit.status === "completed") return isSameOperationsDay(visit.scheduledAt) ? "Completed today" : "Completed recently";
+  return statusLabel(visit.status);
+}
+
 async function therapistReferralAction(formData: FormData) {
   "use server";
 
@@ -314,6 +337,7 @@ export default async function MyWorkPage({
       })
     : [];
   const assignedReferrals = referrals as TherapistWorkReferral[];
+  const assignedVisitCount = assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + referral.visits.length, 0);
 
   return (
     <div>
@@ -359,16 +383,35 @@ export default async function MyWorkPage({
         ) : null}
 
         <div className="mt-8 grid gap-5">
+          {selectedTherapistId ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-lg border border-line bg-white p-5">
+                <p className="text-sm font-semibold text-slate-600">Assigned referrals</p>
+                <p className="mt-2 text-3xl font-semibold text-ink">{assignedReferrals.length}</p>
+              </div>
+              <div className="rounded-lg border border-line bg-white p-5">
+                <p className="text-sm font-semibold text-slate-600">Assigned visits</p>
+                <p className="mt-2 text-3xl font-semibold text-ink">{assignedVisitCount}</p>
+              </div>
+            </div>
+          ) : null}
+
           {assignedReferrals.map((referral: TherapistWorkReferral) => (
             <article key={referral.id} className="rounded-lg border border-line bg-white p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned referral</p>
                   <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h2>
                   <p className="mt-1 text-sm text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
                 </div>
-                <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>
-                  {statusLabel(referral.status)}
-                </span>
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex w-fit rounded-md bg-ice px-2 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">
+                    {referralWorkLabel(referral)}
+                  </span>
+                  <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>
+                    {statusLabel(referral.status)}
+                  </span>
+                </div>
               </div>
 
               <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
@@ -383,8 +426,14 @@ export default async function MyWorkPage({
                   {referral.visits.map((visit: TherapistWorkVisit) => (
                     <div key={visit.id} className="rounded-lg border border-line p-4">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm font-semibold text-ink">{formatDateTime(visit.scheduledAt)}</p>
-                        <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(visit.status)}`}>{statusLabel(visit.status)}</span>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned visit</p>
+                          <p className="mt-1 text-sm font-semibold text-ink">{formatDateTime(visit.scheduledAt)}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <span className="inline-flex w-fit rounded-md bg-ice px-2 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">{visitWorkLabel(visit)}</span>
+                          <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(visit.status)}`}>{statusLabel(visit.status)}</span>
+                        </div>
                       </div>
                       <p className="mt-2 text-sm text-slate-600">{visit.notes || "No operational visit note."}</p>
                       <form action={therapistVisitAction} className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">

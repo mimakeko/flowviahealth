@@ -41,6 +41,7 @@ type ReferralDetailVisit = {
   notes: string | null;
   scheduledAt: Date | string | null;
   status: string;
+  therapist: { name: string } | null;
   therapistId: string | null;
 };
 
@@ -50,6 +51,21 @@ type AuditLogListItem = {
   actorType: string;
   createdAt: Date | string;
 };
+
+const REFERRAL_WORKFLOW_STAGES = ["new", "contacted", "scheduled", "active", "completed", "canceled"] as const;
+
+function referralNextSteps(status: string) {
+  if (status === "new") return "Contact the patient, confirm SMS consent readiness, and assign a therapist.";
+  if (status === "contacted") return "Assign a therapist and schedule the first visit.";
+  if (status === "scheduled") return "Monitor the upcoming visit and keep the operational note free of PHI.";
+  if (status === "active") return "Complete the current visit or schedule the next follow-up.";
+  if (status === "completed" || status === "canceled") return "Read-only pilot summary. Review audit events before reopening this fake workflow.";
+  return "Review status, therapist assignment, and visit readiness.";
+}
+
+function isUpcomingVisit(visit: ReferralDetailVisit) {
+  return Boolean(visit.scheduledAt && !["completed", "canceled", "no_show"].includes(visit.status));
+}
 
 async function updateReferralAction(formData: FormData) {
   "use server";
@@ -262,6 +278,7 @@ export default async function ReferralDetailPage({
   const referralVisits = referral.visits as ReferralDetailVisit[];
   const referralVisitIds = referralVisits.map((visit: ReferralDetailVisit) => visit.id);
   const therapistOptions = therapists as TherapistOption[];
+  const upcomingVisits = referralVisits.filter(isUpcomingVisit);
 
   const [auditLogs, smsConsent] = await Promise.all([
     prisma.auditLog.findMany({
@@ -279,6 +296,7 @@ export default async function ReferralDetailPage({
     }),
   ]);
   const referralAuditLogs = auditLogs as AuditLogListItem[];
+  const smsReadiness = smsConsent?.status || "none";
   const telnyx = getTelnyxConfigStatus();
 
   return (
@@ -301,6 +319,30 @@ export default async function ReferralDetailPage({
             </span>
           </div>
 
+          <div className="mt-6 rounded-lg border border-line bg-slate-50 p-4">
+            <div className="flex flex-wrap gap-2">
+              {REFERRAL_WORKFLOW_STAGES.map((stage) => (
+                <span key={stage} className={`inline-flex min-h-8 items-center rounded-md px-3 text-xs font-semibold ring-1 ${stage === referral.status ? statusClassName(stage) : "bg-white text-slate-500 ring-line"}`}>
+                  {statusLabel(stage)}
+                </span>
+              ))}
+            </div>
+            <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+              <div>
+                <p className="font-semibold text-ink">Current status</p>
+                <p className="mt-1 text-slate-600">{statusLabel(referral.status)}</p>
+              </div>
+              <div>
+                <p className="font-semibold text-ink">Next step</p>
+                <p className="mt-1 text-slate-600">{referralNextSteps(referral.status)}</p>
+              </div>
+              <div>
+                <p className="font-semibold text-ink">Upcoming visits</p>
+                <p className="mt-1 text-slate-600">{upcomingVisits.length > 0 ? `${upcomingVisits.length} active/upcoming` : "None scheduled"}</p>
+              </div>
+            </div>
+          </div>
+
           <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
             <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{redactPhone(referral.phone)}</dd></div>
             <div><dt className="font-semibold text-ink">Email</dt><dd className="mt-1 text-slate-600">{referral.email || "Not provided"}</dd></div>
@@ -310,10 +352,18 @@ export default async function ReferralDetailPage({
             <div><dt className="font-semibold text-ink">Created</dt><dd className="mt-1 text-slate-600">{formatDateTime(referral.createdAt)}</dd></div>
           </dl>
 
-          <div className="mt-5 rounded-lg border border-line bg-slate-50 p-4 text-sm leading-6 text-slate-700">
-            <p className="font-semibold text-ink">SMS readiness only</p>
-            <p className="mt-1">Consent: {smsConsent?.status ? statusLabel(smsConsent.status) : "No enrollment found"} · Template: safe transactional templates available · Real SMS gate: {telnyx.realSmsTestsEnabled ? "On" : "Off"}</p>
-            <p className="mt-1 text-xs text-slate-500">SMS send disabled in this workflow. Controlled SMS tests require `FLOWVIA_ALLOW_REAL_SMS_TEST=true`, personal-number-only testing, and no PHI.</p>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="rounded-lg border border-line bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+              <p className="font-semibold text-ink">Assignment and schedule</p>
+              <p className="mt-1">Therapist: {referral.assignedTherapist?.name || "Unassigned"}</p>
+              <p className="mt-1">Next visit: {upcomingVisits[0] ? `${formatDateTime(upcomingVisits[0].scheduledAt)} · ${upcomingVisits[0].therapist?.name || "Unassigned"}` : "Not scheduled"}</p>
+            </div>
+            <div className="rounded-lg border border-line bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+              <p className="font-semibold text-ink">SMS consent readiness</p>
+              <p className="mt-1">Phone: {redactPhone(referral.phone)} · Consent: {statusLabel(smsReadiness)}</p>
+              <p className="mt-1">Template: safe transactional templates available · Real SMS gate: {telnyx.realSmsTestsEnabled ? "On" : "Off"}</p>
+              <p className="mt-1 text-xs text-slate-500">SMS send disabled in this workflow. Controlled SMS tests require `FLOWVIA_ALLOW_REAL_SMS_TEST=true`, personal-number-only testing, and no PHI.</p>
+            </div>
           </div>
 
           <BlockedNoteAlert className="mt-5" searchParams={query} />

@@ -1,8 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ClipboardList, Plus } from "lucide-react";
+import type { Prisma } from "@prisma/client";
 import { getPrismaClient } from "@/lib/db/prisma";
-import { formatDate, requirePilotOperationsAccess, statusClassName, statusLabel } from "@/lib/pilot/ops";
+import {
+  formatDate,
+  REFERRAL_STATUSES,
+  requirePilotOperationsAccess,
+  statusClassName,
+  statusLabel,
+  type ReferralStatusValue,
+} from "@/lib/pilot/ops";
 
 export const metadata: Metadata = {
   title: "Referral Operations",
@@ -21,16 +29,47 @@ type ReferralListRow = {
   zip: string | null;
 };
 
-export default async function AdminReferralsPage() {
+type TherapistFilterOption = {
+  id: string;
+  name: string;
+};
+
+export default async function AdminReferralsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ group?: string; status?: string; therapistId?: string }>;
+}) {
   requirePilotOperationsAccess();
 
+  const params = await searchParams;
+  const selectedStatus = REFERRAL_STATUSES.includes(params?.status as ReferralStatusValue) ? (params?.status as ReferralStatusValue) : "";
+  const selectedTherapistId = params?.therapistId || "";
+  const selectedGroup = params?.group === "needs_scheduling" ? "needs_scheduling" : "";
+  const needsSchedulingStatuses: ReferralStatusValue[] = ["new", "contacted"];
+  const referralFilters: Prisma.PatientReferralWhereInput[] = [];
+
+  if (selectedStatus) referralFilters.push({ status: selectedStatus });
+  if (selectedTherapistId === "unassigned") referralFilters.push({ assignedTherapistId: null });
+  if (selectedTherapistId && selectedTherapistId !== "unassigned") referralFilters.push({ assignedTherapistId: selectedTherapistId });
+  if (selectedGroup === "needs_scheduling") {
+    referralFilters.push({ status: { in: needsSchedulingStatuses }, visits: { none: {} } });
+  }
+
   const prisma = getPrismaClient();
-  const referrals = await prisma.patientReferral.findMany({
-    include: { assignedTherapist: true },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
+  const [referrals, therapists] = await Promise.all([
+    prisma.patientReferral.findMany({
+      include: { assignedTherapist: true },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      where: referralFilters.length > 0 ? { AND: referralFilters } : undefined,
+    }),
+    prisma.therapist.findMany({
+      orderBy: { name: "asc" },
+      where: { active: true },
+    }),
+  ]);
   const referralRows = referrals as ReferralListRow[];
+  const therapistOptions = therapists as TherapistFilterOption[];
 
   return (
     <div className="grid gap-8">
@@ -48,7 +87,38 @@ export default async function AdminReferralsPage() {
           </Link>
         </div>
 
-        <div className="mt-8 overflow-x-auto rounded-lg border border-line bg-white">
+        <form className="rounded-lg border border-line bg-white p-5">
+          <div className="grid gap-4 md:grid-cols-4">
+            <label className="text-sm font-semibold text-ink">
+              Referral status
+              <select className="field" name="status" defaultValue={selectedStatus}>
+                <option value="">All statuses</option>
+                {REFERRAL_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-ink">
+              Therapist
+              <select className="field" name="therapistId" defaultValue={selectedTherapistId}>
+                <option value="">All therapists</option>
+                <option value="unassigned">Unassigned</option>
+                {therapistOptions.map((therapist: TherapistFilterOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-ink">
+              Queue
+              <select className="field" name="group" defaultValue={selectedGroup}>
+                <option value="">All referrals</option>
+                <option value="needs_scheduling">Needs scheduling</option>
+              </select>
+            </label>
+            <div className="flex items-end gap-2">
+              <button className="btn-primary w-full" type="submit">Apply</button>
+              <Link href="/admin/referrals" className="btn-secondary w-full justify-center">Reset</Link>
+            </div>
+          </div>
+        </form>
+
+        <div className="overflow-x-auto rounded-lg border border-line bg-white">
           <table className="min-w-full divide-y divide-line text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
               <tr>

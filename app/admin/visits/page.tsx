@@ -1,8 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CalendarClock, Plus } from "lucide-react";
+import type { Prisma } from "@prisma/client";
 import { getPrismaClient } from "@/lib/db/prisma";
-import { formatDateTime, requirePilotOperationsAccess, statusClassName, statusLabel } from "@/lib/pilot/ops";
+import {
+  formatDateTime,
+  requirePilotOperationsAccess,
+  statusClassName,
+  statusLabel,
+  type VisitStatusValue,
+  VISIT_STATUSES,
+} from "@/lib/pilot/ops";
 
 export const metadata: Metadata = {
   title: "Visit Operations",
@@ -23,31 +31,62 @@ type VisitListRow = {
   therapist: { name: string } | null;
 };
 
-export default async function AdminVisitsPage() {
+type TherapistFilterOption = {
+  id: string;
+  name: string;
+};
+
+export default async function AdminVisitsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ group?: string; status?: string; therapistId?: string }>;
+}) {
   requirePilotOperationsAccess();
 
+  const params = await searchParams;
+  const selectedStatus = VISIT_STATUSES.includes(params?.status as VisitStatusValue) ? (params?.status as VisitStatusValue) : "";
+  const selectedTherapistId = params?.therapistId || "";
+  const selectedGroup = params?.group === "upcoming" || params?.group === "unscheduled" ? params.group : "";
+  const now = new Date();
+  const upcomingStatuses: VisitStatusValue[] = ["scheduled", "in_progress"];
+  const visitFilters: Prisma.VisitWhereInput[] = [];
+
+  if (selectedStatus) visitFilters.push({ status: selectedStatus });
+  if (selectedTherapistId === "unassigned") visitFilters.push({ therapistId: null });
+  if (selectedTherapistId && selectedTherapistId !== "unassigned") visitFilters.push({ therapistId: selectedTherapistId });
+  if (selectedGroup === "upcoming") visitFilters.push({ scheduledAt: { gte: now }, status: { in: upcomingStatuses } });
+  if (selectedGroup === "unscheduled") visitFilters.push({ OR: [{ scheduledAt: null }, { status: "unscheduled" }] });
+
   const prisma = getPrismaClient();
-  const visits = await prisma.visit.findMany({
-    include: {
-      referral: {
-        select: {
-          city: true,
-          id: true,
-          patientName: true,
-          status: true,
-          zip: true,
+  const [visits, therapists] = await Promise.all([
+    prisma.visit.findMany({
+      include: {
+        referral: {
+          select: {
+            city: true,
+            id: true,
+            patientName: true,
+            status: true,
+            zip: true,
+          },
+        },
+        therapist: {
+          select: {
+            name: true,
+          },
         },
       },
-      therapist: {
-        select: {
-          name: true,
-        },
-      },
-    },
-    orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
-    take: 100,
-  });
+      orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
+      take: 100,
+      where: visitFilters.length > 0 ? { AND: visitFilters } : undefined,
+    }),
+    prisma.therapist.findMany({
+      orderBy: { name: "asc" },
+      where: { active: true },
+    }),
+  ]);
   const visitRows = visits as VisitListRow[];
+  const therapistOptions = therapists as TherapistFilterOption[];
 
   return (
     <div className="grid gap-8">
@@ -64,6 +103,40 @@ export default async function AdminVisitsPage() {
           New visit
         </Link>
       </div>
+
+      <form className="rounded-lg border border-line bg-white p-5">
+        <div className="grid gap-4 md:grid-cols-5">
+          <label className="text-sm font-semibold text-ink">
+            Visit status
+            <select className="field" name="status" defaultValue={selectedStatus}>
+              <option value="">All statuses</option>
+              {VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-ink">
+            Therapist
+            <select className="field" name="therapistId" defaultValue={selectedTherapistId}>
+              <option value="">All therapists</option>
+              <option value="unassigned">Unassigned</option>
+              {therapistOptions.map((therapist: TherapistFilterOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-ink">
+            Queue
+            <select className="field" name="group" defaultValue={selectedGroup}>
+              <option value="">All visits</option>
+              <option value="upcoming">Upcoming</option>
+              <option value="unscheduled">Needs scheduling</option>
+            </select>
+          </label>
+          <div className="flex items-end md:col-span-2">
+            <div className="grid w-full grid-cols-2 gap-2">
+              <button className="btn-primary justify-center" type="submit">Apply</button>
+              <Link href="/admin/visits" className="btn-secondary justify-center">Reset</Link>
+            </div>
+          </div>
+        </div>
+      </form>
 
       <div className="overflow-hidden rounded-lg border border-line bg-white">
         {visitRows.map((visit: VisitListRow) => (

@@ -4,6 +4,7 @@ node_modules
 .next
 .vercel/
 .DS_Store
+tsconfig.tsbuildinfo
 *.log
 .env*
 !.env.example

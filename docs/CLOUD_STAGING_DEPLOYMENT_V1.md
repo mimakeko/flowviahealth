@@ -130,6 +130,8 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
     - `/admin/referrals`
     - `/admin/visits`
     - `/admin/messages`
+    - `/admin/health`
+    - `/admin/audit`
 
 20. Confirm Message Ledger says:
 
@@ -193,11 +195,16 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 
 1. Open `/admin/health` and confirm deploy target, data mode, database URL mode, webhook signing, Telnyx config, SMS store mode, and latest activity timestamps look healthy.
 2. Open `/admin/messages` and confirm Cloud webhook last seen, latest inbound keyword, consent state, and Message Ledger rows are current.
-3. Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
-4. Confirm Vercel logs show no 500s on `/dashboard`, `/admin/referrals`, `/admin/visits`, `/admin/messages`, or `/admin/health`.
-5. Confirm no `EMAXCONNSESSION` errors are present.
-6. Confirm no TLS or certificate errors are present.
-7. Confirm data mode remains `personal_test` or `phi_blocked`; never enable PHI for the pilot.
+3. Open `/admin/referrals`, filter for `New`, `Contacted`, or `Needs scheduling`, then update assignment and visit scheduling only with fake pilot data.
+4. Open `/admin/visits`, filter for `Upcoming`, `Needs scheduling`, or in-progress visits, then update lifecycle status and no-PHI operational notes.
+5. Have therapists review `/my-work`; therapist actions stay limited to operational status and note updates, with no assignment, SMS send, or bulk controls.
+6. Open `/admin/audit` and confirm recent status, assignment, visit, SMS consent, and permission events look expected with safe metadata only.
+7. Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
+8. Confirm Vercel logs show no 500s on `/dashboard`, `/admin/referrals`, `/admin/visits`, `/admin/messages`, `/admin/health`, or `/admin/audit`.
+9. Confirm no `EMAXCONNSESSION` errors are present.
+10. Confirm no TLS or certificate errors are present.
+11. Confirm data mode remains `personal_test` or `phi_blocked`; never enable PHI for the pilot.
+12. Remind operators that notes must not include diagnosis, symptoms, treatment details, medication, emergency details, wound details, therapy plans, pain scores, full addresses, or clinical narratives.
 
 Optional terminal checks:
 

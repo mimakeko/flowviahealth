@@ -8,6 +8,7 @@ import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardr
 import { requirePilotSession } from "@/lib/pilot/auth";
 import {
   dateTimeLocalValue,
+  FLOWVIA_OPERATIONS_TIME_ZONE,
   formatDateTime,
   optionalDateField,
   optionalTextField,
@@ -38,6 +39,17 @@ type AuditLogListItem = {
   actorType: string;
   createdAt: Date | string;
 };
+
+const VISIT_LIFECYCLE_STAGES = ["scheduled", "in_progress", "completed", "no_show", "canceled"] as const;
+
+function visitNextSteps(status: string) {
+  if (status === "scheduled") return "Confirm therapist readiness and monitor the upcoming visit.";
+  if (status === "in_progress") return "Complete the visit when done, or mark no-show/canceled if the fake workflow changes.";
+  if (status === "completed") return "Review the operational summary and audit trail. Do not add clinical details.";
+  if (status === "no_show") return "Record only operational follow-up needs and keep any note free of PHI.";
+  if (status === "canceled") return "Review the canceled workflow summary and audit trail before rescheduling.";
+  return "Schedule the visit or assign a therapist before moving the lifecycle forward.";
+}
 
 async function updateVisitAction(formData: FormData) {
   "use server";
@@ -172,6 +184,30 @@ export default async function VisitDetailPage({
             <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(visit.status)}`}>{statusLabel(visit.status)}</span>
           </div>
 
+          <div className="mt-6 rounded-lg border border-line bg-slate-50 p-4">
+            <div className="flex flex-wrap gap-2">
+              {VISIT_LIFECYCLE_STAGES.map((stage) => (
+                <span key={stage} className={`inline-flex min-h-8 items-center rounded-md px-3 text-xs font-semibold ring-1 ${stage === visit.status ? statusClassName(stage) : "bg-white text-slate-500 ring-line"}`}>
+                  {statusLabel(stage)}
+                </span>
+              ))}
+            </div>
+            <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+              <div>
+                <p className="font-semibold text-ink">Current status</p>
+                <p className="mt-1 text-slate-600">{statusLabel(visit.status)}</p>
+              </div>
+              <div>
+                <p className="font-semibold text-ink">Next step</p>
+                <p className="mt-1 text-slate-600">{visitNextSteps(visit.status)}</p>
+              </div>
+              <div>
+                <p className="font-semibold text-ink">Timezone</p>
+                <p className="mt-1 text-slate-600">{FLOWVIA_OPERATIONS_TIME_ZONE}</p>
+              </div>
+            </div>
+          </div>
+
           <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
             <div><dt className="font-semibold text-ink">Referral</dt><dd className="mt-1 text-slate-600"><Link href={`/admin/referrals/${visit.referral.id}`} className="font-semibold text-blue underline">Open referral</Link></dd></div>
             <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{redactPhone(visit.referral.phone)}</dd></div>
@@ -186,6 +222,9 @@ export default async function VisitDetailPage({
             <label className="text-sm font-semibold text-ink">Scheduled<input className="field" name="scheduledAt" type="datetime-local" defaultValue={dateTimeLocalValue(visit.scheduledAt)} /></label>
             <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue={visit.status}>{VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
             <label className="text-sm font-semibold text-ink md:col-span-2">Therapist<select className="field" name="therapistId" defaultValue={visit.therapistId || ""}><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-950 md:col-span-2">
+              Operational notes are for scheduling/status context only. Do not enter diagnosis, symptoms, treatment detail, addresses, or other PHI.
+            </div>
             <label className="text-sm font-semibold text-ink md:col-span-2">Operational note <span className="font-normal text-slate-400">(no PHI or clinical detail)</span><textarea className="field min-h-28" name="notes" defaultValue={visit.notes || ""} /></label>
             <div className="md:col-span-2"><button className="btn-primary" type="submit"><Save size={18} />Save visit</button></div>
           </form>

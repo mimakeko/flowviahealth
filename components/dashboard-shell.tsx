@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LockKeyhole,
   MessageSquareText,
+  ScrollText,
   ShieldAlert,
 } from "lucide-react";
 import { logoutAction } from "@/app/logout/actions";
@@ -42,6 +43,7 @@ const navItems: readonly NavItem[] = [
   { href: "/admin/visits", icon: CalendarClock, label: "Visit Operations", roles: ["admin"], section: "admin" },
   { href: "/admin/messages", icon: MessageSquareText, label: "Message Ledger", roles: ["admin"], section: "admin", gate: "messages" },
   { href: "/admin/health", icon: HeartPulse, label: "Health Center", roles: ["admin"], section: "admin" },
+  { href: "/admin/audit", icon: ScrollText, label: "Audit Trail", roles: ["admin"], section: "admin" },
   { href: "/my-work", icon: BriefcaseMedical, label: "My Work", roles: ["admin", "therapist"], section: "workspace" },
 ] as const;
 
