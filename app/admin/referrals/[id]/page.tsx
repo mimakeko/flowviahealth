@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarPlus, Save } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getOperationsAssistantV2Status, getReferralAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
@@ -23,6 +24,11 @@ import {
   visitStatusField,
   VISIT_STATUSES,
 } from "@/lib/pilot/ops";
+import {
+  getSchedulingReadiness,
+  getSuggestedSchedulingWindows,
+  getTherapistFit,
+} from "@/lib/pilot/scheduling-intelligence";
 import { normalizeE164Phone } from "@/lib/sms/compliance";
 import { getTelnyxConfigStatus } from "@/lib/sms/telnyx";
 
@@ -300,6 +306,33 @@ export default async function ReferralDetailPage({
   const referralAuditLogs = auditLogs as AuditLogListItem[];
   const smsReadiness = smsConsent?.status || "none";
   const telnyx = getTelnyxConfigStatus();
+  const assignedTherapistOpenVisits = referral.assignedTherapistId
+    ? await prisma.visit.findMany({
+        orderBy: { scheduledAt: "asc" },
+        select: { id: true, scheduledAt: true, status: true },
+        where: {
+          therapistId: referral.assignedTherapistId,
+          status: { in: ["scheduled", "in_progress"] },
+        },
+      })
+    : [];
+  const schedulingReadiness = getSchedulingReadiness({
+    assignedTherapistId: referral.assignedTherapistId,
+    futureVisitCount: upcomingVisits.length,
+    referralStatus: referral.status,
+    smsConsentStatus: smsReadiness,
+  });
+  const therapistFit = getTherapistFit({
+    active: referral.assignedTherapist?.active ?? false,
+    currentOpenVisitCount: assignedTherapistOpenVisits.length,
+    referralCity: referral.city,
+    referralZip: referral.zip,
+    serviceAreaNotes: referral.assignedTherapist?.serviceAreaNotes,
+    therapistName: referral.assignedTherapist?.name,
+  });
+  const suggestedWindows = getSuggestedSchedulingWindows({
+    scheduledVisits: assignedTherapistOpenVisits,
+  });
   const assistantCards = getReferralAssistantCards({
     assignedTherapistId: referral.assignedTherapistId,
     noteClassification: query?.noteClassification,
@@ -385,6 +418,21 @@ export default async function ReferralDetailPage({
               summary="Referral guidance is deterministic and limited to operational workflow state. It does not send messages or make autonomous changes."
               title="Operations Assistant"
             />
+          </div>
+
+          <div className="mt-5">
+            <SchedulingIntelligencePanel
+              fit={therapistFit}
+              readiness={schedulingReadiness}
+              summary="Referral scheduling readiness uses fake pilot status, therapist assignment, SMS consent state, and existing future visits. Suggested windows require manual review."
+              windows={suggestedWindows}
+            />
+            {schedulingReadiness.readiness === "ready_to_schedule" ? (
+              <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-secondary mt-4">
+                <CalendarPlus size={18} />
+                Open New Visit flow
+              </Link>
+            ) : null}
           </div>
 
           {referral.address ? (

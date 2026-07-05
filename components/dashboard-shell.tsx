@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   BriefcaseMedical,
   CalendarClock,
+  CalendarSearch,
   ClipboardList,
   Database,
   FolderArchive,
@@ -42,6 +43,7 @@ const navItems: readonly NavItem[] = [
   { href: "/admin/referrals", icon: ClipboardList, label: "Referral Operations", roles: ["admin"], section: "admin" },
   { href: "/admin/referrals/new", icon: FilePlus2, label: "New Referral", roles: ["admin"], section: "admin" },
   { href: "/admin/visits", icon: CalendarClock, label: "Visit Operations", roles: ["admin"], section: "admin" },
+  { href: "/admin/scheduling", icon: CalendarSearch, label: "Scheduling", roles: ["admin"], section: "admin" },
   { href: "/admin/messages", icon: MessageSquareText, label: "Message Ledger", roles: ["admin"], section: "admin", gate: "messages" },
   { href: "/admin/health", icon: HeartPulse, label: "Health Center", roles: ["admin"], section: "admin" },
   { href: "/admin/audit", icon: ScrollText, label: "Audit Trail", roles: ["admin"], section: "admin" },

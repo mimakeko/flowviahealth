@@ -13,11 +13,13 @@ import {
   UsersRound,
 } from "lucide-react";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import {
   getOperationsAssistantV2Status,
   getQueueAssistantCards,
   getTherapistAssistantCards,
 } from "@/lib/ai/operations-assistant-v2";
+import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import { getCurrentPilotSession } from "@/lib/pilot/auth";
 import { getPilotOperationsAccessState } from "@/lib/pilot/access";
 import { getPilotDashboardSnapshot, getTherapistDashboardSnapshot } from "@/lib/pilot/dashboard";
@@ -75,6 +77,16 @@ async function TherapistDashboard({ email }: { email: string }) {
     recentlyCompleted: snapshot.recentlyCompleted,
     upcomingVisits: snapshot.upcomingVisits,
   });
+  const schedulingCards = getSchedulingQueueCards({
+    archiveCandidates: 0,
+    capacityCautions: snapshot.upcomingVisits >= 6 ? 1 : 0,
+    conflicts: snapshot.inProgressVisits,
+    contactedWithoutFutureVisit: snapshot.readyToSchedule,
+    optedOutContacts: 0,
+    readyToSchedule: snapshot.readyToSchedule,
+    unassignedReferrals: 0,
+    upcomingNextSevenDays: snapshot.upcomingVisits,
+  });
 
   return (
     <div className="grid gap-8">
@@ -114,6 +126,11 @@ async function TherapistDashboard({ email }: { email: string }) {
             status={assistantStatus}
             summary="Your next best operational step is deterministic, scoped to your assigned fake pilot work, and requires human review."
             title="Operations Assistant"
+          />
+
+          <SchedulingIntelligencePanel
+            cards={schedulingCards}
+            summary="Therapist-scoped scheduling guidance from assigned fake pilot work only. Admin-only controls and SMS internals remain hidden."
           />
 
           <section>
@@ -179,6 +196,16 @@ export default async function DashboardPage() {
     smokeTestRecords: snapshot.smokeTestRecords,
     unassignedReferrals: snapshot.unassignedReferrals,
   });
+  const schedulingCards = getSchedulingQueueCards({
+    archiveCandidates: snapshot.referralCounts.completed + snapshot.referralCounts.canceled,
+    capacityCautions: 0,
+    conflicts: snapshot.pastScheduledVisits,
+    contactedWithoutFutureVisit: snapshot.contactedNotScheduled,
+    optedOutContacts: snapshot.optedOutSmsConsent,
+    readyToSchedule: snapshot.contactedNotScheduled,
+    unassignedReferrals: snapshot.unassignedReferrals,
+    upcomingNextSevenDays: snapshot.scheduledVisitsNextSevenDays,
+  });
   const metrics = [
     { icon: ClipboardList, label: "Total referrals", note: "All fake/test referrals in the pilot workspace.", value: snapshot.totalReferrals },
     { icon: ClipboardList, label: "New referrals", note: "Fake/test referrals waiting for first contact.", value: snapshot.referralCounts.new },
@@ -226,6 +253,11 @@ export default async function DashboardPage() {
         status={assistantStatus}
         summary="Queue-level risk signals are generated from safe counts only. No autonomous action, messaging, or clinical guidance is enabled."
         title="Operations Assistant"
+      />
+
+      <SchedulingIntelligencePanel
+        cards={schedulingCards}
+        summary="Deterministic scheduling summary from safe queue counts. No maps, geocoding, travel-time calculation, or autonomous scheduling."
       />
 
       <section className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">

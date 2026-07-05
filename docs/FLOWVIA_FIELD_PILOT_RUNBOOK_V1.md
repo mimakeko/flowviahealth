@@ -47,6 +47,7 @@ Internal dashboard/admin/workspace routes:
 - `/admin/visits`: admin visit operations queue.
 - `/admin/visits/new`: manual fake-data visit scheduling.
 - `/admin/visits/[id]`: visit lifecycle detail and audit view.
+- `/admin/scheduling`: admin-only deterministic scheduling intelligence.
 - `/admin/messages`: read-only SMS consent/message ledger.
 - `/admin/health`: admin-only cloud pilot health center.
 - `/admin/audit`: admin-only audit trail with safe metadata summaries.
@@ -163,6 +164,7 @@ Protected routes:
 - `/admin/visits`
 - `/admin/visits/new`
 - `/admin/visits/[id]`
+- `/admin/scheduling`
 - `/admin/health`
 - `/admin/audit`
 - `/admin/data`
@@ -247,6 +249,17 @@ Admins should run each pilot day from the internal dashboard shell:
 - Human review is required before acting on any assistant suggestion.
 - Passive assistant suggestions are not audit events; blocked-note attempts and explicit user actions remain audited.
 - Run `pnpm ai:ops-smoke` to verify deterministic assistant outputs, opt-out warnings, assignment warnings, past-visit warnings, safe wording, and no external API mode.
+
+## Scheduling Intelligence Policy
+
+- Scheduling Intelligence V1 is deterministic only.
+- It does not use external maps, geocoding APIs, route optimization, or real travel-time calculation.
+- It uses fake pilot city, ZIP family, therapist service-area text, active status, visit timing, and workflow status only.
+- It must not use PHI, full street addresses, raw SMS bodies, secrets, diagnosis, treatment details, or clinical guidance.
+- It must not create visits, assign therapists, send SMS, or perform autonomous scheduling.
+- Suggested windows are operational suggestions only and require human review in the existing visit creation/update flows.
+- Passive scheduling suggestions are not audit events; explicit user actions such as `visit_created`, `visit_status_changed`, and `therapist_assigned` remain audited.
+- Run `pnpm scheduling:intelligence-smoke` to verify fit scoring, readiness, conflicts, suggested windows, deterministic source, and no external API mode.
 
 ## Supabase staging checks
 

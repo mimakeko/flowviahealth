@@ -15,6 +15,7 @@ Flowvia is not approved for real patients or PHI yet. This list blocks productio
 - Vendor BAA review is required before PHI for Supabase, Vercel, Telnyx, Resend if email is used, and any AI/dev tooling if PHI might be involved later.
 - AI real-provider mode must remain disabled/mock-only until no-PHI routing, audit-only controls, legal/vendor review, and explicit approval are complete.
 - Operations Assistant V2 must remain deterministic/mock-only: no external AI/API calls, no autonomous actions, no clinical advice, no diagnosis/treatment guidance, and no PHI in inputs or outputs.
+- Scheduling Intelligence V1 must remain deterministic: no external maps/geocoding APIs, no real travel-time calculation, no autonomous scheduling, no PHI, and human review required.
 - Backup/restore policy and tested restore process are needed.
 - Retention/deletion policy is needed.
 - Incident response policy is needed.
@@ -51,6 +52,7 @@ Before any serious pilot use, an admin should:
 - Open `/admin/audit` and review recent audit events for safe metadata only; no secrets, raw SMS bodies, provider payloads, or PHI should appear.
 - Open `/admin/data` and confirm stewardship status is audit-preserving, no SMS history deletion is offered, and real SMS gate remains Off.
 - Confirm `/admin/health` shows Operations Assistant V2 as mock/deterministic, external API calls disabled, no-PHI mode on, and autonomous actions disabled.
+- Confirm `/admin/health` shows Scheduling Intelligence enabled, source deterministic, external APIs/maps/geocoding disabled, autonomous scheduling disabled, and no-PHI mode on.
 - Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
 - Confirm Vercel logs show no 500s and no `EMAXCONNSESSION`.
 - Confirm no TLS/certificate errors.
@@ -65,4 +67,5 @@ Before any serious pilot use, an admin should:
 - Audit trail metadata must remain summarized and safe; do not expose raw SMS payloads, provider payloads, secrets, or PHI.
 - Data stewardship tools must not hard-delete audit logs or SMS history and must require exact confirmation for archive/cleanup actions.
 - Assistant suggestions must remain operational-only and human-reviewed; do not enable real provider mode or autonomous actions before production controls are approved.
+- Scheduling suggestions must remain operational-only and human-reviewed; do not enable route optimization, maps/geocoding APIs, travel-time calculation, or autonomous visit creation before production controls are approved.
 - Full phone number exposure must remain limited and masked by default.

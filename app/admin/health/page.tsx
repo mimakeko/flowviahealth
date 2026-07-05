@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Activity, AlertTriangle, Clock, Database, KeyRound, MessageSquareText, Radio, ShieldCheck } from "lucide-react";
+import { Activity, AlertTriangle, CalendarClock, Clock, Database, KeyRound, MessageSquareText, Radio, ShieldCheck } from "lucide-react";
 import { getOperationsAssistantStatus } from "@/lib/ai/operations-assistant";
 import { getOperationsAssistantV2Status } from "@/lib/ai/operations-assistant-v2";
 import { getFlowviaDataModeStatus } from "@/lib/compliance/data-mode";
@@ -14,6 +14,7 @@ import { requirePilotOperationsAccess } from "@/lib/pilot/ops";
 import { redactPhone } from "@/lib/sms/compliance";
 import { getSmsStoreStatus } from "@/lib/sms/store";
 import { getTelnyxConfigStatus } from "@/lib/sms/telnyx";
+import { getSchedulingIntelligenceStatus } from "@/lib/pilot/scheduling-intelligence";
 
 export const metadata: Metadata = {
   title: "Cloud Pilot Health",
@@ -131,6 +132,7 @@ export default async function AdminHealthPage() {
   const aiV2Status = getOperationsAssistantV2Status();
   const smsStore = getSmsStoreStatus();
   const dbUrls = getDatabaseUrlComparison();
+  const schedulingStatus = getSchedulingIntelligenceStatus();
   const activitySnapshot = await getActivitySnapshot();
   const databaseStorageMode = process.env.DATABASE_URL ? "Postgres" : smsStore.label;
   const webhookEnforced = telnyx.webhookSigningConfigured && !telnyx.unsignedWebhookTestBypassEnabled;
@@ -159,6 +161,10 @@ export default async function AdminHealthPage() {
     { icon: Database, metric: { label: "DATABASE_URL mode", value: `${dbUrls.databaseUrl.mode} / port ${dbUrls.databaseUrl.port}`, tone: dbUrls.databaseUrl.mode === "transaction" ? "good" : "warn" } },
     { icon: Database, metric: { label: "DIRECT_URL mode", value: `${dbUrls.directUrl.mode} / port ${dbUrls.directUrl.port}`, tone: dbUrls.directUrl.mode === "session" ? "good" : "warn" } },
     { icon: Database, metric: { label: "Database URL comparison", value: dbIdenticalLabel, tone: dbUrls.identical === false ? "good" : "warn" } },
+    { icon: CalendarClock, metric: { label: "Scheduling intelligence", value: schedulingStatus.enabled ? "Enabled" : "Disabled", tone: schedulingStatus.enabled ? "good" : "warn" } },
+    { icon: CalendarClock, metric: { label: "Scheduling source", value: schedulingStatus.source, tone: "good" } },
+    { icon: ShieldCheck, metric: { label: "Maps/geocoding APIs", value: schedulingStatus.geocodingEnabled || schedulingStatus.externalApisEnabled ? "Enabled" : "Disabled", tone: schedulingStatus.geocodingEnabled || schedulingStatus.externalApisEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "Autonomous scheduling", value: schedulingStatus.autonomousSchedulingEnabled ? "Enabled" : "Disabled", tone: schedulingStatus.autonomousSchedulingEnabled ? "warn" : "good" } },
     { icon: Activity, metric: { label: "Audit activity, last 24h", value: `${activitySnapshot.lastAuditActivityCount}` } },
     { icon: Clock, metric: { label: "Last SMS webhook event", value: formatDateTime(activitySnapshot.lastSmsWebhookEventTime) } },
     { icon: Clock, metric: { label: "Last inbound SMS", value: formatDateTime(activitySnapshot.lastInboundSmsTime) } },

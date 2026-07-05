@@ -3,8 +3,10 @@ import Link from "next/link";
 import { CalendarClock, Plus } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getOperationsAssistantV2Status, getQueueAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
+import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import {
   formatDateTime,
   requirePilotOperationsAccess,
@@ -60,7 +62,7 @@ export default async function AdminVisitsPage({
   if (selectedGroup === "unscheduled") visitFilters.push({ OR: [{ scheduledAt: null }, { status: "unscheduled" }] });
 
   const prisma = getPrismaClient();
-  const [visits, therapists, newReferrals, contactedNotScheduled, scheduledVisitsNextSevenDays, pastScheduledVisits, optedOutContacts, unassignedReferrals, smokeTestRecords] = await Promise.all([
+  const [visits, therapists, newReferrals, contactedNotScheduled, scheduledVisitsNextSevenDays, pastScheduledVisits, optedOutContacts, unassignedReferrals, smokeTestRecords, archiveCandidates, capacityCautions] = await Promise.all([
     prisma.visit.findMany({
       include: {
         referral: {
@@ -119,6 +121,13 @@ export default async function AdminVisitsPage({
         ],
       },
     }),
+    prisma.patientReferral.count({ where: { status: { in: ["completed", "canceled"] } } }),
+    prisma.therapist.count({
+      where: {
+        active: true,
+        visits: { some: { status: { in: ["scheduled", "in_progress"] } } },
+      },
+    }),
   ]);
   const visitRows = visits as VisitListRow[];
   const therapistOptions = therapists as TherapistFilterOption[];
@@ -132,6 +141,16 @@ export default async function AdminVisitsPage({
     unassignedReferrals,
   });
   const assistantStatus = getOperationsAssistantV2Status();
+  const schedulingCards = getSchedulingQueueCards({
+    archiveCandidates,
+    capacityCautions,
+    conflicts: pastScheduledVisits,
+    contactedWithoutFutureVisit: contactedNotScheduled,
+    optedOutContacts,
+    readyToSchedule: contactedNotScheduled,
+    unassignedReferrals,
+    upcomingNextSevenDays: scheduledVisitsNextSevenDays,
+  });
 
   return (
     <div className="grid gap-8">
@@ -154,6 +173,11 @@ export default async function AdminVisitsPage({
         status={assistantStatus}
         summary="Visit queue signals are deterministic and based on safe workflow counts. Review before updating status."
         title="Operations Assistant"
+      />
+
+      <SchedulingIntelligencePanel
+        cards={schedulingCards}
+        summary="Visit scheduling signals highlight upcoming visits, past open visits, and therapist capacity cautions. No travel-time or geocoding is used."
       />
 
       <form className="rounded-lg border border-line bg-white p-5">

@@ -129,6 +129,7 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
 
     - `/admin/referrals`
     - `/admin/visits`
+    - `/admin/scheduling`
     - `/admin/messages`
     - `/admin/health`
     - `/admin/audit`
@@ -225,6 +226,15 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 - The assistant must not provide clinical advice, diagnosis, treatment guidance, or triage.
 - No PHI should be used in assistant inputs or outputs.
 - Before/after deploy, confirm `/admin/health` reports provider `mock / deterministic`, external API calls disabled, no-PHI enforcement on, and autonomous actions disabled.
+
+## Scheduling Intelligence Policy
+
+- Scheduling Intelligence V1 must remain deterministic in cloud staging.
+- External maps, geocoding APIs, route optimization, and real travel-time calculation are disabled.
+- Suggested windows are operational suggestions only; humans must create or update visits manually.
+- No autonomous scheduling, SMS sending, therapist assignment, or record mutation is allowed from scheduling suggestions.
+- No PHI, full street addresses, raw SMS bodies, secrets, diagnosis, treatment details, or clinical guidance should appear in scheduling intelligence.
+- Before/after deploy, confirm `/admin/health` reports scheduling intelligence enabled, source deterministic, external APIs disabled, maps/geocoding disabled, autonomous scheduling disabled, and no-PHI enforcement on.
 
 Optional terminal checks:
 

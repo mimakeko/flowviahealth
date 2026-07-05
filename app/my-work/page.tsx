@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 import { BriefcaseMedical, CircleAlert, Save } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getOperationsAssistantV2Status, getTherapistAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
+import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import { requirePilotSession } from "@/lib/pilot/auth";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
 import {
@@ -349,6 +351,16 @@ export default async function MyWorkPage({
     recentlyCompleted: recentlyCompletedCount,
     upcomingVisits: assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + referral.visits.filter((visit: TherapistWorkVisit) => visit.status === "scheduled").length, 0),
   });
+  const schedulingCards = getSchedulingQueueCards({
+    archiveCandidates: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "completed" || referral.status === "canceled").length,
+    capacityCautions: assignedVisitCount >= 6 ? 1 : 0,
+    conflicts: inProgressVisitCount,
+    contactedWithoutFutureVisit: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted" && referral.visits.length === 0).length,
+    optedOutContacts: 0,
+    readyToSchedule: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted" && referral.visits.length === 0).length,
+    unassignedReferrals: 0,
+    upcomingNextSevenDays: assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + referral.visits.filter((visit: TherapistWorkVisit) => visit.status === "scheduled" || visit.status === "in_progress").length, 0),
+  });
   const assistantStatus = getOperationsAssistantV2Status();
 
   return (
@@ -401,6 +413,13 @@ export default async function MyWorkPage({
               status={assistantStatus}
               summary="Your next best operational step is deterministic, scoped to this therapist worklist, and requires human review."
               title="Operations Assistant"
+            />
+          ) : null}
+
+          {selectedTherapistId ? (
+            <SchedulingIntelligencePanel
+              cards={schedulingCards}
+              summary="Therapist-scoped scheduling intelligence uses assigned fake pilot work only. No admin controls, SMS internals, or full addresses are shown."
             />
           ) : null}
 

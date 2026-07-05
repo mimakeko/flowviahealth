@@ -3,8 +3,10 @@ import Link from "next/link";
 import { ClipboardList, Plus } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getOperationsAssistantV2Status, getQueueAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
+import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import {
   formatDate,
   REFERRAL_STATUSES,
@@ -61,7 +63,7 @@ export default async function AdminReferralsPage({
   }
 
   const prisma = getPrismaClient();
-  const [referrals, therapists, contactedNotScheduled, scheduledVisitsNextSevenDays, pastScheduledVisits, optedOutContacts, unassignedReferrals, smokeTestRecords] = await Promise.all([
+  const [referrals, therapists, contactedNotScheduled, scheduledVisitsNextSevenDays, pastScheduledVisits, optedOutContacts, unassignedReferrals, smokeTestRecords, archiveCandidates, capacityCautions] = await Promise.all([
     prisma.patientReferral.findMany({
       include: { assignedTherapist: true },
       orderBy: { createdAt: "desc" },
@@ -104,6 +106,13 @@ export default async function AdminReferralsPage({
         ],
       },
     }),
+    prisma.patientReferral.count({ where: { status: { in: ["completed", "canceled"] } } }),
+    prisma.therapist.count({
+      where: {
+        active: true,
+        visits: { some: { status: { in: ["scheduled", "in_progress"] } } },
+      },
+    }),
   ]);
   const referralRows = referrals as ReferralListRow[];
   const therapistOptions = therapists as TherapistFilterOption[];
@@ -117,6 +126,16 @@ export default async function AdminReferralsPage({
     unassignedReferrals,
   });
   const assistantStatus = getOperationsAssistantV2Status();
+  const schedulingCards = getSchedulingQueueCards({
+    archiveCandidates,
+    capacityCautions,
+    conflicts: pastScheduledVisits,
+    contactedWithoutFutureVisit: contactedNotScheduled,
+    optedOutContacts,
+    readyToSchedule: contactedNotScheduled,
+    unassignedReferrals,
+    upcomingNextSevenDays: scheduledVisitsNextSevenDays,
+  });
 
   return (
     <div className="grid gap-8">
@@ -139,6 +158,11 @@ export default async function AdminReferralsPage({
           status={assistantStatus}
           summary="Referral queue signals are deterministic and based on safe workflow counts. Review before taking action."
           title="Operations Assistant"
+        />
+
+        <SchedulingIntelligencePanel
+          cards={schedulingCards}
+          summary="Referral scheduling signals are deterministic and based on safe workflow counts. Use existing visit forms for any scheduling action."
         />
 
         <form className="rounded-lg border border-line bg-white p-5">

@@ -1,0 +1,344 @@
+import {
+  FLOWVIA_OPERATIONS_TIME_ZONE,
+  formatOperationsDateTime,
+  formatOperationsDateTimeLocalInput,
+  parseOperationsDateTimeLocal,
+} from "./time.ts";
+
+export type SchedulingPriority = "info" | "caution" | "blocker";
+export type TherapistFitLabel = "best_fit" | "good_fit" | "weak_fit" | "not_ready";
+export type SchedulingReadiness = "ready_to_schedule" | "needs_contact" | "needs_assignment" | "already_scheduled" | "blocked" | "archive_candidate";
+export type ConflictLevel = "none" | "caution" | "blocker";
+
+export type SchedulingCard = Readonly<{
+  explanation: string;
+  label: string;
+  level: SchedulingPriority;
+  nextAction: string;
+  source: "deterministic";
+}>;
+
+export type TherapistFitInput = Readonly<{
+  active: boolean;
+  currentOpenVisitCount: number;
+  referralCity?: string | null;
+  referralZip?: string | null;
+  serviceAreaNotes?: string | null;
+  therapistName?: string | null;
+}>;
+
+export type TherapistFitResult = Readonly<{
+  explanation: string;
+  label: TherapistFitLabel;
+  reason: string;
+  score: number;
+}>;
+
+export type ScheduledVisitForConflict = Readonly<{
+  id?: string;
+  scheduledAt: Date | string | null;
+  status: string;
+}>;
+
+export type VisitConflictInput = Readonly<{
+  candidateVisitId?: string | null;
+  candidateScheduledAt?: Date | string | null;
+  durationMinutes?: number;
+  referralStatus: string;
+  scheduledVisits: readonly ScheduledVisitForConflict[];
+  therapistActive: boolean;
+  therapistId?: string | null;
+}>;
+
+export type VisitConflictResult = Readonly<{
+  cards: SchedulingCard[];
+  level: ConflictLevel;
+}>;
+
+export type SchedulingReadinessInput = Readonly<{
+  assignedTherapistId?: string | null;
+  futureVisitCount: number;
+  referralStatus: string;
+  smsConsentStatus?: string | null;
+}>;
+
+export type SchedulingReadinessResult = Readonly<{
+  cards: SchedulingCard[];
+  nextAction: string;
+  readiness: SchedulingReadiness;
+}>;
+
+export type SuggestedWindowInput = Readonly<{
+  candidateStart?: Date;
+  durationMinutes?: number;
+  scheduledVisits: readonly ScheduledVisitForConflict[];
+}>;
+
+export type SchedulingQueueInput = Readonly<{
+  archiveCandidates: number;
+  capacityCautions: number;
+  conflicts: number;
+  contactedWithoutFutureVisit: number;
+  optedOutContacts: number;
+  readyToSchedule: number;
+  unassignedReferrals: number;
+  upcomingNextSevenDays: number;
+}>;
+
+export type SuggestedSchedulingWindow = Readonly<{
+  label: string;
+  localInputValue: string;
+  scheduledAt: Date;
+  source: "deterministic";
+}>;
+
+const PILOT_AREA_TERMS = ["dallas", "north dallas", "plano", "frisco", "mckinney", "allen"] as const;
+const SUGGESTED_HOURS = [9, 11, 13, 15] as const;
+const DEFAULT_DURATION_MINUTES = 60;
+const CONFLICT_WINDOW_MINUTES = 90;
+
+function card(label: string, level: SchedulingPriority, explanation: string, nextAction: string): SchedulingCard {
+  return { explanation, label, level, nextAction, source: "deterministic" };
+}
+
+function normalized(value: string | null | undefined) {
+  return (value || "").trim().toLowerCase();
+}
+
+function zipFamily(value: string | null | undefined) {
+  const digits = (value || "").replace(/\D/g, "");
+  return digits.slice(0, 3);
+}
+
+function containsAny(haystack: string, values: readonly string[]) {
+  return values.some((value) => haystack.includes(value));
+}
+
+function clampScore(score: number) {
+  return Math.max(0, Math.min(100, score));
+}
+
+function maxConflictLevel(cards: readonly SchedulingCard[]): ConflictLevel {
+  if (cards.some((item) => item.level === "blocker")) return "blocker";
+  if (cards.some((item) => item.level === "caution")) return "caution";
+  return "none";
+}
+
+function isOpenVisitStatus(status: string) {
+  return status === "scheduled" || status === "in_progress";
+}
+
+function isTerminalReferralStatus(status: string) {
+  return status === "completed" || status === "canceled";
+}
+
+function overlapsKnownVisit(candidate: Date, existing: ScheduledVisitForConflict, durationMinutes: number) {
+  if (!existing.scheduledAt || !isOpenVisitStatus(existing.status)) return false;
+  const existingDate = new Date(existing.scheduledAt);
+  const minutesBetween = Math.abs(candidate.getTime() - existingDate.getTime()) / 60000;
+  return minutesBetween < Math.max(CONFLICT_WINDOW_MINUTES, durationMinutes);
+}
+
+export function getTherapistFit(input: TherapistFitInput): TherapistFitResult {
+  if (!input.therapistName) {
+    return {
+      explanation: "No therapist is selected for fit review.",
+      label: "not_ready",
+      reason: "unassigned",
+      score: 0,
+    };
+  }
+
+  if (!input.active) {
+    return {
+      explanation: "This therapist is inactive and should not receive new pilot assignments.",
+      label: "not_ready",
+      reason: "inactive therapist",
+      score: 0,
+    };
+  }
+
+  const city = normalized(input.referralCity);
+  const serviceArea = normalized(`${input.therapistName || ""} ${input.serviceAreaNotes || ""}`);
+  const referralZipFamily = zipFamily(input.referralZip);
+  let score = 40;
+  let reason = "nearby pilot area";
+  let label: TherapistFitLabel = "weak_fit";
+
+  if (city && serviceArea.includes(city)) {
+    score = 90;
+    reason = "same city";
+    label = "best_fit";
+  } else if (referralZipFamily && serviceArea.includes(referralZipFamily)) {
+    score = 82;
+    reason = "same zip family";
+    label = "good_fit";
+  } else if (city && containsAny(serviceArea, PILOT_AREA_TERMS) && PILOT_AREA_TERMS.includes(city as (typeof PILOT_AREA_TERMS)[number])) {
+    score = 68;
+    reason = "nearby pilot area";
+    label = "good_fit";
+  }
+
+  if (input.currentOpenVisitCount >= 6) {
+    score -= 25;
+    reason = "overloaded therapist";
+    label = score >= 60 ? "good_fit" : "weak_fit";
+  }
+
+  return {
+    explanation: `${input.therapistName} fit is based on fake pilot city, ZIP family, service-area notes, active status, and current open visit count.`,
+    label,
+    reason,
+    score: clampScore(score),
+  };
+}
+
+export function getSchedulingReadiness(input: SchedulingReadinessInput): SchedulingReadinessResult {
+  const cards: SchedulingCard[] = [];
+
+  if (isTerminalReferralStatus(input.referralStatus)) {
+    return {
+      cards: [card("Archive candidate", "info", "This fake referral is completed or canceled.", "Review audit history and archive through Data Stewardship when appropriate.")],
+      nextAction: "Review and archive if appropriate.",
+      readiness: "archive_candidate",
+    };
+  }
+
+  if (input.referralStatus === "new") {
+    cards.push(card("Needs contact", "caution", "This referral has not been contacted yet.", "Complete first-contact workflow before scheduling."));
+    return { cards, nextAction: "Contact before scheduling.", readiness: "needs_contact" };
+  }
+
+  if (!input.assignedTherapistId) {
+    cards.push(card("Needs therapist assignment", "caution", "This referral has no assigned therapist.", "Assign a therapist before creating a visit."));
+    return { cards, nextAction: "Assign therapist before scheduling.", readiness: "needs_assignment" };
+  }
+
+  if (input.futureVisitCount > 0) {
+    cards.push(card("Already scheduled", "info", "This referral already has an upcoming/open visit.", "Monitor the existing visit before creating another."));
+    return { cards, nextAction: "Monitor existing visit.", readiness: "already_scheduled" };
+  }
+
+  if (input.smsConsentStatus === "opted_out") {
+    cards.push(card("Opted out - non-SMS follow-up", "blocker", "This contact is opted out of SMS.", "Use non-SMS operational follow-up only."));
+  } else if (input.smsConsentStatus === "pending_confirmation") {
+    cards.push(card("Consent pending", "caution", "SMS consent is pending confirmation.", "Use non-SMS follow-up until consent is active."));
+  }
+
+  cards.push(card("Ready to schedule", "info", "This referral is contacted or active, assigned, and has no future visit.", "Use the existing visit creation flow and review suggested windows."));
+  return { cards, nextAction: "Review suggested windows and create visit manually.", readiness: "ready_to_schedule" };
+}
+
+export function detectVisitConflicts(input: VisitConflictInput, now: Date = new Date()): VisitConflictResult {
+  const cards: SchedulingCard[] = [];
+  const durationMinutes = input.durationMinutes ?? DEFAULT_DURATION_MINUTES;
+  const candidate = input.candidateScheduledAt ? new Date(input.candidateScheduledAt) : null;
+
+  if (!input.therapistId) {
+    cards.push(card("Therapist not selected", "caution", "Conflict checks are limited until a therapist is selected.", "Select a therapist before confirming the visit."));
+  }
+
+  if (!input.therapistActive) {
+    cards.push(card("Inactive therapist", "blocker", "The selected therapist is inactive.", "Choose an active therapist before scheduling."));
+  }
+
+  if (candidate && candidate < now) {
+    cards.push(card("Past scheduled visit needs status update", "caution", "This visit time is in the past while the workflow is still open.", "Update visit status or select a future operational window."));
+  }
+
+  if (isTerminalReferralStatus(input.referralStatus)) {
+    cards.push(card("Referral status incompatible", "blocker", "The parent referral is completed or canceled.", "Do not schedule unless the referral is intentionally reopened."));
+  }
+
+  if (candidate) {
+    const conflictingVisits = input.scheduledVisits.filter((visit) => visit.id !== input.candidateVisitId && overlapsKnownVisit(candidate, visit, durationMinutes));
+    if (conflictingVisits.length > 0) {
+      cards.push(card("Therapist schedule conflict", "caution", `${conflictingVisits.length} open visit conflicts within ${CONFLICT_WINDOW_MINUTES} minutes.`, "Pick another deterministic window or review the existing visit manually."));
+    }
+  }
+
+  return {
+    cards,
+    level: maxConflictLevel(cards),
+  };
+}
+
+function zonedDateKey(date: Date) {
+  const value = formatOperationsDateTimeLocalInput(date);
+  return value.slice(0, 10);
+}
+
+function weekdayInOperationsZone(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: FLOWVIA_OPERATIONS_TIME_ZONE,
+    weekday: "short",
+  }).format(date);
+}
+
+function addDays(date: Date, days: number) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+export function getSuggestedSchedulingWindows(input: SuggestedWindowInput, now: Date = new Date()): SuggestedSchedulingWindow[] {
+  const windows: SuggestedSchedulingWindow[] = [];
+  const durationMinutes = input.durationMinutes ?? DEFAULT_DURATION_MINUTES;
+  let dayCursor = input.candidateStart ?? now;
+  let daysChecked = 0;
+
+  while (windows.length < 8 && daysChecked < 14) {
+    dayCursor = addDays(dayCursor, daysChecked === 0 ? 1 : 1);
+    daysChecked += 1;
+
+    const weekday = weekdayInOperationsZone(dayCursor);
+    if (weekday === "Sat" || weekday === "Sun") continue;
+
+    const dateKey = zonedDateKey(dayCursor);
+    for (const hour of SUGGESTED_HOURS) {
+      const localInputValue = `${dateKey}T${String(hour).padStart(2, "0")}:00`;
+      const scheduledAt = parseOperationsDateTimeLocal(localInputValue);
+      if (!scheduledAt || scheduledAt <= now) continue;
+      const hasConflict = input.scheduledVisits.some((visit) => overlapsKnownVisit(scheduledAt, visit, durationMinutes));
+      if (hasConflict) continue;
+
+      windows.push({
+        label: formatOperationsDateTime(scheduledAt),
+        localInputValue,
+        scheduledAt,
+        source: "deterministic",
+      });
+
+      if (windows.length >= 8) break;
+    }
+  }
+
+  return windows;
+}
+
+export function getSchedulingQueueCards(input: SchedulingQueueInput): SchedulingCard[] {
+  const cards: SchedulingCard[] = [];
+
+  if (input.readyToSchedule > 0) cards.push(card("Ready to schedule", "info", `${input.readyToSchedule} referral${input.readyToSchedule === 1 ? " is" : "s are"} assigned and waiting for a future visit.`, "Open the referral and use the existing visit creation flow."));
+  if (input.unassignedReferrals > 0) cards.push(card("Missing therapist assignment", "caution", `${input.unassignedReferrals} active referral${input.unassignedReferrals === 1 ? " has" : "s have"} no assigned therapist.`, "Assign a therapist before scheduling."));
+  if (input.contactedWithoutFutureVisit > 0) cards.push(card("Contacted without future visit", "caution", `${input.contactedWithoutFutureVisit} contacted referral${input.contactedWithoutFutureVisit === 1 ? " has" : "s have"} no future visit.`, "Review scheduling readiness."));
+  if (input.optedOutContacts > 0) cards.push(card("Opted-out non-SMS follow-up", "blocker", `${input.optedOutContacts} SMS enrollment${input.optedOutContacts === 1 ? " is" : "s are"} opted out.`, "Use non-SMS operational follow-up only."));
+  if (input.conflicts > 0) cards.push(card("Schedule conflicts", "caution", `${input.conflicts} visit${input.conflicts === 1 ? " has" : "s have"} a deterministic conflict or status warning.`, "Review visit status, time, and therapist assignment."));
+  if (input.upcomingNextSevenDays > 0) cards.push(card("Upcoming next 7 days", "info", `${input.upcomingNextSevenDays} visit${input.upcomingNextSevenDays === 1 ? " is" : "s are"} scheduled soon.`, "Monitor readiness and status updates."));
+  if (input.capacityCautions > 0) cards.push(card("Therapist capacity caution", "caution", `${input.capacityCautions} therapist${input.capacityCautions === 1 ? " has" : "s have"} several open visits.`, "Review workload before assigning more visits."));
+  if (input.archiveCandidates > 0) cards.push(card("Archive candidates", "info", `${input.archiveCandidates} completed/canceled referral${input.archiveCandidates === 1 ? " is" : "s are"} eligible for stewardship archive review.`, "Use Data Stewardship after audit review."));
+
+  return cards.length > 0 ? cards : [card("Scheduling queue steady", "info", "No deterministic scheduling risk was detected.", "Continue normal operational review.")];
+}
+
+export function getSchedulingIntelligenceStatus() {
+  return {
+    autonomousSchedulingEnabled: false,
+    enabled: true,
+    externalApisEnabled: false,
+    geocodingEnabled: false,
+    noPhiMode: true,
+    source: "deterministic",
+    timeZone: FLOWVIA_OPERATIONS_TIME_ZONE,
+  };
+}

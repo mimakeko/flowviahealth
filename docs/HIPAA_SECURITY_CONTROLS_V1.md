@@ -20,6 +20,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - Encryption: use managed encrypted storage and avoid secrets in source, screenshots, logs, and tickets.
 - Integrity controls: validate webhook signatures, preserve event-id idempotency, and reject unsupported data modes.
 - AI controls: Operations Assistant V2 is deterministic/mock-only, no external API calls, no autonomous actions, no clinical guidance, and human review required.
+- Scheduling controls: Scheduling Intelligence V1 is deterministic only, with external maps/geocoding, route optimization, real travel-time calculation, and autonomous scheduling disabled.
 - Session management: signed httpOnly cookies are acceptable for pilot only; final timeout, revocation, and recovery controls remain blockers.
 
 ## Physical Safeguards
@@ -38,3 +39,4 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - Message Ledger masks phone numbers and does not expose secrets.
 - Data Stewardship tools are admin-only, confirmation-gated, fake-data-only, audit-preserving, and do not send SMS.
 - Operations Assistant cards use safe workflow state only and must not include PHI, clinical advice, diagnosis, or treatment guidance.
+- Scheduling Intelligence uses fake pilot city/ZIP/service-area/status/time data only and must not include PHI, full street addresses, clinical guidance, raw SMS bodies, or secrets.

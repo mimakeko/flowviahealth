@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Save } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getOperationsAssistantV2Status, getVisitAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
@@ -22,6 +23,12 @@ import {
   visitStatusField,
   VISIT_STATUSES,
 } from "@/lib/pilot/ops";
+import {
+  detectVisitConflicts,
+  getSchedulingReadiness,
+  getSuggestedSchedulingWindows,
+  getTherapistFit,
+} from "@/lib/pilot/scheduling-intelligence";
 
 export const metadata: Metadata = {
   title: "Visit Detail",
@@ -167,6 +174,41 @@ export default async function VisitDetailPage({
 
   const therapistOptions = therapists as TherapistOption[];
   const visitAuditLogs = auditLogs as AuditLogListItem[];
+  const therapistOpenVisits = visit.therapistId
+    ? await prisma.visit.findMany({
+        orderBy: { scheduledAt: "asc" },
+        select: { id: true, scheduledAt: true, status: true },
+        where: {
+          therapistId: visit.therapistId,
+          status: { in: ["scheduled", "in_progress"] },
+        },
+      })
+    : [];
+  const schedulingReadiness = getSchedulingReadiness({
+    assignedTherapistId: visit.therapistId || visit.referral.assignedTherapistId,
+    futureVisitCount: visit.status === "scheduled" || visit.status === "in_progress" ? 1 : 0,
+    referralStatus: visit.referral.status,
+    smsConsentStatus: null,
+  });
+  const therapistFit = getTherapistFit({
+    active: visit.therapist?.active ?? Boolean(visit.referral.assignedTherapist?.active),
+    currentOpenVisitCount: therapistOpenVisits.length,
+    referralCity: visit.referral.city,
+    referralZip: visit.referral.zip,
+    serviceAreaNotes: visit.therapist?.serviceAreaNotes || visit.referral.assignedTherapist?.serviceAreaNotes,
+    therapistName: visit.therapist?.name || visit.referral.assignedTherapist?.name,
+  });
+  const conflict = detectVisitConflicts({
+    candidateScheduledAt: visit.scheduledAt,
+    candidateVisitId: visit.id,
+    referralStatus: visit.referral.status,
+    scheduledVisits: therapistOpenVisits,
+    therapistActive: visit.therapist?.active ?? Boolean(visit.referral.assignedTherapist?.active),
+    therapistId: visit.therapistId,
+  });
+  const suggestedWindows = getSuggestedSchedulingWindows({
+    scheduledVisits: therapistOpenVisits,
+  });
   const assistantCards = getVisitAssistantCards({
     noteClassification: query?.noteClassification,
     referralStatus: visit.referral.status,
@@ -233,6 +275,16 @@ export default async function VisitDetailPage({
               status={assistantStatus}
               summary="Visit guidance is deterministic and limited to operational workflow state. It does not send messages or make autonomous changes."
               title="Operations Assistant"
+            />
+          </div>
+
+          <div className="mt-5">
+            <SchedulingIntelligencePanel
+              conflict={conflict}
+              fit={therapistFit}
+              readiness={schedulingReadiness}
+              summary="Visit conflict checks use therapist open visits, the scheduled time, referral status, and active therapist state. No travel-time or geocoding is used."
+              windows={suggestedWindows}
             />
           </div>
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Save } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
+import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
 import { requirePilotSession } from "@/lib/pilot/auth";
@@ -16,6 +17,12 @@ import {
   visitStatusField,
   VISIT_STATUSES,
 } from "@/lib/pilot/ops";
+import {
+  getSchedulingReadiness,
+  getSuggestedSchedulingWindows,
+  getTherapistFit,
+} from "@/lib/pilot/scheduling-intelligence";
+import { normalizeE164Phone } from "@/lib/sms/compliance";
 
 export const metadata: Metadata = {
   title: "New Visit",
@@ -35,6 +42,21 @@ type ReferralOption = {
 type TherapistOption = {
   id: string;
   name: string;
+};
+
+type SelectedReferral = {
+  assignedTherapist: {
+    active: boolean;
+    name: string;
+    serviceAreaNotes: string | null;
+  } | null;
+  assignedTherapistId: string | null;
+  city: string | null;
+  id: string;
+  phone: string;
+  status: string;
+  visits: { scheduledAt: Date | null; status: string }[];
+  zip: string | null;
 };
 
 async function createVisitAction(formData: FormData) {
@@ -113,7 +135,7 @@ export default async function NewVisitPage({
 
   const params = await searchParams;
   const prisma = getPrismaClient();
-  const [referrals, therapists] = await Promise.all([
+  const [referrals, therapists, selectedReferralRecord] = await Promise.all([
     prisma.patientReferral.findMany({
       orderBy: { updatedAt: "desc" },
       select: {
@@ -130,9 +152,57 @@ export default async function NewVisitPage({
       orderBy: { name: "asc" },
       where: { active: true },
     }),
+    params?.referralId
+      ? prisma.patientReferral.findUnique({
+          include: {
+            assignedTherapist: true,
+            visits: {
+              select: { scheduledAt: true, status: true },
+              where: { status: { in: ["scheduled", "in_progress"] } },
+            },
+          },
+          where: { id: params.referralId },
+        })
+      : Promise.resolve(null),
   ]);
   const referralOptions = referrals as ReferralOption[];
   const therapistOptions = therapists as TherapistOption[];
+  const selectedReferral = selectedReferralRecord as SelectedReferral | null;
+  const smsConsent = selectedReferral
+    ? await prisma.smsConsentEnrollment.findUnique({
+        select: { status: true },
+        where: { normalizedPhone: normalizeE164Phone(selectedReferral.phone) },
+      })
+    : null;
+  const therapistOpenVisits = selectedReferral?.assignedTherapistId
+    ? await prisma.visit.findMany({
+        orderBy: { scheduledAt: "asc" },
+        select: { id: true, scheduledAt: true, status: true },
+        where: {
+          therapistId: selectedReferral.assignedTherapistId,
+          status: { in: ["scheduled", "in_progress"] },
+        },
+      })
+    : [];
+  const schedulingReadiness = selectedReferral
+    ? getSchedulingReadiness({
+        assignedTherapistId: selectedReferral.assignedTherapistId,
+        futureVisitCount: selectedReferral.visits.length,
+        referralStatus: selectedReferral.status,
+        smsConsentStatus: smsConsent?.status || null,
+      })
+    : null;
+  const therapistFit = selectedReferral
+    ? getTherapistFit({
+        active: selectedReferral.assignedTherapist?.active ?? false,
+        currentOpenVisitCount: therapistOpenVisits.length,
+        referralCity: selectedReferral.city,
+        referralZip: selectedReferral.zip,
+        serviceAreaNotes: selectedReferral.assignedTherapist?.serviceAreaNotes,
+        therapistName: selectedReferral.assignedTherapist?.name,
+      })
+    : null;
+  const suggestedWindows = selectedReferral ? getSuggestedSchedulingWindows({ scheduledVisits: therapistOpenVisits }) : [];
 
   return (
     <div className="max-w-4xl">
@@ -148,9 +218,20 @@ export default async function NewVisitPage({
 
       <BlockedNoteAlert searchParams={params} />
 
+      {selectedReferral && schedulingReadiness ? (
+        <div className="mt-8">
+          <SchedulingIntelligencePanel
+            fit={therapistFit}
+            readiness={schedulingReadiness}
+            summary="This read-only scheduling guidance uses the selected referral, assigned therapist, consent state, and known open visits. Create still requires manual form submission."
+            windows={suggestedWindows}
+          />
+        </div>
+      ) : null}
+
       <form action={createVisitAction} className="mt-8 grid gap-6 rounded-lg border border-line bg-white p-6 md:grid-cols-2">
         <label className="text-sm font-semibold text-ink md:col-span-2">Referral<select className="field" name="referralId" defaultValue={params?.referralId || ""} required><option value="">Select referral</option>{referralOptions.map((referral: ReferralOption) => <option key={referral.id} value={referral.id}>{referral.patientName} · {statusLabel(referral.status)} · {[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</option>)}</select></label>
-        <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue=""><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+        <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue={selectedReferral?.assignedTherapistId || ""}><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
         <label className="text-sm font-semibold text-ink">Scheduled<input className="field" name="scheduledAt" type="datetime-local" /></label>
         <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue="scheduled">{VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
         <label className="text-sm font-semibold text-ink">Scheduling timezone<span className="field flex items-center text-slate-500">{FLOWVIA_OPERATIONS_TIME_ZONE}</span></label>
