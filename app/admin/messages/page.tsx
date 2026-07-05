@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AlertTriangle, MessageSquareText, ShieldCheck } from "lucide-react";
 import { getOperationsAssistantStatus } from "@/lib/ai/operations-assistant";
 import { getFlowviaDataModeStatus } from "@/lib/compliance/data-mode";
+import { safeInboundKeywordLabel } from "@/lib/pilot/cloud-health";
 import { requireAdminMessagesAccess } from "@/lib/pilot/access";
 import { redactPhone } from "@/lib/sms/compliance";
 import { getSmsStoreSnapshot, getSmsStoreStatus } from "@/lib/sms/store";
@@ -45,6 +46,9 @@ export default async function AdminMessagesPage() {
   const deployTarget = (process.env.FLOWVIA_DEPLOY_TARGET || process.env.VERCEL_ENV || process.env.NODE_ENV || "local").toLowerCase();
   const smsStoreMode = process.env.FLOWVIA_SMS_STORE_MODE || "default";
   const enrollmentByPhone = new Map(snapshot.enrollments.map((enrollment) => [enrollment.phone, enrollment]));
+  const latestWebhook = (snapshot.webhookEvents ?? [])[0];
+  const latestInboundMessage = snapshot.messages.find((message) => message.direction === "inbound");
+  const latestOutboundMessage = snapshot.messages.find((message) => message.direction === "outbound");
   const warnings = [
     telnyx.webhookSigningDevSkipped ? "Webhook signing is skipped because no signing key is configured. This is local/dev only." : null,
     telnyx.unsignedWebhookTestBypassEnabled ? "Unsigned Telnyx webhook test bypass is enabled. Disable it before staging or production." : null,
@@ -103,6 +107,10 @@ export default async function AdminMessagesPage() {
             <div className="flex justify-between gap-3"><dt>Webhook signing</dt><dd className="font-semibold text-ink">{telnyx.webhookSigningConfigured ? "Configured" : "Missing/dev skipped"}</dd></div>
             <div className="flex justify-between gap-3"><dt>Unsigned bypass</dt><dd className="font-semibold text-ink">{telnyx.unsignedWebhookTestBypassEnabled ? "Enabled" : "Disabled"}</dd></div>
             <div className="flex justify-between gap-3"><dt>SMS store mode</dt><dd className="font-semibold text-ink">{smsStoreMode}</dd></div>
+            <div className="flex justify-between gap-3"><dt>Cloud webhook last seen</dt><dd className="font-semibold text-ink">{formatTimestamp(latestWebhook?.createdAt)}</dd></div>
+            <div className="flex justify-between gap-3"><dt>Latest inbound keyword</dt><dd className="font-semibold text-ink">{safeInboundKeywordLabel(latestInboundMessage?.body)}</dd></div>
+            <div className="flex justify-between gap-3"><dt>Last inbound SMS</dt><dd className="font-semibold text-ink">{formatTimestamp(latestInboundMessage?.timestamp)}</dd></div>
+            <div className="flex justify-between gap-3"><dt>Last outbound SMS</dt><dd className="font-semibold text-ink">{formatTimestamp(latestOutboundMessage?.timestamp)}</dd></div>
           </dl>
         </section>
 

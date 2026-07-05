@@ -313,6 +313,28 @@ Manual first steps:
 7. Test with personal phone only.
 8. Turn real SMS off.
 
+## Cloud Pilot Daily Check
+
+1. Open `/admin/health`.
+2. Confirm deploy target, data mode, Real SMS gate, AI mode/no-PHI mode, SMS store mode, database storage mode, webhook signing, and Telnyx config are healthy.
+3. Confirm `DATABASE_URL` mode is transaction/port `6543` for Vercel runtime and `DIRECT_URL` mode is session/port `5432` for Prisma migrations/admin operations.
+4. Open `/admin/messages`.
+5. Confirm Cloud webhook last seen, latest inbound keyword, masked phone values, consent state, and recent webhook rows.
+6. Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
+7. Confirm Vercel has no 500s on `/dashboard`, `/admin/referrals`, `/admin/visits`, `/admin/messages`, or `/admin/health`.
+8. Confirm no `EMAXCONNSESSION` errors are present.
+9. Confirm no TLS/certificate errors are present.
+10. Confirm data mode remains `personal_test` or `phi_blocked`; do not enable PHI.
+
+Optional safe checks:
+
+```bash
+pnpm cloud:readiness
+pnpm cloud:route-smoke
+pnpm db:pool-smoke
+pnpm telnyx:cloud-readiness
+```
+
 ## No-PHI / Personal-Test Boundary
 
 - Keep `FLOWVIA_DATA_MODE=phi_blocked`.

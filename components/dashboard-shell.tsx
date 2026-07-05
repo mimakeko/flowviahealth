@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Database,
   FilePlus2,
+  HeartPulse,
   Home,
   LayoutDashboard,
   LockKeyhole,
@@ -40,6 +41,7 @@ const navItems: readonly NavItem[] = [
   { href: "/admin/referrals/new", icon: FilePlus2, label: "New Referral", roles: ["admin"], section: "admin" },
   { href: "/admin/visits", icon: CalendarClock, label: "Visit Operations", roles: ["admin"], section: "admin" },
   { href: "/admin/messages", icon: MessageSquareText, label: "Message Ledger", roles: ["admin"], section: "admin", gate: "messages" },
+  { href: "/admin/health", icon: HeartPulse, label: "Health Center", roles: ["admin"], section: "admin" },
   { href: "/my-work", icon: BriefcaseMedical, label: "My Work", roles: ["admin", "therapist"], section: "workspace" },
 ] as const;
 

@@ -22,6 +22,7 @@ Flowvia is not approved for real patients or PHI yet. This list blocks productio
 - PHI in SMS forbidden.
 - Field pilot referral/visit workflows are fake-data-only until production auth, audit review, retention, backup, incident response, and vendor controls are complete.
 - Operational notes must not include diagnosis, treatment details, clinical notes, emergency notes, medication, symptoms, therapy plans, wound details, or pain scores.
+- Cloud pilot health checks must remain green: `/admin/health`, `/admin/messages`, no Vercel 500s, no `EMAXCONNSESSION`, no TLS/certificate errors, Real SMS gate Off except controlled personal-phone tests, and data mode `personal_test` or `phi_blocked`.
 
 ## Required Auth Improvements
 
@@ -36,6 +37,17 @@ Flowvia is not approved for real patients or PHI yet. This list blocks productio
 ## Production Rule
 
 `FLOWVIA_DATA_MODE=phi_blocked` remains required. `phi_allowed` is a future mode and must not be enabled until legal, operational, vendor, security, backup, retention, incident response, and audit controls are complete.
+
+## Cloud Pilot Daily Check
+
+Before any serious pilot use, an admin should:
+
+- Open `/admin/health` and confirm deploy target, database pooler modes, webhook signing, Telnyx config, SMS store mode, AI mock/no-PHI state, and recent activity timestamps.
+- Open `/admin/messages` and confirm Cloud webhook last seen, latest inbound keyword, masked phone values, consent state, and recent webhook events.
+- Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
+- Confirm Vercel logs show no 500s and no `EMAXCONNSESSION`.
+- Confirm no TLS/certificate errors.
+- Confirm data mode remains `personal_test` or `phi_blocked`; PHI remains blocked.
 
 ## Workflow-Specific Blockers
 

@@ -189,6 +189,24 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
 
 If a staging check fails, stop the cutover and keep Telnyx pointed away from the cloud endpoint until the root cause is fixed. Keep real SMS test mode off while debugging unless a controlled owner-phone test is actively in progress.
 
+## Cloud Pilot Daily Check
+
+1. Open `/admin/health` and confirm deploy target, data mode, database URL mode, webhook signing, Telnyx config, SMS store mode, and latest activity timestamps look healthy.
+2. Open `/admin/messages` and confirm Cloud webhook last seen, latest inbound keyword, consent state, and Message Ledger rows are current.
+3. Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
+4. Confirm Vercel logs show no 500s on `/dashboard`, `/admin/referrals`, `/admin/visits`, `/admin/messages`, or `/admin/health`.
+5. Confirm no `EMAXCONNSESSION` errors are present.
+6. Confirm no TLS or certificate errors are present.
+7. Confirm data mode remains `personal_test` or `phi_blocked`; never enable PHI for the pilot.
+
+Optional terminal checks:
+
+```bash
+pnpm cloud:readiness
+pnpm db:pool-smoke
+pnpm telnyx:cloud-readiness
+```
+
 ## Troubleshooting
 
 ### `EMAXCONNSESSION` max clients reached in session mode

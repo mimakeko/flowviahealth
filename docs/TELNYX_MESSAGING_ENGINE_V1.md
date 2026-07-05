@@ -183,8 +183,27 @@ All app-generated SMS must come from `lib/sms/templates.ts`. The template guard 
 - Delivery status updates
 - Opt-out state
 - Telnyx configuration status without secrets
+- Cloud webhook last seen timestamp
+- Latest inbound keyword as `HELP`, `START`, `STOP`, or `UNKNOWN`
 
 The page is read-only and does not provide bulk messaging or manual send controls.
+
+## Cloud Pilot Daily Check
+
+1. Open `/admin/health` and confirm Telnyx API key, messaging profile, approved from number, webhook signing, unsigned bypass, Real SMS gate, and latest SMS timestamps look healthy.
+2. Open `/admin/messages` and confirm Cloud webhook last seen, latest inbound keyword, masked phone values, and recent webhook events.
+3. Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
+4. Confirm no Vercel 500s are occurring on SMS or internal admin routes.
+5. Confirm no `EMAXCONNSESSION` errors are present.
+6. Confirm no TLS/certificate errors are present.
+7. Confirm data mode remains `personal_test` or `phi_blocked`; do not enable PHI.
+
+Run config-only checks without sending SMS:
+
+```bash
+pnpm telnyx:cloud-readiness
+pnpm cloud:route-smoke
+```
 
 ## Local testing
 
