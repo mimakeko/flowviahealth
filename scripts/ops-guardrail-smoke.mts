@@ -59,7 +59,6 @@ async function main() {
   assert.match(formatOperationsDateTime(scheduledAt), /1:00 PM/);
 
   await prisma.$transaction(async (tx) => {
-    await tx.auditLog.deleteMany({ where: { actorType: SMOKE_ACTOR } });
     await tx.patientReferral.deleteMany({ where: { referralSource: SMOKE_SOURCE } });
     await tx.therapist.deleteMany({ where: { email: `ops.guardrail.${runId}@flowviahealth.test` } });
 

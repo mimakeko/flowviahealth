@@ -30,15 +30,21 @@ type AuditFilterRow = {
 
 const SAFE_METADATA_KEYS = new Set([
   "assignedTherapistId",
+  "cleanupMode",
+  "count",
   "from",
   "hasOperationalNote",
   "noteAdded",
   "reason",
+  "referralCount",
   "referralId",
   "route",
+  "source",
   "status",
+  "therapistCount",
   "therapistId",
   "to",
+  "visitCount",
   "visitId",
   "workflow",
 ]);

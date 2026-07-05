@@ -22,7 +22,6 @@ async function main() {
   const telnyxEventId = `smoke_${runId}`;
 
   await prisma.$transaction(async (tx) => {
-    await tx.auditLog.deleteMany({ where: { actorType: SMOKE_ACTOR } });
     await tx.telnyxWebhookEvent.deleteMany({ where: { eventType: "smoke.webhook" } });
     await tx.smsMessage.deleteMany({ where: { eventType: "smoke.sms.dry_run" } });
     await tx.smsConsentEnrollment.deleteMany({ where: { fullName: "Smoke SMS Contact" } });

@@ -22,7 +22,8 @@ Flowvia is not approved for real patients or PHI yet. This list blocks productio
 - PHI in SMS forbidden.
 - Field pilot referral/visit workflows are fake-data-only until production auth, audit review, retention, backup, incident response, and vendor controls are complete.
 - Operational notes must not include diagnosis, treatment details, clinical notes, emergency notes, medication, symptoms, therapy plans, wound details, or pain scores.
-- Cloud pilot health checks must remain green: `/admin/health`, `/admin/messages`, `/admin/audit`, no Vercel 500s, no `EMAXCONNSESSION`, no TLS/certificate errors, Real SMS gate Off except controlled personal-phone tests, and data mode `personal_test` or `phi_blocked`.
+- Cloud pilot health checks must remain green: `/admin/health`, `/admin/messages`, `/admin/audit`, `/admin/data`, no Vercel 500s, no `EMAXCONNSESSION`, no TLS/certificate errors, Real SMS gate Off except controlled personal-phone tests, and data mode `personal_test` or `phi_blocked`.
+- Data stewardship is fake-data-only: no audit deletion, no SMS history deletion, archive over delete, and personal-number tests end `opted_out` unless active testing is underway.
 
 ## Required Auth Improvements
 
@@ -47,6 +48,7 @@ Before any serious pilot use, an admin should:
 - Open `/admin/referrals` and `/admin/visits` to confirm fake-data workflow queues are moving through assignment, scheduling, active, completed, canceled, no-show states as expected.
 - Have therapists review `/my-work`; therapist actions must remain scoped to their assigned referrals/visits and limited to operational status/note updates.
 - Open `/admin/audit` and review recent audit events for safe metadata only; no secrets, raw SMS bodies, provider payloads, or PHI should appear.
+- Open `/admin/data` and confirm stewardship status is audit-preserving, no SMS history deletion is offered, and real SMS gate remains Off.
 - Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
 - Confirm Vercel logs show no 500s and no `EMAXCONNSESSION`.
 - Confirm no TLS/certificate errors.
@@ -59,4 +61,5 @@ Before any serious pilot use, an admin should:
 - Therapist workflow actions are pilot-only and not final clinical documentation.
 - SMS send actions are blocked from referral/visit workflow pages.
 - Audit trail metadata must remain summarized and safe; do not expose raw SMS payloads, provider payloads, secrets, or PHI.
+- Data stewardship tools must not hard-delete audit logs or SMS history and must require exact confirmation for archive/cleanup actions.
 - Full phone number exposure must remain limited and masked by default.

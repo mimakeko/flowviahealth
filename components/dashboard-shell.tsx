@@ -4,6 +4,7 @@ import {
   CalendarClock,
   ClipboardList,
   Database,
+  FolderArchive,
   FilePlus2,
   HeartPulse,
   Home,
@@ -44,6 +45,7 @@ const navItems: readonly NavItem[] = [
   { href: "/admin/messages", icon: MessageSquareText, label: "Message Ledger", roles: ["admin"], section: "admin", gate: "messages" },
   { href: "/admin/health", icon: HeartPulse, label: "Health Center", roles: ["admin"], section: "admin" },
   { href: "/admin/audit", icon: ScrollText, label: "Audit Trail", roles: ["admin"], section: "admin" },
+  { href: "/admin/data", icon: FolderArchive, label: "Data Stewardship", roles: ["admin"], section: "admin" },
   { href: "/my-work", icon: BriefcaseMedical, label: "My Work", roles: ["admin", "therapist"], section: "workspace" },
 ] as const;
 

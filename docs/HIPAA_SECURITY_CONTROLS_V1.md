@@ -15,6 +15,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - Unique user identification: replace temporary shared pilot credentials with per-user accounts.
 - RBAC: admins and therapists must keep separate route and data access.
 - Audit controls: retain login, referral, SMS consent, webhook, and operational audit events.
+- Data stewardship: fake/personal-number pilot cleanup must preserve audit history, preserve SMS consent/message/webhook history, and archive operational records instead of deleting audit evidence.
 - Transmission security: require HTTPS, signed Telnyx webhooks, secure database connections, and secret-managed API keys.
 - Encryption: use managed encrypted storage and avoid secrets in source, screenshots, logs, and tickets.
 - Integrity controls: validate webhook signatures, preserve event-id idempotency, and reject unsupported data modes.
@@ -34,3 +35,4 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - `FLOWVIA_ALLOW_REAL_SMS_TEST=false` by default.
 - `FLOWVIA_ALLOW_UNSIGNED_TELNYX_WEBHOOK_TEST=false` by default.
 - Message Ledger masks phone numbers and does not expose secrets.
+- Data Stewardship tools are admin-only, confirmation-gated, fake-data-only, audit-preserving, and do not send SMS.

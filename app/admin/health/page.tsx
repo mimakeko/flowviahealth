@@ -8,6 +8,7 @@ import {
   getDatabaseUrlComparison,
   safeInboundKeywordLabel,
 } from "@/lib/pilot/cloud-health";
+import { getPilotDataStewardshipSummary } from "@/lib/pilot/data-stewardship";
 import { requirePilotOperationsAccess } from "@/lib/pilot/ops";
 import { redactPhone } from "@/lib/sms/compliance";
 import { getSmsStoreStatus } from "@/lib/sms/store";
@@ -132,6 +133,10 @@ export default async function AdminHealthPage() {
   const databaseStorageMode = process.env.DATABASE_URL ? "Postgres" : smsStore.label;
   const webhookEnforced = telnyx.webhookSigningConfigured && !telnyx.unsignedWebhookTestBypassEnabled;
   const dbIdenticalLabel = dbUrls.identical === null ? "Unknown" : dbUrls.identical ? "Identical" : "Non-identical";
+  const stewardshipSummary = process.env.DATABASE_URL ? await getPilotDataStewardshipSummary(getPrismaClient()) : null;
+  const lastStewardshipAction = stewardshipSummary?.lastStewardshipAudit
+    ? `${stewardshipSummary.lastStewardshipAudit.action} / ${formatDateTime(stewardshipSummary.lastStewardshipAudit.createdAt)}`
+    : "Not recorded";
 
   const statusMetrics: Array<{ icon: typeof Activity; metric: HealthMetric }> = [
     { icon: Activity, metric: { label: "Deploy target", value: deployTarget } },
@@ -156,6 +161,9 @@ export default async function AdminHealthPage() {
     { icon: Clock, metric: { label: "Last outbound SMS", value: formatDateTime(activitySnapshot.lastOutboundSmsTime) } },
     { icon: Clock, metric: { label: "Last referral created", value: formatDateTime(activitySnapshot.lastReferralCreatedTime) } },
     { icon: Clock, metric: { label: "Last visit created", value: formatDateTime(activitySnapshot.lastVisitCreatedTime) } },
+    { icon: Database, metric: { label: "Data stewardship", value: stewardshipSummary ? "Audit-preserving cleanup enabled" : "Unavailable", tone: stewardshipSummary?.auditPreservingCleanupEnabled ? "good" : "warn" } },
+    { icon: Clock, metric: { label: "Last seed/reset/archive action", value: lastStewardshipAction } },
+    { icon: ShieldCheck, metric: { label: "Cleanup mode", value: stewardshipSummary?.auditPreservingCleanupEnabled ? "Archive only / audit preserved" : "Disabled", tone: stewardshipSummary?.auditPreservingCleanupEnabled ? "good" : "warn" } },
   ];
 
   return (

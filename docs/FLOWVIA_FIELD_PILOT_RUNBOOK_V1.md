@@ -50,6 +50,7 @@ Internal dashboard/admin/workspace routes:
 - `/admin/messages`: read-only SMS consent/message ledger.
 - `/admin/health`: admin-only cloud pilot health center.
 - `/admin/audit`: admin-only audit trail with safe metadata summaries.
+- `/admin/data`: admin-only data stewardship for fake/personal-number pilot data.
 - `/my-work`: therapist demo worklist.
 
 Internal routes use the shared dashboard shell and sidebar after pilot login. Public pages use the public website header/footer.
@@ -164,6 +165,7 @@ Protected routes:
 - `/admin/visits/[id]`
 - `/admin/health`
 - `/admin/audit`
+- `/admin/data`
 - `/my-work`
 
 Public or webhook routes that remain unprotected:
@@ -219,8 +221,20 @@ Admins should run each pilot day from the internal dashboard shell:
 4. Open `/admin/visits`, filter for `Upcoming`, `Needs scheduling`, or in-progress statuses, then update only operational lifecycle status and no-PHI notes.
 5. Have therapists use `/my-work` for their assigned referrals and visits. Therapist actions remain limited to operational status and notes; no assignment, SMS send, or bulk controls are exposed.
 6. Open `/admin/audit` and review recent audit events for expected status changes, assignment changes, visit updates, SMS consent events, and permission denials.
-7. Keep all notes free of PHI: no diagnosis, symptoms, treatment details, medication, emergency details, wound details, therapy plans, pain scores, full addresses, or clinical narratives.
-8. Keep real SMS testing personal-number-only. `FLOWVIA_ALLOW_REAL_SMS_TEST` must stay `false` except during an explicit controlled owner-phone test window.
+7. Open `/admin/data` only when fake pilot data needs stewardship. Use archive/refresh tools with exact confirmation text and verify audit events afterward.
+8. Keep all notes free of PHI: no diagnosis, symptoms, treatment details, medication, emergency details, wound details, therapy plans, pain scores, full addresses, or clinical narratives.
+9. Keep real SMS testing personal-number-only. `FLOWVIA_ALLOW_REAL_SMS_TEST` must stay `false` except during an explicit controlled owner-phone test window.
+
+## Pilot Data Stewardship Policy
+
+- Pilot data is fake data only, except controlled owner personal-number SMS tests.
+- PHI remains blocked. Do not enter real patient data, clinical notes, diagnosis, treatment details, medication, symptoms, wound details, therapy plans, pain scores, or emergency details.
+- Do not delete audit logs. Audit rows must remain available even when fake operational records are archived.
+- Do not delete SMS consent enrollments, SMS messages, or Telnyx webhook history from dashboard tools.
+- Prefer archive over delete. `/admin/data` archives completed/canceled fake referrals and smoke-test operational records by marking operational notes, not by deleting audit/SMS history.
+- Personal-number tests should end in `opted_out` unless active testing is underway.
+- Data stewardship actions must not send real SMS and must not expose full phone numbers, raw SMS bodies, secrets, or provider payloads.
+- Run `pnpm data:inventory` for safe counts only and `pnpm data:stewardship-smoke` to validate cleanup guardrails.
 
 ## Supabase staging checks
 
