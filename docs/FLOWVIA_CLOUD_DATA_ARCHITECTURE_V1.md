@@ -12,14 +12,15 @@ This foundation prepares Flowvia for a small field pilot with 1-2 therapists usi
 - Schema: `prisma/schema.prisma`
 - Initial migration: `prisma/migrations/20260702130000_field_pilot_foundation/migration.sql`
 
-Prisma 7 keeps the connection URL out of `schema.prisma`. The CLI reads `DATABASE_URL` through `prisma.config.ts`, and the app creates `PrismaClient` with `PrismaPg`.
+Prisma 7 keeps the connection URL out of `schema.prisma`. The app creates `PrismaClient` with `PrismaPg` and reads `DATABASE_URL` at runtime. Prisma CLI operations read `DIRECT_URL` through `prisma.config.ts`, falling back to `DATABASE_URL` only for local compatibility.
 
 ## Environment
 
 Required for cloud/pilot:
 
 ```bash
-DATABASE_URL=postgresql://...
+DATABASE_URL=postgresql://... # Supabase transaction pooler for Vercel runtime, usually port 6543
+DIRECT_URL=postgresql://... # Supabase direct/session URL for migrations/admin, usually port 5432
 ```
 
 Required for Telnyx SMS:

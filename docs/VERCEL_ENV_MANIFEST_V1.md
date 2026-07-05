@@ -16,8 +16,10 @@ Allowed values: `local`, `staging`, `production`.
 
 | Variable | Purpose | Required for staging | Safe example | Secret handling | Missing readiness behavior | Can remain disabled |
 | --- | --- | --- | --- | --- | --- | --- |
-| `DATABASE_URL` | Prisma/Postgres pooled or runtime connection URL. | Yes | `<paste from Supabase session pooler>` | Secret. Paste only in Vercel env UI/CLI. Do not commit. | Fail in staging/production-like checks. | No |
-| `DIRECT_URL` | Direct database URL for migrations/admin operations. | Yes | `<paste from Supabase direct/session URL>` | Secret. Paste only in Vercel env UI/CLI. Do not commit. | Fail in staging/production-like checks. | No |
+| `DATABASE_URL` | Prisma/Postgres runtime URL for Vercel serverless. Must use the Supabase transaction pooler. | Yes | `<paste Supabase transaction pooler URL, usually port 6543, with sslmode=require>` | Secret. Paste only in Vercel env UI/CLI. Do not commit. | Fail in staging/production-like checks if missing or if it appears to use session/direct port 5432. | No |
+| `DIRECT_URL` | Direct/session database URL for Prisma migrations and admin operations. Do not use for Vercel runtime. | Yes | `<paste Supabase direct/session URL, usually port 5432, with sslmode=require>` | Secret. Paste only in Vercel env UI/CLI. Do not commit. | Fail in staging/production-like checks if missing; warn if identical to `DATABASE_URL`. | No |
+
+Vercel/serverless must not use Supabase session mode for `DATABASE_URL`. Runtime routes such as `/dashboard` and `/admin/referrals` can exhaust the session pool and return `EMAXCONNSESSION` if `DATABASE_URL` points at port `5432`. Keep `DATABASE_URL` on the transaction pooler, usually port `6543`, and keep `DIRECT_URL` on direct/session, usually port `5432`, for Prisma migrations/admin work.
 
 ## Telnyx
 

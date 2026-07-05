@@ -55,7 +55,10 @@ Internal routes use the shared dashboard shell and sidebar after pilot login. Pu
 2. Set production/staging env vars:
 
 ```bash
+# Vercel/serverless runtime: Supabase transaction pooler, usually port 6543, with SSL required.
 DATABASE_URL=postgresql://...
+# Prisma migrations/admin operations: Supabase direct/session URL, usually port 5432, with SSL required.
+DIRECT_URL=postgresql://...
 RESEND_API_KEY=
 TELNYX_API_KEY=
 TELNYX_MESSAGING_PROFILE_ID=
@@ -200,21 +203,23 @@ pnpm hipaa:readiness
 
 Use Supabase staging for database validation before putting real pilot operations into the system.
 
-1. Confirm the local shell has `DATABASE_URL` configured for the Supabase project.
-2. Do not print `DATABASE_URL` or any Supabase credentials in terminal output, logs, screenshots, or tickets.
-3. Generate the Prisma Client:
+1. Confirm Vercel `DATABASE_URL` is the Supabase transaction pooler URL for serverless runtime, usually port `6543`, with SSL required.
+2. Confirm `DIRECT_URL` is the Supabase direct/session URL for Prisma migrations/admin operations, usually port `5432`, with SSL required.
+3. Confirm `DATABASE_URL` and `DIRECT_URL` are not identical in staging/production.
+4. Do not print `DATABASE_URL`, `DIRECT_URL`, or any Supabase credentials in terminal output, logs, screenshots, or tickets.
+5. Generate the Prisma Client:
 
 ```bash
 pnpm db:generate
 ```
 
-4. Apply migrations if they have not already been deployed:
+6. Apply migrations if they have not already been deployed:
 
 ```bash
 pnpm db:deploy
 ```
 
-5. Run the smoke test:
+7. Run the smoke test:
 
 ```bash
 pnpm db:smoke
@@ -232,6 +237,17 @@ The smoke test also executes the dashboard query shapes for:
 - Active therapists.
 - Upcoming visits.
 - Recent referrals.
+
+### Supabase serverless pooling
+
+Vercel runtime must use Supabase transaction pooling through `DATABASE_URL`. Do not point Vercel `DATABASE_URL` at the Supabase session/direct URL on port `5432`; that can exhaust the session client limit and return 500s on internal routes.
+
+Use this split:
+
+- `DATABASE_URL`: Supabase transaction pooler, usually port `6543`, for Vercel/serverless runtime.
+- `DIRECT_URL`: Supabase direct/session URL, usually port `5432`, for Prisma migrations/admin operations.
+
+If Vercel logs show `(EMAXCONNSESSION) max clients reached in session mode`, switch Vercel `DATABASE_URL` to the transaction pooler URL, keep `DIRECT_URL` on direct/session, redeploy, and re-test `/dashboard`, `/admin/referrals`, and `/admin/visits`.
 
 ## Seeding fake pilot data
 

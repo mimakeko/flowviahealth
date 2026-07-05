@@ -5,6 +5,14 @@ import { getFlowviaDataModeStatus } from "../lib/compliance/data-mode.ts";
 import { verifyScryptPasswordHash } from "../lib/pilot/session.ts";
 
 type CheckLevel = "PASS" | "WARN" | "FAIL";
+type DatabasePoolerMode = "session" | "transaction" | "unknown";
+type DatabaseUrlMetadata = Readonly<{
+  hasSslRequirement: boolean;
+  mode: DatabasePoolerMode;
+  parseable: boolean;
+  port: string;
+  set: boolean;
+}>;
 
 const repoRoot = process.cwd();
 const envLocalPath = `${repoRoot}/.env.local`;
@@ -112,6 +120,113 @@ function booleanEnv(name: string, defaultValue: boolean) {
   return value === "true";
 }
 
+function databaseUrlMetadata(name: "DATABASE_URL" | "DIRECT_URL"): DatabaseUrlMetadata {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    return {
+      hasSslRequirement: false,
+      mode: "unknown",
+      parseable: false,
+      port: "missing",
+      set: false,
+    };
+  }
+
+  try {
+    const parsed = new URL(value);
+    const port = parsed.port || (parsed.protocol === "postgresql:" || parsed.protocol === "postgres:" ? "5432" : "unknown");
+    const host = parsed.hostname.toLowerCase();
+    const sslMode = parsed.searchParams.get("sslmode")?.toLowerCase();
+    const sslValue = parsed.searchParams.get("ssl")?.toLowerCase();
+    const hasSslRequirement = sslMode === "require" || sslValue === "true";
+    const mode: DatabasePoolerMode = port === "6543" || (host.includes("pooler") && port !== "5432")
+      ? "transaction"
+      : port === "5432"
+        ? "session"
+        : "unknown";
+
+    return {
+      hasSslRequirement,
+      mode,
+      parseable: true,
+      port,
+      set: true,
+    };
+  } catch {
+    return {
+      hasSslRequirement: false,
+      mode: "unknown",
+      parseable: false,
+      port: "unparseable",
+      set: true,
+    };
+  }
+}
+
+function addDatabaseUrlMetadata(name: "DATABASE_URL" | "DIRECT_URL", metadata: DatabaseUrlMetadata) {
+  if (!metadata.set) return;
+
+  add(
+    metadata.parseable ? "PASS" : productionLike ? "FAIL" : "WARN",
+    `${name} safe metadata: SET, detected port=${metadata.port}, likely pooler mode=${metadata.mode}, SSL requirement=${metadata.hasSslRequirement ? "present" : "missing"}.`,
+  );
+}
+
+function addSupabasePoolingChecks() {
+  const databaseUrl = databaseUrlMetadata("DATABASE_URL");
+  const directUrl = databaseUrlMetadata("DIRECT_URL");
+
+  addDatabaseUrlMetadata("DATABASE_URL", databaseUrl);
+  addDatabaseUrlMetadata("DIRECT_URL", directUrl);
+
+  if (databaseUrl.set && databaseUrl.parseable) {
+    if (databaseUrl.port === "6543" || databaseUrl.mode === "transaction") {
+      add("PASS", "DATABASE_URL appears serverless-safe for Vercel runtime: transaction pooler mode detected.");
+    } else if (databaseUrl.port === "5432" || databaseUrl.mode === "session") {
+      add(
+        productionLike ? "FAIL" : "WARN",
+        "DATABASE_URL appears to use session/direct Postgres on port 5432. Vercel/serverless runtime must use Supabase transaction pooler, usually port 6543.",
+      );
+    } else {
+      add(
+        productionLike ? "WARN" : "PASS",
+        "DATABASE_URL pooler mode is unknown. For Vercel/serverless, confirm it is the Supabase transaction pooler URL, usually port 6543.",
+      );
+    }
+
+    add(
+      databaseUrl.hasSslRequirement ? "PASS" : productionLike ? "FAIL" : "WARN",
+      `DATABASE_URL SSL requirement is ${databaseUrl.hasSslRequirement ? "present" : "missing"} for Supabase Postgres.`,
+    );
+  }
+
+  if (directUrl.set && directUrl.parseable) {
+    if (directUrl.port === "5432" || directUrl.mode === "session") {
+      add("PASS", "DIRECT_URL appears suitable for Prisma migrations/admin operations: session/direct mode detected.");
+    } else if (directUrl.port === "6543" || directUrl.mode === "transaction") {
+      add(
+        productionLike ? "FAIL" : "WARN",
+        "DIRECT_URL appears to use the transaction pooler. Prisma migrations/admin operations should use Supabase session/direct URL, usually port 5432.",
+      );
+    } else {
+      add("WARN", "DIRECT_URL pooler mode is unknown. Confirm it is Supabase session/direct URL for migrations/admin operations, usually port 5432.");
+    }
+
+    add(
+      directUrl.hasSslRequirement ? "PASS" : productionLike ? "FAIL" : "WARN",
+      `DIRECT_URL SSL requirement is ${directUrl.hasSslRequirement ? "present" : "missing"} for Supabase Postgres.`,
+    );
+  }
+
+  if (databaseUrl.set && directUrl.set) {
+    const identical = process.env.DATABASE_URL?.trim() === process.env.DIRECT_URL?.trim();
+    add(
+      identical ? "WARN" : "PASS",
+      `DATABASE_URL and DIRECT_URL are ${identical ? "identical" : "non-identical"}. Runtime should use transaction pooler; migrations/admin should use session/direct.`,
+    );
+  }
+}
+
 console.log(`Flowvia cloud staging readiness (${target})`);
 console.log("Secret values are redacted; this script reports presence, lengths, modes, and safe public identifiers only.");
 
@@ -144,6 +259,8 @@ for (const name of stagingRequiredEnv) {
   const set = hasEnv(name);
   add(set ? "PASS" : productionLike ? "FAIL" : "WARN", `${name}: ${safeValueSummary(name)}`);
 }
+
+addSupabasePoolingChecks();
 
 if (productionLike) {
   if (process.env.FLOWVIA_PILOT_OPERATIONS_ENABLED !== "true") {

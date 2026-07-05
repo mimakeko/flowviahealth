@@ -9,8 +9,10 @@ Copy this into the Vercel environment-variable UI/CLI as a checklist. Do not com
 FLOWVIA_DEPLOY_TARGET=staging
 
 # Database - secret, required
-DATABASE_URL=<paste from Supabase session pooler>
-DIRECT_URL=<paste from Supabase direct/session URL>
+# Vercel/serverless runtime: Supabase transaction pooler, usually port 6543, with SSL required.
+DATABASE_URL=<paste Supabase transaction pooler URL with sslmode=require>
+# Prisma migrations/admin: Supabase direct/session URL, usually port 5432, with SSL required.
+DIRECT_URL=<paste Supabase direct/session URL with sslmode=require>
 
 # Telnyx - required
 TELNYX_API_KEY=<paste from Telnyx> # secret
@@ -52,6 +54,8 @@ FLOWVIA_SMS_STORE_MODE=
 ## Do Not Set In Vercel
 
 ```bash
+DATABASE_URL=<Supabase session/direct URL on port 5432>
+DATABASE_URL=<same value as DIRECT_URL>
 FLOWVIA_SMS_STORE_MODE=test
 FLOWVIA_SMS_STORE_MODE=json
 FLOWVIA_ALLOW_UNSIGNED_TELNYX_WEBHOOK_TEST=true

@@ -68,8 +68,8 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
 10. Confirm required staging values:
 
     - `FLOWVIA_DEPLOY_TARGET=staging`
-    - `DATABASE_URL`
-    - `DIRECT_URL`
+    - `DATABASE_URL` uses the Supabase transaction pooler for Vercel/serverless runtime, usually port `6543`, with SSL required.
+    - `DIRECT_URL` uses the Supabase direct/session URL for Prisma migrations/admin operations, usually port `5432`, with SSL required.
     - `TELNYX_API_KEY`
     - `TELNYX_MESSAGING_PROFILE_ID=40019f0a-4f48-4749-9d5a-7bb4f0716cbe`
     - `TELNYX_FLOWVIA_FROM_NUMBER=+14692933948`
@@ -88,19 +88,23 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
     - `FLOWVIA_AI_NO_PHI_MODE=true`
     - `FLOWVIA_AI_AUDIT_ONLY=true`
 
-11. Confirm forbidden staging values are absent/off:
+11. Before smoke testing internal routes, verify Vercel `DATABASE_URL` is not the Supabase session/direct URL. It must be the transaction pooler URL, usually port `6543`. Keep `DIRECT_URL` separate on direct/session, usually port `5432`.
 
+12. Confirm forbidden staging values are absent/off:
+
+    - `DATABASE_URL` using Supabase session/direct port `5432`
+    - `DATABASE_URL` identical to `DIRECT_URL`
     - `FLOWVIA_ALLOW_UNSIGNED_TELNYX_WEBHOOK_TEST=true`
     - `FLOWVIA_SMS_STORE_MODE=test`
     - `FLOWVIA_SMS_STORE_MODE=json`
     - `FLOWVIA_DATA_MODE=phi_allowed`
     - Any localhost/ngrok webhook URL as final webhook
 
-12. Deploy through Vercel.
+13. Deploy through Vercel.
 
-13. Confirm Vercel build succeeds.
+14. Confirm Vercel build succeeds.
 
-14. Confirm public routes:
+15. Confirm public routes:
 
     - `https://flowviahealth.com/`
     - `https://flowviahealth.com/sms-consent`
@@ -109,7 +113,7 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
     - `https://flowviahealth.com/hipaa`
     - `https://flowviahealth.com/contact`
 
-15. Confirm protected routes redirect unauthenticated:
+16. Confirm protected routes redirect unauthenticated:
 
     - `https://flowviahealth.com/dashboard`
     - `https://flowviahealth.com/admin/referrals`
@@ -117,17 +121,17 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
     - `https://flowviahealth.com/admin/messages`
     - `https://flowviahealth.com/my-work`
 
-16. Confirm admin login.
+17. Confirm admin login.
 
-17. Confirm therapist login.
+18. Confirm therapist login.
 
-18. Confirm therapist is blocked from admin routes:
+19. Confirm therapist is blocked from admin routes:
 
     - `/admin/referrals`
     - `/admin/visits`
     - `/admin/messages`
 
-19. Confirm Message Ledger says:
+20. Confirm Message Ledger says:
 
     - Storage: `Postgres`
     - API key configured
@@ -138,7 +142,7 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
     - AI disabled/mock and audit-only
     - Data mode is `personal_test` or `phi_blocked`
 
-20. Set Telnyx inbound webhook URL:
+21. Set Telnyx inbound webhook URL:
 
     ```text
     https://flowviahealth.com/api/telnyx/webhook
@@ -146,9 +150,9 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
 
     Method: `POST`
 
-21. Confirm Telnyx webhook signing is configured in Telnyx and Vercel.
+22. Confirm Telnyx webhook signing is configured in Telnyx and Vercel.
 
-22. Controlled personal-phone-only test:
+23. Controlled personal-phone-only test:
 
     - Temporarily set `FLOWVIA_ALLOW_REAL_SMS_TEST=true` in Vercel.
     - Redeploy/restart as needed.
@@ -164,13 +168,13 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
     - Set `FLOWVIA_ALLOW_REAL_SMS_TEST=false` immediately afterward.
     - Redeploy/restart as needed.
 
-23. Confirm `FLOWVIA_ALLOW_REAL_SMS_TEST=false` after the test.
+24. Confirm `FLOWVIA_ALLOW_REAL_SMS_TEST=false` after the test.
 
-24. Confirm no unsigned webhook bypass is enabled.
+25. Confirm no unsigned webhook bypass is enabled.
 
-25. Confirm no real patients and no PHI were used.
+26. Confirm no real patients and no PHI were used.
 
-26. Rotate temporary passwords before serious use.
+27. Rotate temporary passwords before serious use.
 
 ## Hard Stops
 
@@ -184,3 +188,23 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
 ## Rollback / Pause
 
 If a staging check fails, stop the cutover and keep Telnyx pointed away from the cloud endpoint until the root cause is fixed. Keep real SMS test mode off while debugging unless a controlled owner-phone test is actively in progress.
+
+## Troubleshooting
+
+### `EMAXCONNSESSION` max clients reached in session mode
+
+Symptom: Vercel runtime returns 500 on Prisma-backed internal routes such as `/dashboard` or `/admin/referrals`, and logs include:
+
+```text
+DriverAdapterError: (EMAXCONNSESSION) max clients reached in session mode
+```
+
+Cause: Vercel/serverless runtime is using a Supabase session/direct Postgres URL for `DATABASE_URL`, usually port `5432`. Serverless functions can create enough concurrent sessions to exhaust the small session pool.
+
+Fix:
+
+1. In Supabase, copy the transaction pooler connection string for app/runtime use. It usually uses port `6543`.
+2. In Vercel, set `DATABASE_URL` to that transaction pooler URL and include SSL requirements.
+3. Keep `DIRECT_URL` as the Supabase direct/session URL for Prisma migrations/admin operations, usually port `5432`.
+4. Redeploy from GitHub or trigger a normal Vercel redeploy after the env var change.
+5. Re-test `/dashboard`, `/admin/referrals`, and `/admin/visits`.
