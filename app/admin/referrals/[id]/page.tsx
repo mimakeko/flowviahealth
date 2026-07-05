@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarPlus, Save } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
+import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { getOperationsAssistantV2Status, getReferralAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
 import { requirePilotSession } from "@/lib/pilot/auth";
@@ -249,7 +251,7 @@ export default async function ReferralDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ error?: string; noteCategory?: string; noteDestination?: string; noteSuggestion?: string }>;
+  searchParams?: Promise<{ error?: string; noteCategory?: string; noteClassification?: string; noteDestination?: string; noteSuggestion?: string }>;
 }) {
   requirePilotOperationsAccess();
 
@@ -298,6 +300,14 @@ export default async function ReferralDetailPage({
   const referralAuditLogs = auditLogs as AuditLogListItem[];
   const smsReadiness = smsConsent?.status || "none";
   const telnyx = getTelnyxConfigStatus();
+  const assistantCards = getReferralAssistantCards({
+    assignedTherapistId: referral.assignedTherapistId,
+    noteClassification: query?.noteClassification,
+    smsConsentStatus: smsReadiness,
+    status: referral.status,
+    upcomingVisitCount: upcomingVisits.length,
+  });
+  const assistantStatus = getOperationsAssistantV2Status();
 
   return (
     <div>
@@ -367,6 +377,15 @@ export default async function ReferralDetailPage({
           </div>
 
           <BlockedNoteAlert className="mt-5" searchParams={query} />
+
+          <div className="mt-5">
+            <OperationsAssistantPanel
+              cards={assistantCards}
+              status={assistantStatus}
+              summary="Referral guidance is deterministic and limited to operational workflow state. It does not send messages or make autonomous changes."
+              title="Operations Assistant"
+            />
+          </div>
 
           {referral.address ? (
             <p className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-900">

@@ -42,7 +42,7 @@ export function BlockedNoteAlert({ className = "mt-6", searchParams }: BlockedNo
         </div>
         {suggestion ? (
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-rose-800">Suggested operational rewrite</dt>
+            <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-rose-800">Suggested operational rewrite — review before saving</dt>
             <dd className="mt-1 rounded-md bg-white/75 px-3 py-2 text-rose-950">{suggestion}</dd>
           </div>
         ) : null}

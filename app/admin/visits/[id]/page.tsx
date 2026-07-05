@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Save } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
+import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { getOperationsAssistantV2Status, getVisitAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
 import { requirePilotSession } from "@/lib/pilot/auth";
@@ -133,7 +135,7 @@ export default async function VisitDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ error?: string; noteCategory?: string; noteDestination?: string; noteSuggestion?: string }>;
+  searchParams?: Promise<{ error?: string; noteCategory?: string; noteClassification?: string; noteDestination?: string; noteSuggestion?: string }>;
 }) {
   requirePilotOperationsAccess();
 
@@ -165,6 +167,14 @@ export default async function VisitDetailPage({
 
   const therapistOptions = therapists as TherapistOption[];
   const visitAuditLogs = auditLogs as AuditLogListItem[];
+  const assistantCards = getVisitAssistantCards({
+    noteClassification: query?.noteClassification,
+    referralStatus: visit.referral.status,
+    scheduledAt: visit.scheduledAt,
+    status: visit.status,
+    therapistId: visit.therapistId,
+  });
+  const assistantStatus = getOperationsAssistantV2Status();
 
   return (
     <div>
@@ -216,6 +226,15 @@ export default async function VisitDetailPage({
           </dl>
 
           <BlockedNoteAlert className="mt-5" searchParams={query} />
+
+          <div className="mt-5">
+            <OperationsAssistantPanel
+              cards={assistantCards}
+              status={assistantStatus}
+              summary="Visit guidance is deterministic and limited to operational workflow state. It does not send messages or make autonomous changes."
+              title="Operations Assistant"
+            />
+          </div>
 
           <form action={updateVisitAction} className="mt-8 grid gap-5 border-t border-line pt-6 md:grid-cols-2">
             <input type="hidden" name="visitId" value={visit.id} />

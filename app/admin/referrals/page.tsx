@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ClipboardList, Plus } from "lucide-react";
 import type { Prisma } from "@prisma/client";
+import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { getOperationsAssistantV2Status, getQueueAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
 import {
   formatDate,
@@ -47,6 +49,9 @@ export default async function AdminReferralsPage({
   const selectedGroup = params?.group === "needs_scheduling" ? "needs_scheduling" : "";
   const needsSchedulingStatuses: ReferralStatusValue[] = ["new", "contacted"];
   const referralFilters: Prisma.PatientReferralWhereInput[] = [];
+  const now = new Date();
+  const sevenDaysFromNow = new Date(now);
+  sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
 
   if (selectedStatus) referralFilters.push({ status: selectedStatus });
   if (selectedTherapistId === "unassigned") referralFilters.push({ assignedTherapistId: null });
@@ -56,7 +61,7 @@ export default async function AdminReferralsPage({
   }
 
   const prisma = getPrismaClient();
-  const [referrals, therapists] = await Promise.all([
+  const [referrals, therapists, contactedNotScheduled, scheduledVisitsNextSevenDays, pastScheduledVisits, optedOutContacts, unassignedReferrals, smokeTestRecords] = await Promise.all([
     prisma.patientReferral.findMany({
       include: { assignedTherapist: true },
       orderBy: { createdAt: "desc" },
@@ -67,9 +72,51 @@ export default async function AdminReferralsPage({
       orderBy: { name: "asc" },
       where: { active: true },
     }),
+    prisma.patientReferral.count({
+      where: {
+        status: "contacted",
+        visits: { none: { status: { in: ["scheduled", "in_progress"] } } },
+      },
+    }),
+    prisma.visit.count({
+      where: {
+        scheduledAt: {
+          gte: now,
+          lte: sevenDaysFromNow,
+        },
+        status: { in: ["scheduled", "in_progress"] },
+      },
+    }),
+    prisma.visit.count({
+      where: {
+        scheduledAt: { lt: now },
+        status: { in: ["scheduled", "in_progress"] },
+      },
+    }),
+    prisma.smsConsentEnrollment.count({ where: { status: "opted_out" } }),
+    prisma.patientReferral.count({ where: { assignedTherapistId: null, status: { notIn: ["completed", "canceled"] } } }),
+    prisma.patientReferral.count({
+      where: {
+        OR: [
+          { referralSource: { contains: "smoke" } },
+          { patientName: { startsWith: "Smoke" } },
+          { patientName: { startsWith: "Ops Guardrail Smoke" } },
+        ],
+      },
+    }),
   ]);
   const referralRows = referrals as ReferralListRow[];
   const therapistOptions = therapists as TherapistFilterOption[];
+  const assistantCards = getQueueAssistantCards({
+    contactedNotScheduled,
+    newReferrals: referralRows.filter((referral: ReferralListRow) => referral.status === "new").length,
+    optedOutContacts,
+    pastScheduledVisits,
+    scheduledVisitsNextSevenDays,
+    smokeTestRecords,
+    unassignedReferrals,
+  });
+  const assistantStatus = getOperationsAssistantV2Status();
 
   return (
     <div className="grid gap-8">
@@ -86,6 +133,13 @@ export default async function AdminReferralsPage({
             New referral
           </Link>
         </div>
+
+        <OperationsAssistantPanel
+          cards={assistantCards}
+          status={assistantStatus}
+          summary="Referral queue signals are deterministic and based on safe workflow counts. Review before taking action."
+          title="Operations Assistant"
+        />
 
         <form className="rounded-lg border border-line bg-white p-5">
           <div className="grid gap-4 md:grid-cols-4">

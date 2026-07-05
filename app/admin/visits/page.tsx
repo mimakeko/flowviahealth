@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CalendarClock, Plus } from "lucide-react";
 import type { Prisma } from "@prisma/client";
+import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { getOperationsAssistantV2Status, getQueueAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
 import {
   formatDateTime,
@@ -58,7 +60,7 @@ export default async function AdminVisitsPage({
   if (selectedGroup === "unscheduled") visitFilters.push({ OR: [{ scheduledAt: null }, { status: "unscheduled" }] });
 
   const prisma = getPrismaClient();
-  const [visits, therapists] = await Promise.all([
+  const [visits, therapists, newReferrals, contactedNotScheduled, scheduledVisitsNextSevenDays, pastScheduledVisits, optedOutContacts, unassignedReferrals, smokeTestRecords] = await Promise.all([
     prisma.visit.findMany({
       include: {
         referral: {
@@ -84,9 +86,52 @@ export default async function AdminVisitsPage({
       orderBy: { name: "asc" },
       where: { active: true },
     }),
+    prisma.patientReferral.count({ where: { status: "new" } }),
+    prisma.patientReferral.count({
+      where: {
+        status: "contacted",
+        visits: { none: { status: { in: ["scheduled", "in_progress"] } } },
+      },
+    }),
+    prisma.visit.count({
+      where: {
+        scheduledAt: {
+          gte: now,
+          lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+        },
+        status: { in: ["scheduled", "in_progress"] },
+      },
+    }),
+    prisma.visit.count({
+      where: {
+        scheduledAt: { lt: now },
+        status: { in: ["scheduled", "in_progress"] },
+      },
+    }),
+    prisma.smsConsentEnrollment.count({ where: { status: "opted_out" } }),
+    prisma.patientReferral.count({ where: { assignedTherapistId: null, status: { notIn: ["completed", "canceled"] } } }),
+    prisma.patientReferral.count({
+      where: {
+        OR: [
+          { referralSource: { contains: "smoke" } },
+          { patientName: { startsWith: "Smoke" } },
+          { patientName: { startsWith: "Ops Guardrail Smoke" } },
+        ],
+      },
+    }),
   ]);
   const visitRows = visits as VisitListRow[];
   const therapistOptions = therapists as TherapistFilterOption[];
+  const assistantCards = getQueueAssistantCards({
+    contactedNotScheduled,
+    newReferrals,
+    optedOutContacts,
+    pastScheduledVisits,
+    scheduledVisitsNextSevenDays,
+    smokeTestRecords,
+    unassignedReferrals,
+  });
+  const assistantStatus = getOperationsAssistantV2Status();
 
   return (
     <div className="grid gap-8">
@@ -103,6 +148,13 @@ export default async function AdminVisitsPage({
           New visit
         </Link>
       </div>
+
+      <OperationsAssistantPanel
+        cards={assistantCards}
+        status={assistantStatus}
+        summary="Visit queue signals are deterministic and based on safe workflow counts. Review before updating status."
+        title="Operations Assistant"
+      />
 
       <form className="rounded-lg border border-line bg-white p-5">
         <div className="grid gap-4 md:grid-cols-5">

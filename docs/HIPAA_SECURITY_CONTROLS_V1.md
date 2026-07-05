@@ -19,6 +19,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - Transmission security: require HTTPS, signed Telnyx webhooks, secure database connections, and secret-managed API keys.
 - Encryption: use managed encrypted storage and avoid secrets in source, screenshots, logs, and tickets.
 - Integrity controls: validate webhook signatures, preserve event-id idempotency, and reject unsupported data modes.
+- AI controls: Operations Assistant V2 is deterministic/mock-only, no external API calls, no autonomous actions, no clinical guidance, and human review required.
 - Session management: signed httpOnly cookies are acceptable for pilot only; final timeout, revocation, and recovery controls remain blockers.
 
 ## Physical Safeguards
@@ -36,3 +37,4 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - `FLOWVIA_ALLOW_UNSIGNED_TELNYX_WEBHOOK_TEST=false` by default.
 - Message Ledger masks phone numbers and does not expose secrets.
 - Data Stewardship tools are admin-only, confirmation-gated, fake-data-only, audit-preserving, and do not send SMS.
+- Operations Assistant cards use safe workflow state only and must not include PHI, clinical advice, diagnosis, or treatment guidance.

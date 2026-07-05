@@ -87,8 +87,10 @@ type TherapistDashboardAuditEvent = {
 
 export type PilotDashboardSnapshot = {
   activeTherapists: number;
+  contactedNotScheduled: number;
   completedVisits: number;
   optedOutSmsConsent: number;
+  pastScheduledVisits: number;
   pendingSmsConsent: number;
   recentAuditActivity: number;
   recentAuditEvents: PilotDashboardAuditEvent[];
@@ -101,15 +103,20 @@ export type PilotDashboardSnapshot = {
   recentSmsMessages: PilotDashboardSmsMessage[];
   referralCounts: Record<ReferralStatusCountKey, number>;
   scheduledVisits: number;
+  scheduledVisitsNextSevenDays: number;
+  smokeTestRecords: number;
   totalReferrals: number;
+  unassignedReferrals: number;
   unscheduledVisits: number;
   upcomingVisits: PilotDashboardUpcomingVisit[];
 };
 
 export type TherapistDashboardSnapshot = {
   assignedReferrals: number;
+  inProgressVisits: number;
   needsContact: number;
   readyToSchedule: number;
+  recentlyCompleted: number;
   recentAuditEvents: TherapistDashboardAuditEvent[];
   recentReferrals: TherapistDashboardRecentReferral[];
   therapist: TherapistDashboardTherapist | null;
@@ -126,11 +133,16 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
     scheduledVisits,
     unscheduledVisits,
     completedVisits,
+    contactedNotScheduled,
     pendingSmsConsent,
     optedOutSmsConsent,
+    pastScheduledVisits,
     smsMessagesByDirection,
     recentAuditActivity,
     activeTherapists,
+    scheduledVisitsNextSevenDays,
+    smokeTestRecords,
+    unassignedReferrals,
     upcomingVisits,
     recentReferrals,
     recentAuditEvents,
@@ -144,8 +156,20 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
     prisma.visit.count({ where: { status: { in: ["scheduled", "in_progress"] } } }),
     prisma.visit.count({ where: { status: "unscheduled" } }),
     prisma.visit.count({ where: { status: "completed" } }),
+    prisma.patientReferral.count({
+      where: {
+        status: "contacted",
+        visits: { none: { status: { in: ["scheduled", "in_progress"] } } },
+      },
+    }),
     prisma.smsConsentEnrollment.count({ where: { status: "pending_confirmation" } }),
     prisma.smsConsentEnrollment.count({ where: { status: "opted_out" } }),
+    prisma.visit.count({
+      where: {
+        scheduledAt: { lt: new Date() },
+        status: { in: ["scheduled", "in_progress"] },
+      },
+    }),
     prisma.smsMessage.groupBy({
       by: ["direction"],
       _count: { _all: true },
@@ -153,6 +177,30 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
     }),
     prisma.auditLog.count({ where: { createdAt: { gte: recentAuditSince } } }),
     prisma.therapist.count({ where: { active: true } }),
+    prisma.visit.count({
+      where: {
+        scheduledAt: {
+          gte: new Date(),
+          lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+        status: { in: ["scheduled", "in_progress"] },
+      },
+    }),
+    prisma.patientReferral.count({
+      where: {
+        OR: [
+          { referralSource: { contains: "smoke" } },
+          { patientName: { startsWith: "Smoke" } },
+          { patientName: { startsWith: "Ops Guardrail Smoke" } },
+        ],
+      },
+    }),
+    prisma.patientReferral.count({
+      where: {
+        assignedTherapistId: null,
+        status: { notIn: ["completed", "canceled"] },
+      },
+    }),
     prisma.visit.findMany({
       include: {
         referral: {
@@ -237,8 +285,10 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
 
   return {
     activeTherapists,
+    contactedNotScheduled,
     completedVisits,
     optedOutSmsConsent,
+    pastScheduledVisits,
     pendingSmsConsent,
     recentAuditEvents,
     recentAuditActivity,
@@ -248,7 +298,10 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
     recentSmsMessages,
     referralCounts,
     scheduledVisits,
+    scheduledVisitsNextSevenDays,
+    smokeTestRecords,
     totalReferrals,
+    unassignedReferrals,
     unscheduledVisits,
     upcomingVisits,
   };
@@ -266,8 +319,10 @@ export async function getTherapistDashboardSnapshot(email: string): Promise<Ther
   if (!therapist) {
     return {
       assignedReferrals: 0,
+      inProgressVisits: 0,
       needsContact: 0,
       readyToSchedule: 0,
+      recentlyCompleted: 0,
       recentAuditEvents: [],
       recentReferrals: [],
       upcomingVisits: 0,
@@ -280,7 +335,7 @@ export async function getTherapistDashboardSnapshot(email: string): Promise<Ther
     where: { assignedTherapistId: therapist.id },
   });
 
-  const [assignedReferralIds, assignedReferrals, readyToSchedule, upcomingVisits, needsContact, recentReferrals] = await Promise.all([
+  const [assignedReferralIds, assignedReferrals, readyToSchedule, upcomingVisits, needsContact, inProgressVisits, recentlyCompleted, recentReferrals] = await Promise.all([
     assignedReferralIdsPromise,
     prisma.patientReferral.count({
       where: {
@@ -304,6 +359,19 @@ export async function getTherapistDashboardSnapshot(email: string): Promise<Ther
       where: {
         assignedTherapistId: therapist.id,
         status: "new",
+      },
+    }),
+    prisma.visit.count({
+      where: {
+        therapistId: therapist.id,
+        status: "in_progress",
+      },
+    }),
+    prisma.visit.count({
+      where: {
+        therapistId: therapist.id,
+        status: "completed",
+        updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
       },
     }),
     prisma.patientReferral.findMany({
@@ -351,8 +419,10 @@ export async function getTherapistDashboardSnapshot(email: string): Promise<Ther
 
   return {
     assignedReferrals,
+    inProgressVisits,
     needsContact,
     readyToSchedule,
+    recentlyCompleted,
     recentAuditEvents,
     recentReferrals,
     upcomingVisits,

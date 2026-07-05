@@ -216,6 +216,16 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 - Personal-number tests must end `opted_out` unless an active controlled personal-phone test window is underway.
 - Data stewardship tools must not send SMS, add bulk messaging controls, print secrets, expose raw SMS bodies, or display full phone numbers.
 
+## No-PHI AI Operations Assistant Policy
+
+- Operations Assistant V2 must remain deterministic/mock-only for cloud staging.
+- External AI/API calls are disabled.
+- No autonomous scheduling, assignment, messaging, or record mutation is allowed.
+- Assistant cards are operational hints only and require human review.
+- The assistant must not provide clinical advice, diagnosis, treatment guidance, or triage.
+- No PHI should be used in assistant inputs or outputs.
+- Before/after deploy, confirm `/admin/health` reports provider `mock / deterministic`, external API calls disabled, no-PHI enforcement on, and autonomous actions disabled.
+
 Optional terminal checks:
 
 ```bash

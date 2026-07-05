@@ -236,6 +236,18 @@ Admins should run each pilot day from the internal dashboard shell:
 - Data stewardship actions must not send real SMS and must not expose full phone numbers, raw SMS bodies, secrets, or provider payloads.
 - Run `pnpm data:inventory` for safe counts only and `pnpm data:stewardship-smoke` to validate cleanup guardrails.
 
+## No-PHI AI Operations Assistant Policy
+
+- Operations Assistant V2 is deterministic/mock-only in this pilot.
+- It is not clinical AI and must not provide diagnosis, treatment guidance, triage, or clinical recommendations.
+- It must not call OpenAI or any external AI API.
+- It must not take autonomous actions, schedule visits, assign therapists, send SMS, or mutate records.
+- It may provide safe operational next-step cards, queue risk signals, scheduling readiness hints, and suggested operational note rewrites.
+- It must not use PHI in prompts or outputs. Suggestions are generated from safe workflow state and aggregate counts only.
+- Human review is required before acting on any assistant suggestion.
+- Passive assistant suggestions are not audit events; blocked-note attempts and explicit user actions remain audited.
+- Run `pnpm ai:ops-smoke` to verify deterministic assistant outputs, opt-out warnings, assignment warnings, past-visit warnings, safe wording, and no external API mode.
+
 ## Supabase staging checks
 
 Use Supabase staging for database validation before putting real pilot operations into the system.

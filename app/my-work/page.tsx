@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { BriefcaseMedical, CircleAlert, Save } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
+import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { getOperationsAssistantV2Status, getTherapistAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { requirePilotSession } from "@/lib/pilot/auth";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
@@ -338,6 +340,16 @@ export default async function MyWorkPage({
     : [];
   const assignedReferrals = referrals as TherapistWorkReferral[];
   const assignedVisitCount = assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + referral.visits.length, 0);
+  const inProgressVisitCount = assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + referral.visits.filter((visit: TherapistWorkVisit) => visit.status === "in_progress").length, 0);
+  const recentlyCompletedCount = assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + (referral.status === "completed" ? 1 : 0) + referral.visits.filter((visit: TherapistWorkVisit) => visit.status === "completed").length, 0);
+  const assistantCards = getTherapistAssistantCards({
+    inProgressVisits: inProgressVisitCount,
+    needsContact: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "new").length,
+    readyToSchedule: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted").length,
+    recentlyCompleted: recentlyCompletedCount,
+    upcomingVisits: assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + referral.visits.filter((visit: TherapistWorkVisit) => visit.status === "scheduled").length, 0),
+  });
+  const assistantStatus = getOperationsAssistantV2Status();
 
   return (
     <div>
@@ -383,6 +395,15 @@ export default async function MyWorkPage({
         ) : null}
 
         <div className="mt-8 grid gap-5">
+          {selectedTherapistId ? (
+            <OperationsAssistantPanel
+              cards={assistantCards}
+              status={assistantStatus}
+              summary="Your next best operational step is deterministic, scoped to this therapist worklist, and requires human review."
+              title="Operations Assistant"
+            />
+          ) : null}
+
           {selectedTherapistId ? (
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-lg border border-line bg-white p-5">

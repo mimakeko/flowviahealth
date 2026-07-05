@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Activity, AlertTriangle, Clock, Database, KeyRound, MessageSquareText, Radio, ShieldCheck } from "lucide-react";
 import { getOperationsAssistantStatus } from "@/lib/ai/operations-assistant";
+import { getOperationsAssistantV2Status } from "@/lib/ai/operations-assistant-v2";
 import { getFlowviaDataModeStatus } from "@/lib/compliance/data-mode";
 import { getPrismaClient } from "@/lib/db/prisma";
 import {
@@ -127,6 +128,7 @@ export default async function AdminHealthPage() {
   const dataMode = getFlowviaDataModeStatus();
   const telnyx = getTelnyxConfigStatus();
   const aiStatus = getOperationsAssistantStatus();
+  const aiV2Status = getOperationsAssistantV2Status();
   const smsStore = getSmsStoreStatus();
   const dbUrls = getDatabaseUrlComparison();
   const activitySnapshot = await getActivitySnapshot();
@@ -143,6 +145,9 @@ export default async function AdminHealthPage() {
     { icon: ShieldCheck, metric: { label: "Data mode", value: dataMode.safeLabel, tone: dataMode.blockers.length > 0 ? "warn" : "good" } },
     { icon: Radio, metric: { label: "Real SMS gate", value: telnyx.realSmsTestsEnabled ? "On" : "Off", tone: telnyx.realSmsTestsEnabled ? "warn" : "good" } },
     { icon: Activity, metric: { label: "AI mode / provider", value: `${aiStatus.modeLabel} / ${aiStatus.provider}`, tone: aiStatus.enabled && aiStatus.provider !== "mock" ? "warn" : "good" } },
+    { icon: Activity, metric: { label: "AI assistant v2", value: `${aiV2Status.versionLabel} / ${aiV2Status.providerLabel}`, tone: "good" } },
+    { icon: ShieldCheck, metric: { label: "AI external API calls", value: aiV2Status.externalApiCallsEnabled ? "Enabled" : "Disabled", tone: aiV2Status.externalApiCallsEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "AI autonomous actions", value: aiV2Status.autonomousActionsEnabled ? "Enabled" : "Disabled", tone: aiV2Status.autonomousActionsEnabled ? "warn" : "good" } },
     { icon: ShieldCheck, metric: { label: "AI no-PHI mode", value: aiStatus.noPhiMode ? "On" : "Off", tone: aiStatus.noPhiMode ? "good" : "warn" } },
     { icon: Database, metric: { label: "SMS store mode", value: smsStore.label } },
     { icon: Database, metric: { label: "Database storage mode", value: databaseStorageMode, tone: databaseStorageMode === "Postgres" ? "good" : "warn" } },

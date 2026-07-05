@@ -13,12 +13,15 @@ import {
   UsersRound,
 } from "lucide-react";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
-import { getAdminDailyBriefingPreview, getOperationsAssistantStatus } from "@/lib/ai/operations-assistant";
+import {
+  getOperationsAssistantV2Status,
+  getQueueAssistantCards,
+  getTherapistAssistantCards,
+} from "@/lib/ai/operations-assistant-v2";
 import { getCurrentPilotSession } from "@/lib/pilot/auth";
 import { getPilotOperationsAccessState } from "@/lib/pilot/access";
 import { getPilotDashboardSnapshot, getTherapistDashboardSnapshot } from "@/lib/pilot/dashboard";
 import { formatDateTime, statusClassName, statusLabel } from "@/lib/pilot/ops";
-import { getTelnyxConfigStatus } from "@/lib/sms/telnyx";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -64,6 +67,14 @@ function GatedDashboardState({ envVar }: { envVar: string }) {
 
 async function TherapistDashboard({ email }: { email: string }) {
   const snapshot = await getTherapistDashboardSnapshot(email);
+  const assistantStatus = getOperationsAssistantV2Status();
+  const assistantCards = getTherapistAssistantCards({
+    inProgressVisits: snapshot.inProgressVisits,
+    needsContact: snapshot.needsContact,
+    readyToSchedule: snapshot.readyToSchedule,
+    recentlyCompleted: snapshot.recentlyCompleted,
+    upcomingVisits: snapshot.upcomingVisits,
+  });
 
   return (
     <div className="grid gap-8">
@@ -97,6 +108,13 @@ async function TherapistDashboard({ email }: { email: string }) {
             <MetricCard icon={CalendarClock} label="Upcoming visits" note="Scheduled or in-progress visits assigned to this therapist." value={snapshot.upcomingVisits} />
             <MetricCard icon={ShieldAlert} label="Needs contact" note="New assigned referrals waiting for first contact." value={snapshot.needsContact} />
           </section>
+
+          <OperationsAssistantPanel
+            cards={assistantCards}
+            status={assistantStatus}
+            summary="Your next best operational step is deterministic, scoped to your assigned fake pilot work, and requires human review."
+            title="Operations Assistant"
+          />
 
           <section>
             <div className="mb-3 flex items-center justify-between gap-4">
@@ -151,13 +169,15 @@ export default async function DashboardPage() {
   }
 
   const snapshot = await getPilotDashboardSnapshot();
-  const telnyx = getTelnyxConfigStatus();
-  const assistantStatus = getOperationsAssistantStatus();
-  const assistantPreview = await getAdminDailyBriefingPreview({
+  const assistantStatus = getOperationsAssistantV2Status();
+  const assistantCards = getQueueAssistantCards({
+    contactedNotScheduled: snapshot.contactedNotScheduled,
+    newReferrals: snapshot.referralCounts.new,
     optedOutContacts: snapshot.optedOutSmsConsent,
-    realSmsTestMode: telnyx.realSmsTestsEnabled,
-    referralsNeedContact: snapshot.referralCounts.new,
-    unscheduledVisits: snapshot.unscheduledVisits,
+    pastScheduledVisits: snapshot.pastScheduledVisits,
+    scheduledVisitsNextSevenDays: snapshot.scheduledVisitsNextSevenDays,
+    smokeTestRecords: snapshot.smokeTestRecords,
+    unassignedReferrals: snapshot.unassignedReferrals,
   });
   const metrics = [
     { icon: ClipboardList, label: "Total referrals", note: "All fake/test referrals in the pilot workspace.", value: snapshot.totalReferrals },
@@ -201,7 +221,12 @@ export default async function DashboardPage() {
         {metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
       </section>
 
-      <OperationsAssistantPanel status={assistantStatus} suggestion={assistantPreview} />
+      <OperationsAssistantPanel
+        cards={assistantCards}
+        status={assistantStatus}
+        summary="Queue-level risk signals are generated from safe counts only. No autonomous action, messaging, or clinical guidance is enabled."
+        title="Operations Assistant"
+      />
 
       <section className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
         <div>
