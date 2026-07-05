@@ -43,6 +43,10 @@ function baseSuggestion(
   };
 }
 
+function isString(value: string | null): value is string {
+  return typeof value === "string";
+}
+
 function safeNoteRewrite(input: { noteText: string }, config: OperationsAssistantConfig) {
   const classification = classifyOperationalNote(input.noteText, { fieldLabel: "Operational note" });
   return baseSuggestion("safe_note_rewrite", config, classification.suggestedOperationalRewrite || "No rewrite needed.", {
@@ -91,7 +95,7 @@ function visitReadinessCheck(input: VisitReadinessCheckInput, config: Operations
     input.hasTherapist ? null : "Assign a therapist.",
     input.hasVisitTime ? null : "Set a visit time.",
     input.referralStatus === "canceled" ? "Referral is canceled." : null,
-  ].filter(Boolean);
+  ].filter(isString);
 
   return baseSuggestion(
     "visit_readiness_check",

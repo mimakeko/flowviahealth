@@ -27,6 +27,18 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+type TherapistOption = {
+  id: string;
+  name: string;
+};
+
+type AuditLogListItem = {
+  id: string;
+  action: string;
+  actorType: string;
+  createdAt: Date | string;
+};
+
 async function updateVisitAction(formData: FormData) {
   "use server";
 
@@ -139,6 +151,9 @@ export default async function VisitDetailPage({
 
   if (!visit) notFound();
 
+  const therapistOptions = therapists as TherapistOption[];
+  const visitAuditLogs = auditLogs as AuditLogListItem[];
+
   return (
     <div>
       <Link href="/admin/visits" className="inline-flex items-center gap-2 text-sm font-semibold text-blue underline">
@@ -170,7 +185,7 @@ export default async function VisitDetailPage({
             <input type="hidden" name="visitId" value={visit.id} />
             <label className="text-sm font-semibold text-ink">Scheduled<input className="field" name="scheduledAt" type="datetime-local" defaultValue={dateTimeLocalValue(visit.scheduledAt)} /></label>
             <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue={visit.status}>{VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
-            <label className="text-sm font-semibold text-ink md:col-span-2">Therapist<select className="field" name="therapistId" defaultValue={visit.therapistId || ""}><option value="">Unassigned</option>{therapists.map((therapist) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+            <label className="text-sm font-semibold text-ink md:col-span-2">Therapist<select className="field" name="therapistId" defaultValue={visit.therapistId || ""}><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
             <label className="text-sm font-semibold text-ink md:col-span-2">Operational note <span className="font-normal text-slate-400">(no PHI or clinical detail)</span><textarea className="field min-h-28" name="notes" defaultValue={visit.notes || ""} /></label>
             <div className="md:col-span-2"><button className="btn-primary" type="submit"><Save size={18} />Save visit</button></div>
           </form>
@@ -179,13 +194,13 @@ export default async function VisitDetailPage({
         <aside className="rounded-lg border border-line bg-white p-6">
           <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Audit trail</h2>
           <div className="mt-5 space-y-3">
-            {auditLogs.map((log) => (
+            {visitAuditLogs.map((log: AuditLogListItem) => (
               <div key={log.id} className="rounded-lg border border-line p-3 text-sm">
                 <p className="font-semibold text-ink">{log.action}</p>
                 <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {log.actorType}</p>
               </div>
             ))}
-            {auditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No audit events recorded for this visit yet.</p> : null}
+            {visitAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No audit events recorded for this visit yet.</p> : null}
           </div>
         </aside>
       </div>

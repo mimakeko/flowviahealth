@@ -24,6 +24,19 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+type ReferralOption = {
+  id: string;
+  city: string | null;
+  patientName: string;
+  status: string;
+  zip: string | null;
+};
+
+type TherapistOption = {
+  id: string;
+  name: string;
+};
+
 async function createVisitAction(formData: FormData) {
   "use server";
 
@@ -118,6 +131,8 @@ export default async function NewVisitPage({
       where: { active: true },
     }),
   ]);
+  const referralOptions = referrals as ReferralOption[];
+  const therapistOptions = therapists as TherapistOption[];
 
   return (
     <div className="max-w-4xl">
@@ -134,8 +149,8 @@ export default async function NewVisitPage({
       <BlockedNoteAlert searchParams={params} />
 
       <form action={createVisitAction} className="mt-8 grid gap-6 rounded-lg border border-line bg-white p-6 md:grid-cols-2">
-        <label className="text-sm font-semibold text-ink md:col-span-2">Referral<select className="field" name="referralId" defaultValue={params?.referralId || ""} required><option value="">Select referral</option>{referrals.map((referral) => <option key={referral.id} value={referral.id}>{referral.patientName} · {statusLabel(referral.status)} · {[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</option>)}</select></label>
-        <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue=""><option value="">Unassigned</option>{therapists.map((therapist) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+        <label className="text-sm font-semibold text-ink md:col-span-2">Referral<select className="field" name="referralId" defaultValue={params?.referralId || ""} required><option value="">Select referral</option>{referralOptions.map((referral: ReferralOption) => <option key={referral.id} value={referral.id}>{referral.patientName} · {statusLabel(referral.status)} · {[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</option>)}</select></label>
+        <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue=""><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
         <label className="text-sm font-semibold text-ink">Scheduled<input className="field" name="scheduledAt" type="datetime-local" /></label>
         <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue="scheduled">{VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
         <label className="text-sm font-semibold text-ink">Scheduling timezone<span className="field flex items-center text-slate-500">{FLOWVIA_OPERATIONS_TIME_ZONE}</span></label>

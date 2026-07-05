@@ -103,6 +103,7 @@ const ambiguousOperationalContextTerms = [
   "medical issue",
   "status worse",
 ] as const;
+type AmbiguousOperationalContextTerm = (typeof ambiguousOperationalContextTerms)[number];
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -140,7 +141,7 @@ function matchingClinicalTerms(text: string) {
 }
 
 function matchingAmbiguousCategories(text: string) {
-  return ambiguousOperationalContextTerms.some((term) => termPattern(term).test(text)) ? (["ambiguous_context"] as const) : [];
+  return ambiguousOperationalContextTerms.some((term: AmbiguousOperationalContextTerm) => termPattern(term).test(text)) ? (["ambiguous_context"] as const) : [];
 }
 
 function isLongSmsFreeText(text: string) {

@@ -31,6 +31,26 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+type TherapistOption = {
+  id: string;
+  name: string;
+};
+
+type ReferralDetailVisit = {
+  id: string;
+  notes: string | null;
+  scheduledAt: Date | string | null;
+  status: string;
+  therapistId: string | null;
+};
+
+type AuditLogListItem = {
+  id: string;
+  action: string;
+  actorType: string;
+  createdAt: Date | string;
+};
+
 async function updateReferralAction(formData: FormData) {
   "use server";
 
@@ -239,6 +259,10 @@ export default async function ReferralDetailPage({
 
   if (!referral) notFound();
 
+  const referralVisits = referral.visits as ReferralDetailVisit[];
+  const referralVisitIds = referralVisits.map((visit: ReferralDetailVisit) => visit.id);
+  const therapistOptions = therapists as TherapistOption[];
+
   const [auditLogs, smsConsent] = await Promise.all([
     prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
@@ -246,7 +270,7 @@ export default async function ReferralDetailPage({
       where: {
         OR: [
           { entityType: "PatientReferral", entityId: referral.id },
-          { entityType: "Visit", entityId: { in: referral.visits.map((visit) => visit.id) } },
+          { entityType: "Visit", entityId: { in: referralVisitIds } },
         ],
       },
     }),
@@ -254,6 +278,7 @@ export default async function ReferralDetailPage({
       where: { normalizedPhone: normalizeE164Phone(referral.phone) },
     }),
   ]);
+  const referralAuditLogs = auditLogs as AuditLogListItem[];
   const telnyx = getTelnyxConfigStatus();
 
   return (
@@ -302,7 +327,7 @@ export default async function ReferralDetailPage({
           <form action={updateReferralAction} className="mt-8 grid gap-5 border-t border-line pt-6 md:grid-cols-2">
             <input type="hidden" name="referralId" value={referral.id} />
             <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue={referral.status}>{REFERRAL_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
-            <label className="text-sm font-semibold text-ink">Assigned therapist<select className="field" name="assignedTherapistId" defaultValue={referral.assignedTherapistId || ""}><option value="">Unassigned</option>{therapists.map((therapist) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+            <label className="text-sm font-semibold text-ink">Assigned therapist<select className="field" name="assignedTherapistId" defaultValue={referral.assignedTherapistId || ""}><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
             <label className="text-sm font-semibold text-ink md:col-span-2">Internal operational note <span className="font-normal text-slate-400">(no PHI or clinical detail)</span><textarea className="field min-h-32" name="notes" defaultValue={referral.notes || ""} /></label>
             <div className="md:col-span-2"><button className="btn-primary" type="submit"><Save size={18} />Save referral</button></div>
           </form>
@@ -311,13 +336,13 @@ export default async function ReferralDetailPage({
         <aside className="rounded-lg border border-line bg-white p-6">
           <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Audit trail</h2>
           <div className="mt-5 space-y-3">
-            {auditLogs.map((log) => (
+            {referralAuditLogs.map((log: AuditLogListItem) => (
               <div key={log.id} className="rounded-lg border border-line p-3 text-sm">
                 <p className="font-semibold text-ink">{log.action}</p>
                 <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {log.actorType}</p>
               </div>
             ))}
-            {auditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No audit events recorded for this referral yet.</p> : null}
+            {referralAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No audit events recorded for this referral yet.</p> : null}
           </div>
         </aside>
       </div>
@@ -325,25 +350,25 @@ export default async function ReferralDetailPage({
       <section className="mt-8 rounded-lg border border-line bg-white p-6">
         <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Visits</h2>
         <div className="mt-5 space-y-5">
-          {referral.visits.map((visit) => (
+          {referralVisits.map((visit: ReferralDetailVisit) => (
             <form key={visit.id} action={saveVisitAction} className="grid gap-4 rounded-lg border border-line p-4 md:grid-cols-4">
               <input type="hidden" name="referralId" value={referral.id} />
               <input type="hidden" name="visitId" value={visit.id} />
               <label className="text-sm font-semibold text-ink">Scheduled<input className="field" name="scheduledAt" type="datetime-local" defaultValue={dateTimeLocalValue(visit.scheduledAt)} /></label>
               <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue={visit.status}>{VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
-              <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue={visit.therapistId || ""}><option value="">Unassigned</option>{therapists.map((therapist) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+              <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue={visit.therapistId || ""}><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
               <label className="text-sm font-semibold text-ink">Operational note<input className="field" name="notes" defaultValue={visit.notes || ""} /></label>
               <div className="md:col-span-4"><button className="btn-secondary" type="submit"><Save size={18} />Update visit</button></div>
             </form>
           ))}
-          {referral.visits.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No visits created yet.</p> : null}
+          {referralVisits.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No visits created yet.</p> : null}
         </div>
 
         <form action={saveVisitAction} className="mt-6 grid gap-4 border-t border-line pt-6 md:grid-cols-4">
           <input type="hidden" name="referralId" value={referral.id} />
           <label className="text-sm font-semibold text-ink">Scheduled<input className="field" name="scheduledAt" type="datetime-local" /></label>
           <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue="scheduled">{VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
-          <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue={referral.assignedTherapistId || ""}><option value="">Unassigned</option>{therapists.map((therapist) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+          <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue={referral.assignedTherapistId || ""}><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
           <label className="text-sm font-semibold text-ink">Operational note<input className="field" name="notes" placeholder="No PHI" /></label>
           <div className="md:col-span-4"><button className="btn-primary" type="submit"><CalendarPlus size={18} />Create visit</button></div>
         </form>

@@ -2,10 +2,121 @@ import { getPrismaClient } from "@/lib/db/prisma";
 
 const recentAuditWindowDays = 7;
 
-export type PilotDashboardSnapshot = Awaited<ReturnType<typeof getPilotDashboardSnapshot>>;
-export type TherapistDashboardSnapshot = Awaited<ReturnType<typeof getTherapistDashboardSnapshot>>;
+type ReferralStatusCountKey = "active" | "canceled" | "completed" | "contacted" | "new" | "scheduled";
 
-export async function getPilotDashboardSnapshot() {
+type ReferralStatusGroup = {
+  status: ReferralStatusCountKey;
+  _count: { _all: number };
+};
+
+type SmsDirectionGroup = {
+  direction: string;
+  _count: { _all: number };
+};
+
+type AssignedReferralIdRow = {
+  id: string;
+};
+
+type DashboardVisitSummary = {
+  scheduledAt: Date | null;
+  status: string;
+};
+
+type DashboardTherapistSummary = {
+  name: string;
+};
+
+type PilotDashboardRecentReferral = {
+  id: string;
+  assignedTherapist: DashboardTherapistSummary | null;
+  city: string | null;
+  patientName: string;
+  status: string;
+  visits: DashboardVisitSummary[];
+  zip: string | null;
+};
+
+type PilotDashboardUpcomingVisit = {
+  id: string;
+  scheduledAt: Date | null;
+  therapist: DashboardTherapistSummary | null;
+  referral: {
+    city: string | null;
+    patientName: string;
+    zip: string | null;
+  };
+};
+
+type PilotDashboardAuditEvent = {
+  action: string;
+  actorType: string;
+  createdAt: Date;
+  entityType: string;
+};
+
+type PilotDashboardSmsMessage = {
+  createdAt: Date;
+  direction: string;
+  eventType: string;
+  status: string | null;
+};
+
+type TherapistDashboardTherapist = {
+  id: string;
+  email: string;
+  name: string;
+};
+
+type TherapistDashboardRecentReferral = {
+  id: string;
+  city: string | null;
+  patientName: string;
+  status: string;
+  visits: DashboardVisitSummary[];
+  zip: string | null;
+};
+
+type TherapistDashboardAuditEvent = {
+  action: string;
+  actorType: string;
+  createdAt: Date;
+  entityId: string | null;
+  entityType: string;
+};
+
+export type PilotDashboardSnapshot = {
+  activeTherapists: number;
+  completedVisits: number;
+  optedOutSmsConsent: number;
+  pendingSmsConsent: number;
+  recentAuditActivity: number;
+  recentAuditEvents: PilotDashboardAuditEvent[];
+  recentAuditWindowDays: number;
+  recentReferrals: PilotDashboardRecentReferral[];
+  recentSmsActivitySummary: {
+    inbound: number;
+    outbound: number;
+  };
+  recentSmsMessages: PilotDashboardSmsMessage[];
+  referralCounts: Record<ReferralStatusCountKey, number>;
+  scheduledVisits: number;
+  totalReferrals: number;
+  unscheduledVisits: number;
+  upcomingVisits: PilotDashboardUpcomingVisit[];
+};
+
+export type TherapistDashboardSnapshot = {
+  assignedReferrals: number;
+  needsContact: number;
+  readyToSchedule: number;
+  recentAuditEvents: TherapistDashboardAuditEvent[];
+  recentReferrals: TherapistDashboardRecentReferral[];
+  therapist: TherapistDashboardTherapist | null;
+  upcomingVisits: number;
+};
+
+export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapshot> {
   const prisma = getPrismaClient();
   const recentAuditSince = new Date(Date.now() - recentAuditWindowDays * 24 * 60 * 60 * 1000);
 
@@ -112,13 +223,16 @@ export async function getPilotDashboardSnapshot() {
     new: 0,
     scheduled: 0,
   };
-  for (const group of referralStatusGroups) {
+  const referralStatusRows = referralStatusGroups as ReferralStatusGroup[];
+  const smsDirectionRows = smsMessagesByDirection as SmsDirectionGroup[];
+
+  for (const group of referralStatusRows) {
     referralCounts[group.status] = group._count._all;
   }
 
   const recentSmsActivitySummary = {
-    inbound: smsMessagesByDirection.find((group) => group.direction === "inbound")?._count._all ?? 0,
-    outbound: smsMessagesByDirection.find((group) => group.direction === "outbound")?._count._all ?? 0,
+    inbound: smsDirectionRows.find((group: SmsDirectionGroup) => group.direction === "inbound")?._count._all ?? 0,
+    outbound: smsDirectionRows.find((group: SmsDirectionGroup) => group.direction === "outbound")?._count._all ?? 0,
   };
 
   return {
@@ -140,7 +254,7 @@ export async function getPilotDashboardSnapshot() {
   };
 }
 
-export async function getTherapistDashboardSnapshot(email: string) {
+export async function getTherapistDashboardSnapshot(email: string): Promise<TherapistDashboardSnapshot> {
   const prisma = getPrismaClient();
   const therapist = await prisma.therapist.findFirst({
     where: {
@@ -210,6 +324,7 @@ export async function getTherapistDashboardSnapshot(email: string) {
       },
     }),
   ]);
+  const assignedReferralIdRows = assignedReferralIds as AssignedReferralIdRow[];
 
   const recentAuditEvents = await prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
@@ -227,7 +342,7 @@ export async function getTherapistDashboardSnapshot(email: string) {
           {
             entityType: "PatientReferral",
             entityId: {
-              in: assignedReferralIds.map((item) => item.id),
+              in: assignedReferralIdRows.map((item: AssignedReferralIdRow) => item.id),
             },
           },
         ],

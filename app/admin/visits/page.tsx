@@ -11,6 +11,18 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+type VisitListRow = {
+  id: string;
+  scheduledAt: Date | string | null;
+  status: string;
+  referral: {
+    city: string | null;
+    patientName: string;
+    zip: string | null;
+  };
+  therapist: { name: string } | null;
+};
+
 export default async function AdminVisitsPage() {
   requirePilotOperationsAccess();
 
@@ -35,6 +47,7 @@ export default async function AdminVisitsPage() {
     orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
     take: 100,
   });
+  const visitRows = visits as VisitListRow[];
 
   return (
     <div className="grid gap-8">
@@ -53,7 +66,7 @@ export default async function AdminVisitsPage() {
       </div>
 
       <div className="overflow-hidden rounded-lg border border-line bg-white">
-        {visits.map((visit) => (
+        {visitRows.map((visit: VisitListRow) => (
           <Link key={visit.id} href={`/admin/visits/${visit.id}`} className="grid gap-3 border-b border-line p-4 transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[1fr_auto] md:items-center">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -67,7 +80,7 @@ export default async function AdminVisitsPage() {
             <p className="text-sm text-slate-500">{formatDateTime(visit.scheduledAt)}</p>
           </Link>
         ))}
-        {visits.length === 0 ? (
+        {visitRows.length === 0 ? (
           <div className="p-8 text-center">
             <CalendarClock className="mx-auto mb-3 text-slate-400" size={28} />
             <p className="font-semibold text-ink">No visits yet</p>

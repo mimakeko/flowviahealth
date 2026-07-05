@@ -15,6 +15,11 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+type TherapistOption = {
+  id: string;
+  name: string;
+};
+
 async function createReferralAction(formData: FormData) {
   "use server";
 
@@ -89,6 +94,7 @@ export default async function NewReferralPage({
     where: { active: true },
     orderBy: { name: "asc" },
   });
+  const therapistOptions = therapists as TherapistOption[];
 
   return (
     <div className="max-w-4xl">
@@ -120,7 +126,7 @@ export default async function NewReferralPage({
           <label className="text-sm font-semibold text-ink md:col-span-2">Address <span className="font-normal text-slate-400">(optional, restricted)</span><input className="field" name="address" /></label>
           <label className="text-sm font-semibold text-ink">Referral source <span className="font-normal text-slate-400">(optional)</span><input className="field" name="referralSource" /></label>
           <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue="new">{REFERRAL_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
-          <label className="text-sm font-semibold text-ink md:col-span-2">Assigned therapist<select className="field" name="assignedTherapistId" defaultValue=""><option value="">Unassigned</option>{therapists.map((therapist) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+          <label className="text-sm font-semibold text-ink md:col-span-2">Assigned therapist<select className="field" name="assignedTherapistId" defaultValue=""><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
           <label className="text-sm font-semibold text-ink md:col-span-2">Internal operational note <span className="font-normal text-slate-400">(optional, no PHI or clinical detail)</span><textarea className="field min-h-32" name="notes" placeholder="Fake scheduling/admin note only" /></label>
           <div className="md:col-span-2">
             <button className="btn-primary" type="submit"><Save size={18} />Create referral</button>

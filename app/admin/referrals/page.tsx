@@ -11,6 +11,16 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+type ReferralListRow = {
+  id: string;
+  assignedTherapist: { name: string } | null;
+  city: string | null;
+  createdAt: Date | string;
+  patientName: string;
+  status: string;
+  zip: string | null;
+};
+
 export default async function AdminReferralsPage() {
   requirePilotOperationsAccess();
 
@@ -20,6 +30,7 @@ export default async function AdminReferralsPage() {
     orderBy: { createdAt: "desc" },
     take: 100,
   });
+  const referralRows = referrals as ReferralListRow[];
 
   return (
     <div className="grid gap-8">
@@ -50,7 +61,7 @@ export default async function AdminReferralsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {referrals.map((referral) => (
+              {referralRows.map((referral: ReferralListRow) => (
                 <tr key={referral.id}>
                   <td className="px-4 py-3 font-medium text-ink">{referral.patientName}</td>
                   <td className="px-4 py-3">
@@ -68,7 +79,7 @@ export default async function AdminReferralsPage() {
                   </td>
                 </tr>
               ))}
-              {referrals.length === 0 ? (
+              {referralRows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center">
                     <ClipboardList className="mx-auto mb-3 text-slate-400" size={28} />
