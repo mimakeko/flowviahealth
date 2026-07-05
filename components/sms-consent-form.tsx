@@ -14,10 +14,11 @@ export function SmsConsentForm() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     setStatus("loading");
     setErrorMessage("We could not submit your SMS consent request.");
 
-    const formData = new FormData(event.currentTarget);
+    const formData = new FormData(form);
     const mobileNumber = String(formData.get("mobileNumber") ?? "").trim();
     const smsOptIn = formData.get("smsOptIn") === "on";
 
@@ -38,7 +39,7 @@ export function SmsConsentForm() {
 
     if (response.ok) {
       setStatus("success");
-      event.currentTarget.reset();
+      form.reset();
       return;
     }
 
@@ -49,7 +50,7 @@ export function SmsConsentForm() {
     <div role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-emerald-950">
       <CheckCircle2 className="mb-4 text-emerald-600" size={28}/>
       <h2 className="text-xl font-semibold">Consent request received</h2>
-      <p className="mt-2 leading-7">Thank you. Your SMS consent request has been received. After enrollment is completed, Flowvia Health may send a confirmation text to verify participation before transactional healthcare SMS messages are enabled.</p>
+      <p className="mt-2 leading-7">Thank you. Your SMS consent request has been received. Flowvia Health will send a confirmation text to verify participation before transactional healthcare SMS messages are enabled.</p>
     </div>
   );
 

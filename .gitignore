@@ -14,3 +14,5 @@ node_modules
 out
 dist
 qa-screenshots/
+.flowvia-sms-store*.json
+data/flowvia-sms-store*.json

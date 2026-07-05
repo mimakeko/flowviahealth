@@ -1,6 +1,9 @@
 overrides:
+  '@hono/node-server': ^1.19.13
   postcss: ^8.5.15
 
 allowBuilds:
+  '@prisma/engines': true
+  prisma: true
   sharp: false
   unrs-resolver: false

@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ReferralStatus {
+  new
+  contacted
+  scheduled
+  active
+  completed
+  canceled
+}
+
+enum VisitStatus {
+  unscheduled
+  scheduled
+  in_progress
+  completed
+  canceled
+  no_show
+}
+
+enum SmsConsentStatus {
+  pending_confirmation
+  active
+  opted_out
+}
+
+enum SmsConsentSource {
+  sms_consent_page
+}
+
+enum SmsDirection {
+  inbound
+  outbound
+}
+
+model Therapist {
+  id               String            @id @default(cuid())
+  name             String
+  email            String            @unique
+  phone            String
+  active           Boolean           @default(true)
+  serviceAreaNotes String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  referrals        PatientReferral[]
+  visits           Visit[]
+
+  @@index([active])
+}
+
+model PatientReferral {
+  id                  String      @id @default(cuid())
+  patientName         String
+  phone               String
+  email               String?
+  city                String?
+  zip                 String?
+  address             String?
+  referralSource      String?
+  careType            String?
+  notes               String?
+  status              ReferralStatus @default(new)
+  assignedTherapistId String?
+  assignedTherapist   Therapist?  @relation(fields: [assignedTherapistId], references: [id], onDelete: SetNull)
+  visits              Visit[]
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([status])
+  @@index([assignedTherapistId])
+  @@index([createdAt])
+}
+
+model Visit {
+  id          String       @id @default(cuid())
+  referralId  String
+  referral    PatientReferral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  therapistId String?
+  therapist   Therapist?   @relation(fields: [therapistId], references: [id], onDelete: SetNull)
+  scheduledAt DateTime?
+  status      VisitStatus   @default(unscheduled)
+  notes       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([referralId])
+  @@index([therapistId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+model SmsConsentEnrollment {
+  id                 String           @id @default(cuid())
+  phone              String
+  normalizedPhone    String           @unique
+  fullName           String
+  email              String?
+  status             SmsConsentStatus @default(pending_confirmation)
+  source             SmsConsentSource @default(sms_consent_page)
+  consentTextVersion String
+  confirmedAt        DateTime?
+  optedOutAt         DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SmsMessage {
+  id                String       @id @default(cuid())
+  phone             String
+  direction         SmsDirection
+  eventType         String
+  body              String
+  providerMessageId String?
+  status            String?
+  dryRun            Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+
+  @@index([phone])
+  @@index([providerMessageId])
+  @@index([createdAt])
+  @@index([eventType])
+}
+
+model TelnyxWebhookEvent {
+  id            String   @id @default(cuid())
+  telnyxEventId String   @unique
+  eventType     String
+  payloadJson   Json
+  processedAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorType    String
+  actorId      String?
+  action       String
+  entityType   String
+  entityId     String?
+  metadataJson Json?
+  createdAt    DateTime @default(now())
+
+  @@index([actorType])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

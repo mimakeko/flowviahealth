@@ -3,7 +3,9 @@
 Production-ready marketing and compliance website for Flowvia Health, a
 healthcare workflow, scheduling, care coordination, and transactional healthcare
 messaging platform owned, developed, and operated by Onzeon Holdings LLC.
-Built with Next.js, TypeScript, Tailwind CSS, and Resend-backed contact routes.
+Built with Next.js, TypeScript, Tailwind CSS, Resend-backed contact routes,
+Telnyx-backed transactional SMS consent workflows, and Prisma/Postgres storage
+for field-pilot data.
 
 ## Local development
 
@@ -20,15 +22,25 @@ Open `http://localhost:3000`.
 pnpm lint
 pnpm typecheck
 pnpm build
+pnpm test:telnyx
+pnpm db:generate
 ```
 
 ## Deploy to Vercel
 
 Import the repository in Vercel. The default Next.js framework settings are sufficient.
 
-Required environment variable:
+Required email environment variable:
 
 - `RESEND_API_KEY` — enables `/api/contact` and `/api/sms-consent` email delivery.
+
+Required production SMS environment variables:
+
+- `DATABASE_URL`
+- `TELNYX_API_KEY`
+- `TELNYX_MESSAGING_PROFILE_ID`
+- `TELNYX_FLOWVIA_FROM_NUMBER=+14692933948`
+- `TELNYX_WEBHOOK_SIGNING_SECRET` — Telnyx Ed25519 public key for webhook verification.
 
 Optional environment variables:
 
@@ -42,12 +54,21 @@ Optional environment variables:
 - `/terms`
 - `/hipaa`
 - `/contact`
+- `/api/telnyx/webhook`
 
 The contact form sends general inquiries to Flowvia Health support through
 Resend, sends an autoresponder to the submitter, and does not store submissions
 in a database. The SMS consent form emails voluntary enrollment requests to
 Flowvia Health support, sends an autoresponder when the submitter provides an
-email address, and does not instantly send an SMS from the public form itself.
+email address, stores a pending SMS enrollment, and sends a Telnyx confirmation
+SMS that requires a `YES` response before transactional SMS is active.
+
+See `docs/TELNYX_MESSAGING_ENGINE_V1.md` for Telnyx setup, webhook behavior,
+dry-run tests, and production checklist.
+
+See `docs/FLOWVIA_FIELD_PILOT_RUNBOOK_V1.md` and
+`docs/FLOWVIA_CLOUD_DATA_ARCHITECTURE_V1.md` for the 1-2 therapist pilot
+database foundation and rollout checklist.
 
 ## Corporate relationship
 

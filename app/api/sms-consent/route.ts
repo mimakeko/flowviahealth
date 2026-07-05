@@ -14,11 +14,14 @@ import {
   renderAutoReplyEmail,
   renderSubmissionEmail,
 } from "@/lib/email-design-system";
+import { CONSENT_CONFIRMATION_SMS, isValidE164Phone, normalizeE164Phone } from "@/lib/sms/compliance";
+import { upsertPendingConsent } from "@/lib/sms/store";
+import { sendTransactionalSms } from "@/lib/sms/telnyx";
 
 export const runtime = "nodejs";
 
 const SMS_CONSENT_TO_EMAIL = "support@flowviahealth.com";
-const CONFIRMATION_EXAMPLE = "Flowvia Health: Please reply YES to confirm you want to receive transactional healthcare SMS messages for appointment reminders, appointment confirmations, scheduling updates, therapist arrival notifications, care coordination, patient inquiries, and service notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for assistance. Terms: https://flowviahealth.com/terms Privacy: https://flowviahealth.com/privacy";
+const CONFIRMATION_EXAMPLE = CONSENT_CONFIRMATION_SMS;
 
 export async function POST(request: Request) {
   try {
@@ -29,9 +32,12 @@ export async function POST(request: Request) {
     const smsOptIn = formData.get("smsOptIn") === "on";
     const phiDisclaimer = formData.get("phiDisclaimer") === "on";
 
+    const normalizedMobileNumber = normalizeE164Phone(mobileNumber);
+
     if (
       !isReasonableLength(fullName, 120) ||
       !isReasonableLength(mobileNumber, 40) ||
+      !isValidE164Phone(normalizedMobileNumber) ||
       !smsOptIn ||
       !phiDisclaimer ||
       (email && !isValidEmail(email))
@@ -43,80 +49,91 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
     }
 
-    const resend = getResendClient();
-    if (!resend) {
-      console.error("Flowvia SMS consent email service is not configured.");
-      return NextResponse.json({ error: "Email service is not configured." }, { status: 500 });
-    }
-
-    const submittedAt = new Date();
-    const internalEmail = renderSubmissionEmail({
-      brand: FLOWVIA_EMAIL_BRAND,
-      title: "New SMS Consent Request",
-      eyebrow: "Flowvia Health SMS Consent",
-      fields: [
-        { label: "Full name", value: fullName },
-        { label: "Mobile number", value: mobileNumber },
-        { label: "Email", value: email },
-        { label: "SMS consent checkbox", value: "Confirmed" },
-        { label: "PHI disclaimer checkbox", value: "Confirmed" },
-      ],
-      sections: [
-        { label: "Visible confirmation SMS example", value: CONFIRMATION_EXAMPLE },
-      ],
-      submittedAt,
-      notice:
-        "This request records a voluntary SMS enrollment request from https://flowviahealth.com/sms-consent. The public form does not instantly send an SMS; transactional SMS is enabled only after the enrollment and confirmation process is completed.",
+    const enrollment = await upsertPendingConsent({
+      phone: normalizedMobileNumber,
+      name: fullName,
+      email: email || undefined,
     });
 
-    const sends = [
-      resend.emails.send({
-        from: CONTACT_FROM_EMAIL,
-        to: SMS_CONSENT_TO_EMAIL,
-        replyTo: email || undefined,
-        subject: buildSubmissionSubject({
-          title: "New SMS Consent Request",
-          brandName: "Flowvia Health",
-        }),
-        html: internalEmail.html,
-        text: internalEmail.text,
-      }),
-    ];
+    await sendTransactionalSms(normalizedMobileNumber, CONSENT_CONFIRMATION_SMS, {
+      consentBypassReason: "confirmation_request",
+      eventType: "consent.confirmation_request",
+      dryRun: process.env.NODE_ENV !== "production" && process.env.FLOWVIA_ALLOW_REAL_SMS_TEST !== "true",
+    });
 
-    if (email) {
-      const autoReplyEmail = renderAutoReplyEmail({
+    const resend = getResendClient();
+    const submittedAt = new Date();
+    if (!resend) {
+      console.warn("Flowvia SMS consent email service is not configured; continuing without email notification.");
+    } else {
+      const internalEmail = renderSubmissionEmail({
         brand: FLOWVIA_EMAIL_BRAND,
-        title: "Flowvia Health SMS consent request received",
-        intro:
-          "Flowvia Health received your voluntary SMS enrollment request. SMS consent is not active until the enrollment and confirmation process is completed.",
-        paragraphs: [
-          `Example confirmation message: ${CONFIRMATION_EXAMPLE}`,
-          "Flowvia Health is a healthcare workflow, scheduling, care coordination, and transactional healthcare messaging platform owned, developed, and operated by Onzeon Holdings LLC. Do not send protected health information through public website email or forms.",
+        title: "New SMS Consent Request",
+        eyebrow: "Flowvia Health SMS Consent",
+        fields: [
+          { label: "Full name", value: fullName },
+          { label: "Mobile number", value: normalizedMobileNumber },
+          { label: "Email", value: email },
+          { label: "SMS consent checkbox", value: "Confirmed" },
+          { label: "PHI disclaimer checkbox", value: "Confirmed" },
+          { label: "Consent status", value: enrollment.status },
         ],
+        sections: [
+          { label: "Visible confirmation SMS example", value: CONFIRMATION_EXAMPLE },
+        ],
+        submittedAt,
+        notice:
+          "This request records a voluntary SMS enrollment request from https://flowviahealth.com/sms-consent. Flowvia sends a confirmation SMS after submission, and transactional SMS is enabled only after the recipient replies YES.",
       });
 
-      sends.push(
+      const sends = [
         resend.emails.send({
           from: CONTACT_FROM_EMAIL,
-          to: email,
-          replyTo: email,
-          subject: "SMS Consent Request Received | Flowvia Health",
-          html: autoReplyEmail.html,
-          text: autoReplyEmail.text,
+          to: SMS_CONSENT_TO_EMAIL,
+          replyTo: email || undefined,
+          subject: buildSubmissionSubject({
+            title: "New SMS Consent Request",
+            brandName: "Flowvia Health",
+          }),
+          html: internalEmail.html,
+          text: internalEmail.text,
         }),
-      );
-    }
+      ];
 
-    const results = await Promise.all(sends);
+      if (email) {
+        const autoReplyEmail = renderAutoReplyEmail({
+          brand: FLOWVIA_EMAIL_BRAND,
+          title: "Flowvia Health SMS consent request received",
+          intro:
+            "Flowvia Health received your voluntary SMS enrollment request. SMS consent is not active until the enrollment and confirmation process is completed.",
+          paragraphs: [
+            `Example confirmation message: ${CONFIRMATION_EXAMPLE}`,
+            "Flowvia Health is a healthcare workflow, scheduling, care coordination, and transactional healthcare messaging platform owned, developed, and operated by Onzeon Holdings LLC. Do not send protected health information through public website email or forms.",
+          ],
+        });
 
-    if (results.some((result) => result.error)) {
-      console.error("Flowvia SMS consent email delivery failed.");
-      return NextResponse.json({ error: "Email could not be sent." }, { status: 500 });
+        sends.push(
+          resend.emails.send({
+            from: CONTACT_FROM_EMAIL,
+            to: email,
+            replyTo: email,
+            subject: "SMS Consent Request Received | Flowvia Health",
+            html: autoReplyEmail.html,
+            text: autoReplyEmail.text,
+          }),
+        );
+      }
+
+      const results = await Promise.all(sends);
+
+      if (results.some((result) => result.error)) {
+        console.warn("Flowvia SMS consent email delivery failed; enrollment and SMS flow continued.");
+      }
     }
 
     return NextResponse.json({ ok: true });
   } catch {
     console.error("Flowvia SMS consent route failed.");
-    return NextResponse.json({ error: "Email could not be sent." }, { status: 500 });
+    return NextResponse.json({ error: "SMS consent request could not be processed." }, { status: 500 });
   }
 }

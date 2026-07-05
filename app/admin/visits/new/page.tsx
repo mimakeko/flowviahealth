@@ -1,0 +1,147 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { ArrowLeft, Save } from "lucide-react";
+import { BlockedNoteAlert } from "@/components/blocked-note-alert";
+import { getPrismaClient } from "@/lib/db/prisma";
+import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
+import { requirePilotSession } from "@/lib/pilot/auth";
+import {
+  FLOWVIA_OPERATIONS_TIME_ZONE,
+  optionalDateField,
+  optionalTextField,
+  requirePilotOperationsAccess,
+  statusLabel,
+  textField,
+  visitStatusField,
+  VISIT_STATUSES,
+} from "@/lib/pilot/ops";
+
+export const metadata: Metadata = {
+  title: "New Visit",
+  robots: { index: false, follow: false },
+};
+
+export const dynamic = "force-dynamic";
+
+async function createVisitAction(formData: FormData) {
+  "use server";
+
+  requirePilotOperationsAccess();
+  await requirePilotSession(["admin"], "/admin/visits/new");
+
+  const prisma = getPrismaClient();
+  const referralId = textField(formData.get("referralId"), 80);
+  const therapistId = optionalTextField(formData.get("therapistId"), 80);
+  const scheduledAt = optionalDateField(formData.get("scheduledAt"));
+  const status = visitStatusField(formData.get("status"));
+  const notes = optionalTextField(formData.get("notes"), 2000);
+
+  if (!referralId) notFound();
+
+  const blockedNoteSearch = await getBlockedOperationalNoteRedirectSearch({
+    actorType: "pilot_admin",
+    entityType: "Visit",
+    extra: { referralId, status, therapistId: therapistId || null },
+    fieldLabel: "Visit note",
+    route: "/admin/visits/new",
+    value: notes,
+    workflow: "visit_create",
+  });
+  if (blockedNoteSearch) redirect(`/admin/visits/new?referralId=${encodeURIComponent(referralId)}&${blockedNoteSearch}`);
+
+  const visit = await prisma.visit.create({
+    data: {
+      notes,
+      referralId,
+      scheduledAt,
+      status,
+      therapistId,
+    },
+  });
+
+  await Promise.all([
+    prisma.auditLog.create({
+      data: {
+        actorType: "pilot_admin",
+        action: "visit_created",
+        entityType: "Visit",
+        entityId: visit.id,
+        metadataJson: {
+          referralId,
+          status: visit.status,
+          therapistId: visit.therapistId,
+        },
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        actorType: "pilot_admin",
+        action: "referral_visit_created",
+        entityType: "PatientReferral",
+        entityId: referralId,
+        metadataJson: {
+          status: visit.status,
+          visitId: visit.id,
+        },
+      },
+    }),
+  ]);
+
+  redirect(`/admin/visits/${visit.id}`);
+}
+
+export default async function NewVisitPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ error?: string; noteCategory?: string; noteDestination?: string; noteSuggestion?: string; referralId?: string }>;
+}) {
+  requirePilotOperationsAccess();
+
+  const params = await searchParams;
+  const prisma = getPrismaClient();
+  const [referrals, therapists] = await Promise.all([
+    prisma.patientReferral.findMany({
+      orderBy: { updatedAt: "desc" },
+      select: {
+        city: true,
+        id: true,
+        patientName: true,
+        status: true,
+        zip: true,
+      },
+      take: 100,
+      where: { status: { notIn: ["completed", "canceled"] } },
+    }),
+    prisma.therapist.findMany({
+      orderBy: { name: "asc" },
+      where: { active: true },
+    }),
+  ]);
+
+  return (
+    <div className="max-w-4xl">
+      <Link href="/admin/visits" className="inline-flex items-center gap-2 text-sm font-semibold text-blue underline">
+        <ArrowLeft size={16} />
+        Back to visits
+      </Link>
+      <div className="mt-6 border-b border-line pb-6">
+        <p className="eyebrow">Pilot admin</p>
+        <h1 className="mt-3 text-3xl font-semibold tracking-[-.03em] text-ink">Create visit</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-600">Schedule a fake/test operational visit. Do not enter PHI, diagnosis, treatment detail, or clinical notes.</p>
+      </div>
+
+      <BlockedNoteAlert searchParams={params} />
+
+      <form action={createVisitAction} className="mt-8 grid gap-6 rounded-lg border border-line bg-white p-6 md:grid-cols-2">
+        <label className="text-sm font-semibold text-ink md:col-span-2">Referral<select className="field" name="referralId" defaultValue={params?.referralId || ""} required><option value="">Select referral</option>{referrals.map((referral) => <option key={referral.id} value={referral.id}>{referral.patientName} · {statusLabel(referral.status)} · {[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</option>)}</select></label>
+        <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue=""><option value="">Unassigned</option>{therapists.map((therapist) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+        <label className="text-sm font-semibold text-ink">Scheduled<input className="field" name="scheduledAt" type="datetime-local" /></label>
+        <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue="scheduled">{VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
+        <label className="text-sm font-semibold text-ink">Scheduling timezone<span className="field flex items-center text-slate-500">{FLOWVIA_OPERATIONS_TIME_ZONE}</span></label>
+        <label className="text-sm font-semibold text-ink md:col-span-2">Operational note <span className="font-normal text-slate-400">(optional, no PHI or clinical detail)</span><textarea className="field min-h-28" name="notes" /></label>
+        <div className="md:col-span-2"><button className="btn-primary" type="submit"><Save size={18} />Create visit</button></div>
+      </form>
+    </div>
+  );
+}
