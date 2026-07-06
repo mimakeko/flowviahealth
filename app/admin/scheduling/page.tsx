@@ -5,12 +5,19 @@ import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligenc
 import { getPrismaClient } from "@/lib/db/prisma";
 import { formatDateTime, requirePilotOperationsAccess, statusClassName, statusLabel } from "@/lib/pilot/ops";
 import {
+  evaluateReferralIntakeQuality,
+  getReferralDuplicateCandidates,
+  type ReferralIntakeDuplicateSource,
+  type ReferralIntakeQualityResult,
+} from "@/lib/pilot/referral-intake-quality";
+import {
   detectVisitConflicts,
   getSchedulingQueueCards,
   getSchedulingReadiness,
   getSuggestedSchedulingWindows,
   getTherapistFit,
 } from "@/lib/pilot/scheduling-intelligence";
+import { normalizeE164Phone } from "@/lib/sms/compliance";
 
 export const metadata: Metadata = {
   title: "Scheduling Intelligence",
@@ -26,12 +33,20 @@ type SchedulingReferralRow = {
     serviceAreaNotes: string | null;
   } | null;
   assignedTherapistId: string | null;
+  careType: string | null;
   city: string | null;
+  createdAt: Date | string;
   id: string;
   patientName: string;
+  phone: string;
   status: string;
   visits: { scheduledAt: Date | null; status: string }[];
   zip: string | null;
+};
+
+type SchedulingQualityReferralRow = SchedulingReferralRow & {
+  intakeQuality: ReferralIntakeQualityResult;
+  smsConsentStatus: string;
 };
 
 type SchedulingVisitRow = {
@@ -50,6 +65,21 @@ type SchedulingVisitRow = {
   } | null;
   therapistId: string | null;
 };
+
+function duplicateSources(rows: SchedulingReferralRow[]): ReferralIntakeDuplicateSource[] {
+  return rows.map((row: SchedulingReferralRow) => ({
+    assignedTherapistId: row.assignedTherapistId,
+    assignedTherapistName: row.assignedTherapist?.name,
+    city: row.city,
+    createdAt: row.createdAt,
+    futureOpenVisitCount: row.visits.length,
+    id: row.id,
+    patientName: row.patientName,
+    phone: row.phone,
+    status: row.status,
+    zip: row.zip,
+  }));
+}
 
 export default async function AdminSchedulingPage() {
   requirePilotOperationsAccess();
@@ -114,6 +144,42 @@ export default async function AdminSchedulingPage() {
   ]);
 
   const referralRows = readyReferrals as SchedulingReferralRow[];
+  const duplicateSourceRows = duplicateSources(referralRows);
+  const normalizedPhones = Array.from(new Set(referralRows.map((referral: SchedulingReferralRow) => normalizeE164Phone(referral.phone)).filter(Boolean)));
+  const smsConsentRows = normalizedPhones.length > 0
+    ? await prisma.smsConsentEnrollment.findMany({
+        select: { normalizedPhone: true, status: true },
+        where: { normalizedPhone: { in: normalizedPhones } },
+      })
+    : [];
+  const smsConsentByPhone = Object.fromEntries(smsConsentRows.map((row) => [row.normalizedPhone, row.status]));
+  const qualityRows: SchedulingQualityReferralRow[] = referralRows.map((referral: SchedulingReferralRow) => {
+    const smsConsentStatus = smsConsentByPhone[normalizeE164Phone(referral.phone)] || "none";
+    const duplicateCandidates = getReferralDuplicateCandidates({
+      draft: duplicateSourceRows.find((source) => source.id === referral.id) || {
+        id: referral.id,
+        phone: referral.phone,
+        status: referral.status,
+      },
+      sources: duplicateSourceRows,
+    });
+    return {
+      ...referral,
+      intakeQuality: evaluateReferralIntakeQuality({
+        assignedTherapistId: referral.assignedTherapistId,
+        assignedTherapistName: referral.assignedTherapist?.name,
+        careType: referral.careType,
+        city: referral.city,
+        duplicateCandidates,
+        patientName: referral.patientName,
+        phone: referral.phone,
+        smsConsentStatus,
+        status: referral.status,
+        zip: referral.zip,
+      }),
+      smsConsentStatus,
+    };
+  });
   const visitRows = upcomingVisits as SchedulingVisitRow[];
   const pastOpenVisits = visitRows.filter((visit: SchedulingVisitRow) => visit.scheduledAt && visit.scheduledAt < now).length;
   const schedulingCards = getSchedulingQueueCards({
@@ -121,12 +187,14 @@ export default async function AdminSchedulingPage() {
     capacityCautions,
     conflicts: pastOpenVisits,
     contactedWithoutFutureVisit,
+    intakeReviewNeeded: qualityRows.filter((referral: SchedulingQualityReferralRow) => referral.intakeQuality.readinessLevel !== "ready").length,
     optedOutContacts,
-    readyToSchedule: referralRows.length,
+    possibleDuplicates: qualityRows.filter((referral: SchedulingQualityReferralRow) => referral.intakeQuality.duplicateCandidates.length > 0).length,
+    readyToSchedule: qualityRows.filter((referral: SchedulingQualityReferralRow) => referral.intakeQuality.schedulingReady).length,
     unassignedReferrals,
     upcomingNextSevenDays: visitRows.filter((visit: SchedulingVisitRow) => visit.scheduledAt && visit.scheduledAt >= now && visit.scheduledAt <= sevenDaysFromNow).length,
   });
-  const firstReadyReferral = referralRows[0];
+  const firstReadyReferral = qualityRows.find((referral: SchedulingQualityReferralRow) => referral.intakeQuality.schedulingReady) || qualityRows[0];
   const firstReferralTherapistVisits = firstReadyReferral?.assignedTherapistId
     ? openVisits.filter((visit) => visit.therapistId === firstReadyReferral.assignedTherapistId)
     : [];
@@ -154,12 +222,12 @@ export default async function AdminSchedulingPage() {
         <div>
           <h2 className="mb-3 text-xl font-semibold tracking-[-.02em] text-ink">Ready-to-schedule referrals</h2>
           <div className="overflow-hidden rounded-lg border border-line bg-white">
-            {referralRows.map((referral: SchedulingReferralRow) => {
+            {qualityRows.map((referral: SchedulingQualityReferralRow) => {
               const readiness = getSchedulingReadiness({
                 assignedTherapistId: referral.assignedTherapistId,
                 futureVisitCount: referral.visits.length,
                 referralStatus: referral.status,
-                smsConsentStatus: null,
+                smsConsentStatus: referral.smsConsentStatus,
               });
               const fit = getTherapistFit({
                 active: referral.assignedTherapist?.active ?? false,
@@ -176,17 +244,18 @@ export default async function AdminSchedulingPage() {
                       <p className="font-semibold text-ink">{referral.patientName}</p>
                       <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>{statusLabel(referral.status)}</span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">{readiness.readiness.replaceAll("_", " ")} · {fit.label.replaceAll("_", " ")} · {referral.assignedTherapist?.name || "Unassigned"}</p>
+                    <p className="mt-1 text-sm text-slate-600">{referral.intakeQuality.readinessLabel} · {readiness.readiness.replaceAll("_", " ")} · {fit.label.replaceAll("_", " ")} · {referral.assignedTherapist?.name || "Unassigned"}</p>
                     <p className="mt-1 text-xs text-slate-500">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
+                    {!referral.intakeQuality.schedulingReady ? <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-950">Needs intake review before scheduling.</p> : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Link href={`/admin/referrals/${referral.id}`} className="font-semibold text-blue underline">Open</Link>
-                    <Link href={`/admin/visits/new?referralId=${referral.id}`} className="inline-flex items-center gap-1 font-semibold text-blue underline">Create visit <ArrowRight size={14} /></Link>
+                    {referral.intakeQuality.schedulingReady ? <Link href={`/admin/visits/new?referralId=${referral.id}`} className="inline-flex items-center gap-1 font-semibold text-blue underline">Create visit <ArrowRight size={14} /></Link> : null}
                   </div>
                 </div>
               );
             })}
-            {referralRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No ready-to-schedule referrals found.</p> : null}
+            {qualityRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No ready-to-schedule referrals found.</p> : null}
           </div>
         </div>
 

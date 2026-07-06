@@ -16,6 +16,7 @@ import { getSmsStoreStatus } from "@/lib/sms/store";
 import { getTelnyxConfigStatus } from "@/lib/sms/telnyx";
 import { getSchedulingIntelligenceStatus } from "@/lib/pilot/scheduling-intelligence";
 import { getTherapistFieldWorkflowStatus } from "@/lib/pilot/therapist-field-workflow";
+import { getReferralIntakeQualityStatus } from "@/lib/pilot/referral-intake-quality";
 
 export const metadata: Metadata = {
   title: "Cloud Pilot Health",
@@ -136,6 +137,7 @@ export default async function AdminHealthPage() {
   const dbUrls = getDatabaseUrlComparison();
   const schedulingStatus = getSchedulingIntelligenceStatus();
   const therapistFieldWorkflow = getTherapistFieldWorkflowStatus();
+  const referralIntakeQuality = getReferralIntakeQualityStatus();
   const activitySnapshot = await getActivitySnapshot();
   const databaseStorageMode = process.env.DATABASE_URL ? "Postgres" : smsStore.label;
   const webhookEnforced = telnyx.webhookSigningConfigured && !telnyx.unsignedWebhookTestBypassEnabled;
@@ -171,6 +173,15 @@ export default async function AdminHealthPage() {
     { icon: ShieldCheck, metric: { label: "Travel-time APIs", value: schedulingStatus.travelTimeApisEnabled ? "Enabled" : "Disabled", tone: schedulingStatus.travelTimeApisEnabled ? "warn" : "good" } },
     { icon: ShieldCheck, metric: { label: "Scheduling external AI", value: schedulingStatus.externalAiEnabled ? "Enabled" : "Disabled", tone: schedulingStatus.externalAiEnabled ? "warn" : "good" } },
     { icon: ShieldCheck, metric: { label: "Autonomous scheduling", value: schedulingStatus.autonomousSchedulingEnabled ? "Enabled" : "Disabled", tone: schedulingStatus.autonomousSchedulingEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "Referral intake quality", value: referralIntakeQuality.enabled ? "Enabled" : "Disabled", tone: referralIntakeQuality.enabled ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Duplicate guard", value: referralIntakeQuality.duplicateGuardEnabled ? referralIntakeQuality.duplicateGuardMode : "Disabled", tone: referralIntakeQuality.duplicateGuardEnabled ? "good" : "warn" } },
+    { icon: Database, metric: { label: "Duplicate source", value: referralIntakeQuality.duplicateSource, tone: "good" } },
+    { icon: ShieldCheck, metric: { label: "Referral auto-assignment", value: referralIntakeQuality.autoAssignmentEnabled ? "Enabled" : "Disabled", tone: referralIntakeQuality.autoAssignmentEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "Auto visit creation from referral", value: referralIntakeQuality.autoVisitCreationEnabled ? "Enabled" : "Disabled", tone: referralIntakeQuality.autoVisitCreationEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "Intake PHI storage", value: referralIntakeQuality.intakePhiStorageEnabled ? "Enabled" : "Disabled", tone: referralIntakeQuality.intakePhiStorageEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "External duplicate APIs", value: referralIntakeQuality.externalDuplicateApisEnabled ? "Enabled" : "Disabled", tone: referralIntakeQuality.externalDuplicateApisEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "SMS sending from intake", value: referralIntakeQuality.smsSendingEnabled ? "Enabled" : "Disabled", tone: referralIntakeQuality.smsSendingEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "Full phone display", value: referralIntakeQuality.fullPhoneDisplayEnabled ? "Enabled" : "Disabled / masked", tone: referralIntakeQuality.fullPhoneDisplayEnabled ? "warn" : "good" } },
     { icon: BriefcaseMedical, metric: { label: "Therapist field workflow", value: therapistFieldWorkflow.enabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.enabled ? "good" : "warn" } },
     { icon: BriefcaseMedical, metric: { label: "Field workspace optimized", value: therapistFieldWorkflow.fieldWorkspaceOptimized ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.fieldWorkspaceOptimized ? "good" : "warn" } },
     { icon: BriefcaseMedical, metric: { label: "Empty states", value: therapistFieldWorkflow.emptyStatesEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.emptyStatesEnabled ? "good" : "warn" } },

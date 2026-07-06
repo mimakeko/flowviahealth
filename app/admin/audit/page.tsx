@@ -29,6 +29,10 @@ type AuditFilterRow = {
 };
 
 const AUDIT_CATEGORIES = [
+  { value: "referral_intake", label: "Referral intake events" },
+  { value: "duplicate_guard", label: "Duplicate guard" },
+  { value: "unsafe_intake_notes", label: "Unsafe intake notes" },
+  { value: "referral_readiness_changes", label: "Referral readiness changes" },
   { value: "therapist_field", label: "Therapist field actions" },
   { value: "blocked_notes", label: "Blocked notes" },
   { value: "visit_status_changes", label: "Visit status changes" },
@@ -47,6 +51,17 @@ const THERAPIST_FIELD_ACTIONS = [
 
 const BLOCKED_NOTE_ACTIONS = ["operational_note_blocked", "therapist_visit_note_blocked"] as const;
 const VISIT_STATUS_ACTIONS = ["visit_status_changed"] as const;
+const REFERRAL_INTAKE_ACTIONS = [
+  "referral_created",
+  "referral_updated",
+  "referral_status_changed",
+  "therapist_assigned",
+  "referral_duplicate_warning",
+  "referral_duplicate_override",
+  "operational_note_blocked",
+] as const;
+const DUPLICATE_GUARD_ACTIONS = ["referral_duplicate_warning", "referral_duplicate_override"] as const;
+const REFERRAL_READINESS_ACTIONS = ["referral_created", "referral_updated", "referral_status_changed", "therapist_assigned"] as const;
 
 const SAFE_METADATA_KEYS = new Set([
   "assignedTherapistId",
@@ -56,6 +71,8 @@ const SAFE_METADATA_KEYS = new Set([
   "classification",
   "count",
   "destinationHint",
+  "duplicateCandidateCount",
+  "duplicateHighestScore",
   "earlyCompletionWarning",
   "fieldLabel",
   "from",
@@ -65,7 +82,9 @@ const SAFE_METADATA_KEYS = new Set([
   "newStatus",
   "noteAdded",
   "oldStatus",
+  "overrideReasonProvided",
   "reason",
+  "readinessLevel",
   "referralCount",
   "referralId",
   "route",
@@ -78,6 +97,7 @@ const SAFE_METADATA_KEYS = new Set([
   "to",
   "visitCount",
   "visitId",
+  "warningCodes",
   "workflow",
 ]);
 
@@ -116,6 +136,10 @@ function isAuditCategory(value: string | undefined): value is AuditCategory {
 }
 
 function auditCategoryFilter(category: AuditCategory): Prisma.AuditLogWhereInput {
+  if (category === "referral_intake") return { action: { in: [...REFERRAL_INTAKE_ACTIONS] } };
+  if (category === "duplicate_guard") return { action: { in: [...DUPLICATE_GUARD_ACTIONS] } };
+  if (category === "unsafe_intake_notes") return { action: "operational_note_blocked", entityType: "PatientReferral" };
+  if (category === "referral_readiness_changes") return { action: { in: [...REFERRAL_READINESS_ACTIONS] } };
   if (category === "therapist_field") return { action: { in: [...THERAPIST_FIELD_ACTIONS] } };
   if (category === "blocked_notes") return { action: { in: [...BLOCKED_NOTE_ACTIONS] } };
   if (category === "visit_status_changes") return { action: { in: [...VISIT_STATUS_ACTIONS] } };

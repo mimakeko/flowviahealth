@@ -87,7 +87,9 @@ export type SchedulingQueueInput = Readonly<{
   capacityCautions: number;
   conflicts: number;
   contactedWithoutFutureVisit: number;
+  intakeReviewNeeded?: number;
   optedOutContacts: number;
+  possibleDuplicates?: number;
   readyToSchedule: number;
   unassignedReferrals: number;
   upcomingNextSevenDays: number;
@@ -369,6 +371,8 @@ export function getSuggestedSchedulingWindows(input: SuggestedWindowInput, now: 
 export function getSchedulingQueueCards(input: SchedulingQueueInput): SchedulingCard[] {
   const cards: SchedulingCard[] = [];
 
+  if ((input.possibleDuplicates ?? 0) > 0) cards.push(card("Possible duplicate referrals", "caution", `${input.possibleDuplicates} referral${input.possibleDuplicates === 1 ? " has" : "s have"} deterministic local duplicate warnings.`, "Review safe duplicate signals before scheduling."));
+  if ((input.intakeReviewNeeded ?? 0) > 0) cards.push(card("Needs intake review", "caution", `${input.intakeReviewNeeded} referral${input.intakeReviewNeeded === 1 ? " needs" : "s need"} intake checklist review before scheduling.`, "Complete missing contact, location, service area, assignment, and duplicate review steps."));
   if (input.readyToSchedule > 0) cards.push(card("Ready to schedule", "info", `${input.readyToSchedule} referral${input.readyToSchedule === 1 ? " is" : "s are"} assigned and waiting for a future visit.`, "Open the referral and use the existing visit creation flow."));
   if (input.unassignedReferrals > 0) cards.push(card("Missing therapist assignment", "caution", `${input.unassignedReferrals} active referral${input.unassignedReferrals === 1 ? " has" : "s have"} no assigned therapist.`, "Assign a therapist before scheduling."));
   if (input.contactedWithoutFutureVisit > 0) cards.push(card("Contacted without future visit", "caution", `${input.contactedWithoutFutureVisit} contacted referral${input.contactedWithoutFutureVisit === 1 ? " has" : "s have"} no future visit.`, "Review scheduling readiness."));

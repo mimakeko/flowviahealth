@@ -8,6 +8,12 @@ import { getOperationsAssistantV2Status, getQueueAssistantCards } from "@/lib/ai
 import { getPrismaClient } from "@/lib/db/prisma";
 import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import {
+  evaluateReferralIntakeQuality,
+  getReferralDuplicateCandidates,
+  type ReferralIntakeDuplicateSource,
+  type ReferralIntakeQualityResult,
+} from "@/lib/pilot/referral-intake-quality";
+import {
   formatDate,
   REFERRAL_STATUSES,
   requirePilotOperationsAccess,
@@ -15,6 +21,7 @@ import {
   statusLabel,
   type ReferralStatusValue,
 } from "@/lib/pilot/ops";
+import { normalizeE164Phone } from "@/lib/sms/compliance";
 
 export const metadata: Metadata = {
   title: "Referral Operations",
@@ -26,10 +33,14 @@ export const dynamic = "force-dynamic";
 type ReferralListRow = {
   id: string;
   assignedTherapist: { name: string } | null;
+  assignedTherapistId: string | null;
+  careType: string | null;
   city: string | null;
   createdAt: Date | string;
   patientName: string;
+  phone: string;
   status: string;
+  visits: { id: string }[];
   zip: string | null;
 };
 
@@ -37,6 +48,32 @@ type TherapistFilterOption = {
   id: string;
   name: string;
 };
+
+type ReferralListQualityRow = ReferralListRow & {
+  intakeQuality: ReferralIntakeQualityResult;
+  smsConsentStatus: string;
+};
+
+function duplicateSources(rows: ReferralListRow[]): ReferralIntakeDuplicateSource[] {
+  return rows.map((row: ReferralListRow) => ({
+    assignedTherapistId: row.assignedTherapistId,
+    assignedTherapistName: row.assignedTherapist?.name,
+    city: row.city,
+    createdAt: row.createdAt,
+    futureOpenVisitCount: row.visits.length,
+    id: row.id,
+    patientName: row.patientName,
+    phone: row.phone,
+    status: row.status,
+    zip: row.zip,
+  }));
+}
+
+function intakeBadgeClass(readiness: ReferralIntakeQualityResult["readinessLevel"]) {
+  if (readiness === "ready") return "bg-emerald-50 text-emerald-800 ring-emerald-200";
+  if (readiness === "blocked") return "bg-rose-50 text-rose-800 ring-rose-200";
+  return "bg-amber-50 text-amber-800 ring-amber-200";
+}
 
 export default async function AdminReferralsPage({
   searchParams,
@@ -48,7 +85,8 @@ export default async function AdminReferralsPage({
   const params = await searchParams;
   const selectedStatus = REFERRAL_STATUSES.includes(params?.status as ReferralStatusValue) ? (params?.status as ReferralStatusValue) : "";
   const selectedTherapistId = params?.therapistId || "";
-  const selectedGroup = params?.group === "needs_scheduling" ? "needs_scheduling" : "";
+  const intakeGroups = ["needs_scheduling", "ready_scheduling", "needs_intake_review", "possible_duplicate", "missing_therapist", "opted_out"] as const;
+  const selectedGroup = intakeGroups.includes(params?.group as (typeof intakeGroups)[number]) ? (params?.group as (typeof intakeGroups)[number]) : "";
   const needsSchedulingStatuses: ReferralStatusValue[] = ["new", "contacted"];
   const referralFilters: Prisma.PatientReferralWhereInput[] = [];
   const now = new Date();
@@ -65,8 +103,23 @@ export default async function AdminReferralsPage({
   const prisma = getPrismaClient();
   const [referrals, therapists, contactedNotScheduled, scheduledVisitsNextSevenDays, pastScheduledVisits, optedOutContacts, unassignedReferrals, smokeTestRecords, archiveCandidates, capacityCautions] = await Promise.all([
     prisma.patientReferral.findMany({
-      include: { assignedTherapist: true },
       orderBy: { createdAt: "desc" },
+      select: {
+        assignedTherapist: { select: { name: true } },
+        assignedTherapistId: true,
+        careType: true,
+        city: true,
+        createdAt: true,
+        id: true,
+        patientName: true,
+        phone: true,
+        status: true,
+        visits: {
+          select: { id: true },
+          where: { status: { in: ["scheduled", "in_progress"] } },
+        },
+        zip: true,
+      },
       take: 100,
       where: referralFilters.length > 0 ? { AND: referralFilters } : undefined,
     }),
@@ -115,12 +168,59 @@ export default async function AdminReferralsPage({
     }),
   ]);
   const referralRows = referrals as ReferralListRow[];
+  const duplicateSourceRows = duplicateSources(referralRows);
+  const normalizedPhones = Array.from(new Set(referralRows.map((referral: ReferralListRow) => normalizeE164Phone(referral.phone)).filter(Boolean)));
+  const smsConsentRows = normalizedPhones.length > 0
+    ? await prisma.smsConsentEnrollment.findMany({
+        select: { normalizedPhone: true, status: true },
+        where: { normalizedPhone: { in: normalizedPhones } },
+      })
+    : [];
+  const smsConsentByPhone = Object.fromEntries(smsConsentRows.map((row) => [row.normalizedPhone, row.status]));
+  const qualityRows: ReferralListQualityRow[] = referralRows.map((referral: ReferralListRow) => {
+    const smsConsentStatus = smsConsentByPhone[normalizeE164Phone(referral.phone)] || "none";
+    const duplicateCandidates = getReferralDuplicateCandidates({
+      draft: duplicateSourceRows.find((source) => source.id === referral.id) || {
+        id: referral.id,
+        phone: referral.phone,
+        status: referral.status,
+      },
+      sources: duplicateSourceRows,
+    });
+    return {
+      ...referral,
+      intakeQuality: evaluateReferralIntakeQuality({
+        assignedTherapistId: referral.assignedTherapistId,
+        assignedTherapistName: referral.assignedTherapist?.name,
+        careType: referral.careType,
+        city: referral.city,
+        duplicateCandidates,
+        patientName: referral.patientName,
+        phone: referral.phone,
+        smsConsentStatus,
+        status: referral.status,
+        zip: referral.zip,
+      }),
+      smsConsentStatus,
+    };
+  });
+  const displayedReferralRows = qualityRows.filter((referral: ReferralListQualityRow) => {
+    if (selectedGroup === "ready_scheduling") return referral.intakeQuality.schedulingReady;
+    if (selectedGroup === "needs_intake_review") return referral.intakeQuality.readinessLevel !== "ready";
+    if (selectedGroup === "possible_duplicate") return referral.intakeQuality.duplicateCandidates.length > 0;
+    if (selectedGroup === "missing_therapist") return !referral.assignedTherapistId;
+    if (selectedGroup === "opted_out") return referral.smsConsentStatus === "opted_out";
+    return true;
+  });
   const therapistOptions = therapists as TherapistFilterOption[];
   const assistantCards = getQueueAssistantCards({
     contactedNotScheduled,
+    intakeReviewNeeded: qualityRows.filter((referral: ReferralListQualityRow) => referral.intakeQuality.readinessLevel !== "ready").length,
     newReferrals: referralRows.filter((referral: ReferralListRow) => referral.status === "new").length,
     optedOutContacts,
+    possibleDuplicates: qualityRows.filter((referral: ReferralListQualityRow) => referral.intakeQuality.duplicateCandidates.length > 0).length,
     pastScheduledVisits,
+    readyForScheduling: qualityRows.filter((referral: ReferralListQualityRow) => referral.intakeQuality.schedulingReady).length,
     scheduledVisitsNextSevenDays,
     smokeTestRecords,
     unassignedReferrals,
@@ -131,8 +231,10 @@ export default async function AdminReferralsPage({
     capacityCautions,
     conflicts: pastScheduledVisits,
     contactedWithoutFutureVisit: contactedNotScheduled,
+    intakeReviewNeeded: qualityRows.filter((referral: ReferralListQualityRow) => referral.intakeQuality.readinessLevel !== "ready").length,
     optedOutContacts,
-    readyToSchedule: contactedNotScheduled,
+    possibleDuplicates: qualityRows.filter((referral: ReferralListQualityRow) => referral.intakeQuality.duplicateCandidates.length > 0).length,
+    readyToSchedule: qualityRows.filter((referral: ReferralListQualityRow) => referral.intakeQuality.schedulingReady).length,
     unassignedReferrals,
     upcomingNextSevenDays: scheduledVisitsNextSevenDays,
   });
@@ -187,6 +289,11 @@ export default async function AdminReferralsPage({
               <select className="field" name="group" defaultValue={selectedGroup}>
                 <option value="">All referrals</option>
                 <option value="needs_scheduling">Needs scheduling</option>
+                <option value="ready_scheduling">Ready for scheduling</option>
+                <option value="needs_intake_review">Needs intake review</option>
+                <option value="possible_duplicate">Possible duplicate</option>
+                <option value="missing_therapist">Missing therapist</option>
+                <option value="opted_out">Opted out / non-SMS</option>
               </select>
             </label>
             <div className="flex items-end gap-2">
@@ -202,6 +309,7 @@ export default async function AdminReferralsPage({
               <tr>
                 <th className="px-4 py-3">Patient</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Intake</th>
                 <th className="px-4 py-3">Therapist</th>
                 <th className="px-4 py-3">City / ZIP</th>
                 <th className="px-4 py-3">Created</th>
@@ -209,13 +317,26 @@ export default async function AdminReferralsPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {referralRows.map((referral: ReferralListRow) => (
+              {displayedReferralRows.map((referral: ReferralListQualityRow) => (
                 <tr key={referral.id}>
-                  <td className="px-4 py-3 font-medium text-ink">{referral.patientName}</td>
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-ink">{referral.patientName}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {referral.intakeQuality.duplicateCandidates.length > 0 ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Possible duplicate</span> : null}
+                      {!referral.assignedTherapistId ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Missing therapist</span> : null}
+                      {referral.smsConsentStatus === "opted_out" ? <span className="rounded-md bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-900 ring-1 ring-rose-200">Non-SMS only</span> : null}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>
                       {statusLabel(referral.status)}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${intakeBadgeClass(referral.intakeQuality.readinessLevel)}`}>
+                      {referral.intakeQuality.readinessLabel}
+                    </span>
+                    {referral.intakeQuality.schedulingReady ? <p className="mt-1 text-xs font-semibold text-emerald-700">Ready for scheduling</p> : <p className="mt-1 text-xs text-slate-500">Review checklist</p>}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</td>
                   <td className="px-4 py-3 text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Not provided"}</td>
@@ -227,9 +348,9 @@ export default async function AdminReferralsPage({
                   </td>
                 </tr>
               ))}
-              {referralRows.length === 0 ? (
+              {displayedReferralRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center">
+                  <td colSpan={7} className="px-4 py-12 text-center">
                     <ClipboardList className="mx-auto mb-3 text-slate-400" size={28} />
                     <p className="font-semibold text-ink">No referrals yet</p>
                     <p className="mt-1 text-sm text-slate-500">Seed fake pilot data or create a manual referral to start testing.</p>

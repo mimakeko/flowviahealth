@@ -29,6 +29,11 @@ import {
   getSuggestedSchedulingWindows,
   getTherapistFit,
 } from "@/lib/pilot/scheduling-intelligence";
+import {
+  evaluateReferralIntakeQuality,
+  getReferralDuplicateCandidates,
+  type ReferralIntakeDuplicateSource,
+} from "@/lib/pilot/referral-intake-quality";
 import { normalizeE164Phone } from "@/lib/sms/compliance";
 import { getTelnyxConfigStatus } from "@/lib/sms/telnyx";
 
@@ -60,7 +65,29 @@ type AuditLogListItem = {
   createdAt: Date | string;
 };
 
+type DuplicateReferralRow = {
+  assignedTherapist: { name: string } | null;
+  assignedTherapistId: string | null;
+  city: string | null;
+  createdAt: Date;
+  id: string;
+  patientName: string;
+  phone: string;
+  status: string;
+  visits: { id: string }[];
+  zip: string | null;
+};
+
 const REFERRAL_WORKFLOW_STAGES = ["new", "contacted", "scheduled", "active", "completed", "canceled"] as const;
+const INTAKE_AUDIT_ACTIONS = new Set([
+  "referral_created",
+  "referral_updated",
+  "referral_status_changed",
+  "therapist_assigned",
+  "referral_duplicate_warning",
+  "referral_duplicate_override",
+  "operational_note_blocked",
+]);
 
 function referralNextSteps(status: string) {
   if (status === "new") return "Contact the patient, confirm SMS consent readiness, and assign a therapist.";
@@ -73,6 +100,21 @@ function referralNextSteps(status: string) {
 
 function isUpcomingVisit(visit: ReferralDetailVisit) {
   return Boolean(visit.scheduledAt && !["completed", "canceled", "no_show"].includes(visit.status));
+}
+
+function duplicateSources(rows: DuplicateReferralRow[]): ReferralIntakeDuplicateSource[] {
+  return rows.map((row: DuplicateReferralRow) => ({
+    assignedTherapistId: row.assignedTherapistId,
+    assignedTherapistName: row.assignedTherapist?.name,
+    city: row.city,
+    createdAt: row.createdAt,
+    futureOpenVisitCount: row.visits.length,
+    id: row.id,
+    patientName: row.patientName,
+    phone: row.phone,
+    status: row.status,
+    zip: row.zip,
+  }));
 }
 
 async function updateReferralAction(formData: FormData) {
@@ -115,6 +157,16 @@ async function updateReferralAction(formData: FormData) {
       status,
     },
   });
+  const intakeQuality = evaluateReferralIntakeQuality({
+    assignedTherapistId: updated.assignedTherapistId,
+    careType: updated.careType,
+    city: updated.city,
+    patientName: updated.patientName,
+    phone: updated.phone,
+    smsConsentStatus: "none",
+    status: updated.status,
+    zip: updated.zip,
+  });
 
   await Promise.all([
     prisma.auditLog.create({
@@ -126,7 +178,9 @@ async function updateReferralAction(formData: FormData) {
         metadataJson: {
           assignedTherapistId: updated.assignedTherapistId,
           hasOperationalNote: Boolean(notes),
+          readinessLevel: intakeQuality.readinessLevel,
           status: updated.status,
+          warningCodes: intakeQuality.warnings.map((item) => item.code).join(","),
         },
       },
     }),
@@ -288,7 +342,7 @@ export default async function ReferralDetailPage({
   const therapistOptions = therapists as TherapistOption[];
   const upcomingVisits = referralVisits.filter(isUpcomingVisit);
 
-  const [auditLogs, smsConsent] = await Promise.all([
+  const [auditLogs, smsConsent, duplicateRows] = await Promise.all([
     prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
       take: 30,
@@ -302,9 +356,56 @@ export default async function ReferralDetailPage({
     prisma.smsConsentEnrollment.findUnique({
       where: { normalizedPhone: normalizeE164Phone(referral.phone) },
     }),
+    prisma.patientReferral.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        assignedTherapist: { select: { name: true } },
+        assignedTherapistId: true,
+        city: true,
+        createdAt: true,
+        id: true,
+        patientName: true,
+        phone: true,
+        status: true,
+        visits: {
+          select: { id: true },
+          where: { status: { in: ["scheduled", "in_progress"] } },
+        },
+        zip: true,
+      },
+      take: 150,
+      where: { status: { notIn: ["completed", "canceled"] } },
+    }),
   ]);
   const referralAuditLogs = auditLogs as AuditLogListItem[];
+  const intakeAuditLogs = referralAuditLogs.filter((log: AuditLogListItem) => INTAKE_AUDIT_ACTIONS.has(log.action));
   const smsReadiness = smsConsent?.status || "none";
+  const duplicateCandidates = getReferralDuplicateCandidates({
+    draft: {
+      assignedTherapistId: referral.assignedTherapistId,
+      assignedTherapistName: referral.assignedTherapist?.name,
+      city: referral.city,
+      createdAt: referral.createdAt,
+      id: referral.id,
+      patientName: referral.patientName,
+      phone: referral.phone,
+      status: referral.status,
+      zip: referral.zip,
+    },
+    sources: duplicateSources(duplicateRows as DuplicateReferralRow[]),
+  });
+  const intakeQuality = evaluateReferralIntakeQuality({
+    assignedTherapistId: referral.assignedTherapistId,
+    assignedTherapistName: referral.assignedTherapist?.name,
+    careType: referral.careType,
+    city: referral.city,
+    duplicateCandidates,
+    patientName: referral.patientName,
+    phone: referral.phone,
+    smsConsentStatus: smsReadiness,
+    status: referral.status,
+    zip: referral.zip,
+  });
   const telnyx = getTelnyxConfigStatus();
   const assignedTherapistOpenVisits = referral.assignedTherapistId
     ? await prisma.visit.findMany({
@@ -411,6 +512,69 @@ export default async function ReferralDetailPage({
 
           <BlockedNoteAlert className="mt-5" searchParams={query} />
 
+          <section className="mt-5 rounded-lg border border-line bg-white p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="eyebrow">Intake quality</p>
+                <h2 className="mt-2 text-xl font-semibold tracking-[-.02em] text-ink">{intakeQuality.readinessLabel}</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Deterministic local checks only. Duplicate guard is warning-only and does not assign therapists, create visits, send SMS, or call external APIs.</p>
+              </div>
+              <span className={`inline-flex w-fit rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ${intakeQuality.readinessLevel === "ready" ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : intakeQuality.readinessLevel === "blocked" ? "bg-rose-50 text-rose-800 ring-rose-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>
+                {intakeQuality.readinessLevel.replaceAll("_", " ")}
+              </span>
+            </div>
+
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.maskedPhone}</dd></div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Therapist</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.therapistLabel}</dd></div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Location</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.city} / {intakeQuality.safeDisplay.zip}</dd></div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">SMS consent</dt><dd className="mt-1 text-slate-600">{statusLabel(smsReadiness)} · SMS not required for scheduling</dd></div>
+            </dl>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {Object.entries(intakeQuality.checklist).map(([key, value]) => (
+                <p key={key} className={`rounded-md px-3 py-2 text-sm font-semibold ring-1 ${value ? "bg-emerald-50 text-emerald-900 ring-emerald-200" : "bg-amber-50 text-amber-950 ring-amber-200"}`}>
+                  {value ? "Ready" : "Review"} · {key.replace(/([A-Z])/g, " $1").replace(/^has /, "").replace(/^status /, "status ").toLowerCase()}
+                </p>
+              ))}
+            </div>
+
+            {intakeQuality.warnings.length > 0 ? (
+              <div className="mt-4 grid gap-2">
+                {intakeQuality.warnings.map((item) => (
+                  <div key={item.code} className={`rounded-lg border p-3 text-sm leading-6 ${item.level === "blocker" ? "border-rose-200 bg-rose-50 text-rose-950" : item.level === "warning" ? "border-amber-200 bg-amber-50 text-amber-950" : "border-line bg-slate-50 text-slate-700"}`}>
+                    <p className="font-semibold">{item.label}</p>
+                    <p className="mt-1">{item.nextAction}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {duplicateCandidates.length > 0 ? (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+                <p className="font-semibold">Possible duplicate referrals</p>
+                <div className="mt-3 grid gap-2">
+                  {duplicateCandidates.map((candidate) => (
+                    <div key={candidate.id} className="rounded-md bg-white/70 p-3">
+                      <p className="font-semibold">Score: {candidate.score} · Status: {statusLabel(candidate.status)} · Therapist: {candidate.therapistLabel}</p>
+                      <p className="mt-1 text-xs">Signals: {candidate.reasons.join(", ")}</p>
+                      <Link href={`/admin/referrals/${candidate.id}`} className="mt-2 inline-flex font-semibold text-blue underline">Review safe referral record</Link>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {intakeQuality.schedulingReady && schedulingReadiness.readiness === "ready_to_schedule" ? (
+              <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-secondary mt-4">
+                <CalendarPlus size={18} />
+                Ready for scheduling
+              </Link>
+            ) : (
+              <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">Needs review before scheduling. Complete the intake checklist before opening the visit creation flow.</p>
+            )}
+          </section>
+
           <div className="mt-5">
             <OperationsAssistantPanel
               cards={assistantCards}
@@ -427,7 +591,7 @@ export default async function ReferralDetailPage({
               summary="Referral scheduling readiness uses fake pilot status, therapist assignment, SMS consent state, and existing future visits. Suggested windows require manual review."
               windows={suggestedWindows}
             />
-            {schedulingReadiness.readiness === "ready_to_schedule" ? (
+            {intakeQuality.schedulingReady && schedulingReadiness.readiness === "ready_to_schedule" ? (
               <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-secondary mt-4">
                 <CalendarPlus size={18} />
                 Open New Visit flow
@@ -450,7 +614,22 @@ export default async function ReferralDetailPage({
           </form>
         </div>
 
-        <aside className="rounded-lg border border-line bg-white p-6">
+        <aside className="grid gap-5">
+        <section className="rounded-lg border border-line bg-white p-6">
+          <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Intake history</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Audit-safe intake events only. Raw blocked note text, full phones, raw SMS bodies, and provider payloads are not shown.</p>
+          <div className="mt-5 space-y-3">
+            {intakeAuditLogs.map((log: AuditLogListItem) => (
+              <div key={log.id} className="rounded-lg border border-line p-3 text-sm">
+                <p className="font-semibold text-ink">{log.action}</p>
+                <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {log.actorType}</p>
+              </div>
+            ))}
+            {intakeAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No intake events recorded yet.</p> : null}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-line bg-white p-6">
           <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Audit trail</h2>
           <div className="mt-5 space-y-3">
             {referralAuditLogs.map((log: AuditLogListItem) => (
@@ -461,6 +640,7 @@ export default async function ReferralDetailPage({
             ))}
             {referralAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No audit events recorded for this referral yet.</p> : null}
           </div>
+        </section>
         </aside>
       </div>
 

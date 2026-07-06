@@ -20,6 +20,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - Encryption: use managed encrypted storage and avoid secrets in source, screenshots, logs, and tickets.
 - Integrity controls: validate webhook signatures, preserve event-id idempotency, and reject unsupported data modes.
 - AI controls: Operations Assistant V2 is deterministic/mock-only, no external API calls, no autonomous actions, no clinical guidance, and human review required.
+- Referral intake controls: referral intake quality and duplicate guard are deterministic/local-data-only, warning-only, no-PHI, no external duplicate APIs, no external AI, no therapist auto-assignment, no automatic visit creation, no SMS sending, masked phone display, safe audit metadata only, and human review required before scheduling.
 - Scheduling controls: Scheduling Intelligence V1 is deterministic only, with next-5-business-day suggestions, external maps/geocoding, route optimization, real travel-time calculation, external AI, SMS sending, and autonomous scheduling disabled.
 - Therapist field workflow controls: `/my-work` is assigned-scope only, manual-only, confirmation-gated before visit status writes, fake/test-data-only, no-PHI, no SMS sending, no external AI/APIs, no maps/geocoding/travel-time APIs, and no autonomous status changes.
 - Therapist phone/iPad workspace controls: responsive field usability, calm empty states, safe loading/error states, query minimization, and transient action banners must preserve masking, no-PHI note blocking, terminal visit locks, manual submit requirements, RBAC, deterministic assistant/scheduling context, and no external API/SMS/map/travel surfaces.
@@ -41,6 +42,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - Message Ledger masks phone numbers and does not expose secrets.
 - Data Stewardship tools are admin-only, confirmation-gated, fake-data-only, audit-preserving, and do not send SMS.
 - Operations Assistant cards use safe workflow state only and must not include PHI, clinical advice, diagnosis, or treatment guidance.
+- Referral intake quality uses safe operational fields only and must not include PHI, clinical advice, diagnosis, treatment guidance, full phone exposure, raw blocked note text, raw SMS bodies, provider payloads, secrets, external duplicate APIs, SMS sending, autonomous therapist assignment, or autonomous visit creation.
 - Scheduling Intelligence uses fake pilot city/ZIP/service-area/status/time data only and must not include PHI, full street addresses, clinical guidance, raw SMS bodies, or secrets. `Use this window` fills a form field only and must not create visits without manual human submit.
 - Therapist field visit notes are operational-only and must be rejected before persistence when note classification detects PHI-like, SMS-forbidden, diagnosis, treatment, medication, symptoms, measurements, or clinical-note content.
 - Therapist field blocked-note feedback must show only safe reason, destination, optional safe rewrite, and operational examples; raw blocked note text must not be stored or displayed.

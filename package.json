@@ -28,6 +28,7 @@
     "auth:route-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/pilot-auth-route-smoke.mts",
     "ai:ops-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/ai-ops-smoke.mts",
     "scheduling:intelligence-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/scheduling-intelligence-smoke.mts",
+    "referral:intake-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/referral-intake-smoke.mts",
     "sms-consent:route-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/sms-consent-route-smoke.mts",
     "telnyx:webhook-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/telnyx-webhook-route-smoke.mts",
     "telnyx:cloud-readiness": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/telnyx-cloud-readiness.mts",

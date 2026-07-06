@@ -265,6 +265,21 @@ Admins should run each pilot day from the internal dashboard shell:
 - Passive scheduling suggestions are not audit events; explicit user actions such as `visit_created`, `visit_status_changed`, and `therapist_assigned` remain audited.
 - Run `pnpm scheduling:intelligence-smoke` to verify fit scoring, readiness, conflicts, suggested windows, deterministic source, and no external API mode.
 
+## Referral Intake Quality Policy
+
+- Referral intake quality is deterministic and local-data-only.
+- Intake quality is a warning/readiness layer before scheduling and therapist work. It does not auto-assign therapists, create visits, send SMS, call external duplicate APIs, call maps/geocoding/travel-time APIs, or use external AI.
+- The intake checklist reviews safe operational fields only: masked phone/contact readiness, fake city/ZIP, service area/workflow type, therapist assignment, non-terminal status, status readiness, duplicate review, opt-out state, and no-PHI note classification.
+- Duplicate warnings are warning-only. Admins must review possible duplicate signals manually before continuing or scheduling.
+- Duplicate override reasons must be operational-only. Unsafe override text is blocked before write and audited with safe metadata only.
+- `/admin/referrals/new` previews missing intake fields and warns on possible duplicates before creating a referral.
+- `/admin/referrals` can filter ready-for-scheduling, needs-intake-review, possible-duplicate, missing-therapist, and opted-out queues.
+- `/admin/referrals/[id]` shows the intake checklist, duplicate warnings, safe intake history, and only links into visit creation when intake and scheduling readiness are both complete.
+- `/admin/scheduling` and `/admin/visits/new` surface intake quality before scheduling work; humans still submit the existing manual visit forms.
+- `/admin/audit` includes filters for referral intake events, duplicate guard events, unsafe intake notes, and referral readiness changes.
+- `/admin/health` must show referral intake quality enabled, duplicate guard warning-only, deterministic/local duplicate source, auto-assignment disabled, auto visit creation disabled, intake PHI storage disabled, external duplicate APIs disabled, SMS sending from intake disabled, and full phone display disabled/masked.
+- Run `pnpm referral:intake-smoke` to verify checklist behavior, duplicate warnings, safe blocked-note metadata, no SMS, no external APIs, and Prisma wrapper use.
+
 ## Therapist Field Visit Workflow Policy
 
 - `/my-work` is the therapist-facing field workflow inside the dashboard shell.
@@ -470,6 +485,7 @@ The workflow layer is dashboard-first. Admins use `/dashboard`, `/admin/referral
 3. Enter fake/test name, fake/test phone, optional `.test` email, target city, target ZIP, and service area/workflow type.
 4. Keep the status in the allowed workflow values: `new`, `contacted`, `scheduled`, `active`, `completed`, or `canceled`.
 5. Add only non-clinical operational notes. Do not enter diagnosis, treatment detail, clinical notes, emergency notes, medication, symptoms, wound details, therapy plans, or pain scores.
+6. Review any intake quality or possible-duplicate warning before continuing. Duplicate override reasons must be logistics-only and may be blocked if they contain clinical or PHI-like wording.
 
 ### Admin Assigns Therapist
 
@@ -487,7 +503,8 @@ The workflow layer is dashboard-first. Admins use `/dashboard`, `/admin/referral
 4. Set scheduled date/time.
 5. Set visit status: `unscheduled`, `scheduled`, `in_progress`, `completed`, `canceled`, or `no_show`.
 6. Add only non-clinical operational notes.
-7. Confirm `/admin/visits` and the referral detail audit trail show the visit.
+7. Review referral intake quality before scheduling. Needs-intake-review warnings should be resolved before creating field work.
+8. Confirm `/admin/visits` and the referral detail audit trail show the visit.
 
 ### Therapist Sees `/my-work`
 

@@ -27,9 +27,12 @@ export type VisitAssistantInput = Readonly<{
 
 export type QueueAssistantInput = Readonly<{
   contactedNotScheduled: number;
+  intakeReviewNeeded?: number;
   newReferrals: number;
   optedOutContacts: number;
   pastScheduledVisits: number;
+  possibleDuplicates?: number;
+  readyForScheduling?: number;
   scheduledVisitsNextSevenDays: number;
   smokeTestRecords: number;
   unassignedReferrals: number;
@@ -157,6 +160,9 @@ export function getVisitAssistantCards(input: VisitAssistantInput, now: Date = n
 export function getQueueAssistantCards(input: QueueAssistantInput): OperationsAssistantCard[] {
   const cards: OperationsAssistantCard[] = [];
 
+  if ((input.possibleDuplicates ?? 0) > 0) cards.push(card("Possible duplicate referrals", "warning", `${input.possibleDuplicates} referral${input.possibleDuplicates === 1 ? " has" : "s have"} deterministic local duplicate warnings.`, "Review safe duplicate signals before scheduling or creating more visits."));
+  if ((input.intakeReviewNeeded ?? 0) > 0) cards.push(card("Intake review needed", "warning", `${input.intakeReviewNeeded} referral${input.intakeReviewNeeded === 1 ? " needs" : "s need"} missing-data or readiness review.`, "Complete intake checklist before scheduling."));
+  if ((input.readyForScheduling ?? 0) > 0) cards.push(card("Ready for scheduling", "info", `${input.readyForScheduling} referral${input.readyForScheduling === 1 ? " is" : "s are"} intake-ready for manual scheduling.`, "Open the referral and use the existing visit creation flow."));
   if (input.newReferrals > 0) cards.push(card("New referrals waiting", "warning", `${input.newReferrals} referral${input.newReferrals === 1 ? " is" : "s are"} waiting for first contact.`, "Prioritize first contact and assignment review."));
   if (input.contactedNotScheduled > 0) cards.push(card("Contacted referrals not scheduled", "warning", `${input.contactedNotScheduled} contacted referral${input.contactedNotScheduled === 1 ? " has" : "s have"} no upcoming visit.`, "Review scheduling readiness and create visits where appropriate."));
   if (input.scheduledVisitsNextSevenDays > 0) cards.push(card("Scheduled visits in next 7 days", "info", `${input.scheduledVisitsNextSevenDays} visit${input.scheduledVisitsNextSevenDays === 1 ? " is" : "s are"} scheduled soon.`, "Monitor readiness and therapist assignment."));

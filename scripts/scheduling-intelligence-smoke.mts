@@ -104,6 +104,22 @@ assert.equal(weekendStartWindows.length, 20);
 const neutralCards = scheduling.getNeutralSchedulingGuidanceCards();
 assert.match(renderedCards(neutralCards), /Select a referral to see readiness, therapist fit, and suggested business-day windows/i);
 
+const queueCards = scheduling.getSchedulingQueueCards({
+  archiveCandidates: 0,
+  capacityCautions: 0,
+  conflicts: 0,
+  contactedWithoutFutureVisit: 1,
+  intakeReviewNeeded: 2,
+  optedOutContacts: 0,
+  possibleDuplicates: 1,
+  readyToSchedule: 1,
+  unassignedReferrals: 0,
+  upcomingNextSevenDays: 0,
+});
+assert.match(renderedCards(queueCards), /Possible duplicate referrals/);
+assert.match(renderedCards(queueCards), /Needs intake review/);
+assert.match(renderedCards(queueCards), /Ready to schedule/);
+
 const actionPolicy = scheduling.getSchedulingWindowActionPolicy();
 assert.equal(actionPolicy.action, "fill_datetime_field_only");
 assert.equal(actionPolicy.fieldName, "scheduledAt");
@@ -122,7 +138,7 @@ assert.equal(status.noPhiMode, true);
 assert.equal(status.suggestedBusinessDays, 5);
 assert.equal(status.travelTimeApisEnabled, false);
 
-assertNoForbiddenOutput(renderedCards([...readyToSchedule.cards, ...optedOut.cards, ...conflict.cards, ...neutralCards]));
+assertNoForbiddenOutput(renderedCards([...readyToSchedule.cards, ...optedOut.cards, ...conflict.cards, ...neutralCards, ...queueCards]));
 assertNoForbiddenOutput(JSON.stringify({ actionPolicy, status, windows }));
 
 console.log("Scheduling intelligence smoke passed: fit, readiness, conflicts, 5 business-day windows, neutral state, fill-only actions, deterministic source, and no external APIs verified.");

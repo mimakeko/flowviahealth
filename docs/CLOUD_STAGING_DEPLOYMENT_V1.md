@@ -239,6 +239,18 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 - No PHI, full street addresses, raw SMS bodies, secrets, diagnosis, treatment details, or clinical guidance should appear in scheduling intelligence.
 - Before/after deploy, confirm `/admin/health` reports scheduling intelligence enabled, source deterministic, business-day-only windows, external APIs disabled, maps/geocoding disabled, travel-time APIs disabled, external AI disabled, autonomous scheduling disabled, and no-PHI enforcement on.
 
+## Referral Intake Quality Policy
+
+- Referral intake quality must remain deterministic, local-data-only, and warning-only in cloud staging.
+- `/admin/referrals/new`, `/admin/referrals`, `/admin/referrals/[id]`, `/admin/scheduling`, and `/admin/visits/new` should surface intake readiness before scheduling work.
+- The checklist verifies operational contact, fake city/ZIP, service area/workflow type, therapist assignment, non-terminal status, duplicate review, and note-safety signals.
+- Duplicate guard compares only local referral rows and safe workflow fields. It must not call external duplicate, identity, maps, geocoding, travel-time, or AI APIs.
+- Duplicate override reasons must remain operational-only and blocked before write if note classification detects PHI-like or clinical content.
+- Intake warnings must not auto-assign therapists, create visits, send SMS, expose full phone numbers, store raw blocked note text, or bypass human review.
+- `/admin/audit` should filter referral intake events, duplicate guard events, unsafe intake notes, and referral readiness changes with safe metadata only.
+- `/admin/health` should report referral intake quality enabled, duplicate guard warning-only, duplicate source deterministic/local data, auto-assignment disabled, auto visit creation disabled, intake PHI storage disabled, external duplicate APIs disabled, SMS sending from intake disabled, and full phone display disabled/masked.
+- Run `pnpm referral:intake-smoke` before and after staging changes that touch referral intake, scheduling readiness, duplicate warnings, note blocking, audit metadata, or health flags.
+
 ## Therapist Field Visit Workflow Policy
 
 - `/my-work` remains inside the authenticated dashboard shell and is scoped by therapist/admin RBAC.
@@ -266,6 +278,7 @@ pnpm db:pool-smoke
 pnpm telnyx:cloud-readiness
 pnpm therapist:field-smoke
 pnpm therapist:workspace-smoke
+pnpm referral:intake-smoke
 ```
 
 ## Troubleshooting
