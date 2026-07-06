@@ -74,17 +74,55 @@ const windows = scheduling.getSuggestedSchedulingWindows({
   ],
 }, new Date("2026-07-05T12:00:00.000Z"));
 assert.ok(windows.length > 0);
+assert.equal(new Set(windows.map((window) => window.businessDayKey)).size, 5);
+assert.deepEqual([...new Set(windows.map((window) => window.businessDayKey))], [
+  "2026-07-06",
+  "2026-07-07",
+  "2026-07-08",
+  "2026-07-09",
+  "2026-07-10",
+]);
+assert.ok(windows.every((window) => !/Sat|Sun/.test(window.label)));
+assert.ok(windows.every((window) => /^(Mon|Tue|Wed|Thu|Fri), /.test(window.label)));
 assert.ok(windows.every((window) => !window.localInputValue.endsWith("09:30")));
 assert.ok(windows.every((window) => window.source === "deterministic"));
+assert.equal(windows.some((window) => window.localInputValue === "2026-07-06T09:00"), false);
+
+const weekendStartWindows = scheduling.getSuggestedSchedulingWindows({
+  candidateStart: new Date("2026-07-03T17:00:00.000Z"),
+  scheduledVisits: [],
+}, new Date("2026-07-03T17:00:00.000Z"));
+assert.deepEqual([...new Set(weekendStartWindows.map((window) => window.businessDayKey))], [
+  "2026-07-06",
+  "2026-07-07",
+  "2026-07-08",
+  "2026-07-09",
+  "2026-07-10",
+]);
+assert.equal(weekendStartWindows.length, 20);
+
+const neutralCards = scheduling.getNeutralSchedulingGuidanceCards();
+assert.match(renderedCards(neutralCards), /Select a referral to see readiness, therapist fit, and suggested business-day windows/i);
+
+const actionPolicy = scheduling.getSchedulingWindowActionPolicy();
+assert.equal(actionPolicy.action, "fill_datetime_field_only");
+assert.equal(actionPolicy.fieldName, "scheduledAt");
+assert.equal(actionPolicy.requiresManualSubmit, true);
+assert.equal(actionPolicy.createsVisit, false);
+assert.equal(actionPolicy.sendsSms, false);
+assert.equal(actionPolicy.autonomousSchedulingEnabled, false);
 
 const status = scheduling.getSchedulingIntelligenceStatus();
 assert.equal(status.enabled, true);
+assert.equal(status.externalAiEnabled, false);
 assert.equal(status.externalApisEnabled, false);
 assert.equal(status.geocodingEnabled, false);
 assert.equal(status.autonomousSchedulingEnabled, false);
 assert.equal(status.noPhiMode, true);
+assert.equal(status.suggestedBusinessDays, 5);
+assert.equal(status.travelTimeApisEnabled, false);
 
-assertNoForbiddenOutput(renderedCards([...readyToSchedule.cards, ...optedOut.cards, ...conflict.cards]));
-assertNoForbiddenOutput(JSON.stringify(windows));
+assertNoForbiddenOutput(renderedCards([...readyToSchedule.cards, ...optedOut.cards, ...conflict.cards, ...neutralCards]));
+assertNoForbiddenOutput(JSON.stringify({ actionPolicy, status, windows }));
 
-console.log("Scheduling intelligence smoke passed: fit, readiness, conflicts, windows, deterministic source, and no external APIs verified.");
+console.log("Scheduling intelligence smoke passed: fit, readiness, conflicts, 5 business-day windows, neutral state, fill-only actions, deterministic source, and no external APIs verified.");

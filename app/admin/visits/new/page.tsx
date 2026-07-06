@@ -18,6 +18,7 @@ import {
   VISIT_STATUSES,
 } from "@/lib/pilot/ops";
 import {
+  getNeutralSchedulingGuidanceCards,
   getSchedulingReadiness,
   getSuggestedSchedulingWindows,
   getTherapistFit,
@@ -218,16 +219,22 @@ export default async function NewVisitPage({
 
       <BlockedNoteAlert searchParams={params} />
 
-      {selectedReferral && schedulingReadiness ? (
-        <div className="mt-8">
+      <div className="mt-8">
+        {selectedReferral && schedulingReadiness ? (
           <SchedulingIntelligencePanel
+            enableUseWindowAction
             fit={therapistFit}
             readiness={schedulingReadiness}
-            summary="This read-only scheduling guidance uses the selected referral, assigned therapist, consent state, and known open visits. Create still requires manual form submission."
+            summary="This read-only scheduling guidance uses the selected referral, assigned therapist, consent state, and known open visits. Use this window only fills the scheduled field; create still requires manual form submission."
             windows={suggestedWindows}
           />
-        </div>
-      ) : null}
+        ) : (
+          <SchedulingIntelligencePanel
+            cards={getNeutralSchedulingGuidanceCards()}
+            summary="Select a referral to see readiness, therapist fit, and suggested business-day windows. The manual visit form remains available."
+          />
+        )}
+      </div>
 
       <form action={createVisitAction} className="mt-8 grid gap-6 rounded-lg border border-line bg-white p-6 md:grid-cols-2">
         <label className="text-sm font-semibold text-ink md:col-span-2">Referral<select className="field" name="referralId" defaultValue={params?.referralId || ""} required><option value="">Select referral</option>{referralOptions.map((referral: ReferralOption) => <option key={referral.id} value={referral.id}>{referral.patientName} · {statusLabel(referral.status)} · {[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</option>)}</select></label>

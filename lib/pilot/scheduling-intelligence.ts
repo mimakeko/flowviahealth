@@ -1,6 +1,5 @@
 import {
   FLOWVIA_OPERATIONS_TIME_ZONE,
-  formatOperationsDateTime,
   formatOperationsDateTimeLocalInput,
   parseOperationsDateTimeLocal,
 } from "./time.ts";
@@ -74,6 +73,15 @@ export type SuggestedWindowInput = Readonly<{
   scheduledVisits: readonly ScheduledVisitForConflict[];
 }>;
 
+export type SchedulingWindowActionPolicy = Readonly<{
+  action: "fill_datetime_field_only";
+  autonomousSchedulingEnabled: false;
+  createsVisit: false;
+  fieldName: "scheduledAt";
+  requiresManualSubmit: true;
+  sendsSms: false;
+}>;
+
 export type SchedulingQueueInput = Readonly<{
   archiveCandidates: number;
   capacityCautions: number;
@@ -86,6 +94,7 @@ export type SchedulingQueueInput = Readonly<{
 }>;
 
 export type SuggestedSchedulingWindow = Readonly<{
+  businessDayKey: string;
   label: string;
   localInputValue: string;
   scheduledAt: Date;
@@ -96,9 +105,32 @@ const PILOT_AREA_TERMS = ["dallas", "north dallas", "plano", "frisco", "mckinney
 const SUGGESTED_HOURS = [9, 11, 13, 15] as const;
 const DEFAULT_DURATION_MINUTES = 60;
 const CONFLICT_WINDOW_MINUTES = 90;
+const SUGGESTED_BUSINESS_DAYS = 5;
 
 function card(label: string, level: SchedulingPriority, explanation: string, nextAction: string): SchedulingCard {
   return { explanation, label, level, nextAction, source: "deterministic" };
+}
+
+export function getNeutralSchedulingGuidanceCards(): SchedulingCard[] {
+  return [
+    card(
+      "Select referral",
+      "info",
+      "Select a referral to see readiness, therapist fit, and suggested business-day windows.",
+      "Choose a referral in the manual form below. Nothing is created until you submit.",
+    ),
+  ];
+}
+
+export function getSchedulingWindowActionPolicy(): SchedulingWindowActionPolicy {
+  return {
+    action: "fill_datetime_field_only",
+    autonomousSchedulingEnabled: false,
+    createsVisit: false,
+    fieldName: "scheduledAt",
+    requiresManualSubmit: true,
+    sendsSms: false,
+  };
 }
 
 function normalized(value: string | null | undefined) {
@@ -275,6 +307,23 @@ function weekdayInOperationsZone(date: Date) {
   }).format(date);
 }
 
+function formatSuggestedWindowLabel(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+    timeZone: FLOWVIA_OPERATIONS_TIME_ZONE,
+    weekday: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function isBusinessDayInOperationsZone(date: Date) {
+  const weekday = weekdayInOperationsZone(date);
+  return weekday !== "Sat" && weekday !== "Sun";
+}
+
 function addDays(date: Date, days: number) {
   const copy = new Date(date);
   copy.setDate(copy.getDate() + days);
@@ -285,16 +334,18 @@ export function getSuggestedSchedulingWindows(input: SuggestedWindowInput, now: 
   const windows: SuggestedSchedulingWindow[] = [];
   const durationMinutes = input.durationMinutes ?? DEFAULT_DURATION_MINUTES;
   let dayCursor = input.candidateStart ?? now;
-  let daysChecked = 0;
+  let businessDaysChecked = 0;
+  let calendarDaysChecked = 0;
 
-  while (windows.length < 8 && daysChecked < 14) {
-    dayCursor = addDays(dayCursor, daysChecked === 0 ? 1 : 1);
-    daysChecked += 1;
+  while (businessDaysChecked < SUGGESTED_BUSINESS_DAYS && calendarDaysChecked < 14) {
+    dayCursor = addDays(dayCursor, 1);
+    calendarDaysChecked += 1;
 
-    const weekday = weekdayInOperationsZone(dayCursor);
-    if (weekday === "Sat" || weekday === "Sun") continue;
+    if (!isBusinessDayInOperationsZone(dayCursor)) continue;
 
     const dateKey = zonedDateKey(dayCursor);
+    businessDaysChecked += 1;
+
     for (const hour of SUGGESTED_HOURS) {
       const localInputValue = `${dateKey}T${String(hour).padStart(2, "0")}:00`;
       const scheduledAt = parseOperationsDateTimeLocal(localInputValue);
@@ -303,13 +354,12 @@ export function getSuggestedSchedulingWindows(input: SuggestedWindowInput, now: 
       if (hasConflict) continue;
 
       windows.push({
-        label: formatOperationsDateTime(scheduledAt),
+        businessDayKey: dateKey,
+        label: formatSuggestedWindowLabel(scheduledAt),
         localInputValue,
         scheduledAt,
         source: "deterministic",
       });
-
-      if (windows.length >= 8) break;
     }
   }
 
@@ -335,10 +385,14 @@ export function getSchedulingIntelligenceStatus() {
   return {
     autonomousSchedulingEnabled: false,
     enabled: true,
+    externalAiEnabled: false,
     externalApisEnabled: false,
     geocodingEnabled: false,
     noPhiMode: true,
+    suggestedBusinessDays: SUGGESTED_BUSINESS_DAYS,
+    suggestedSlotsLocal: SUGGESTED_HOURS.map((hour) => `${String(hour).padStart(2, "0")}:00`),
     source: "deterministic",
+    travelTimeApisEnabled: false,
     timeZone: FLOWVIA_OPERATIONS_TIME_ZONE,
   };
 }

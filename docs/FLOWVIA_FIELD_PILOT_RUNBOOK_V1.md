@@ -255,6 +255,8 @@ Admins should run each pilot day from the internal dashboard shell:
 - Scheduling Intelligence V1 is deterministic only.
 - It does not use external maps, geocoding APIs, route optimization, or real travel-time calculation.
 - It uses fake pilot city, ZIP family, therapist service-area text, active status, visit timing, and workflow status only.
+- Suggested windows are limited to the next 5 business days in the configured operations timezone and use safe local slots only: 9:00 AM, 11:00 AM, 1:00 PM, and 3:00 PM.
+- The New Visit `Use this window` action fills the scheduled datetime field only; it does not submit the form, create a visit, assign a therapist, send SMS, or bypass human review.
 - It must not use PHI, full street addresses, raw SMS bodies, secrets, diagnosis, treatment details, or clinical guidance.
 - It must not create visits, assign therapists, send SMS, or perform autonomous scheduling.
 - Suggested windows are operational suggestions only and require human review in the existing visit creation/update flows.

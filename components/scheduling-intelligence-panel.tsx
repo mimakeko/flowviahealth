@@ -12,6 +12,7 @@ import { SchedulingWindowList } from "@/components/scheduling-window-list";
 type SchedulingIntelligencePanelProps = Readonly<{
   cards?: readonly SchedulingCard[];
   conflict?: VisitConflictResult;
+  enableUseWindowAction?: boolean;
   fit?: TherapistFitResult | null;
   readiness?: SchedulingReadinessResult | null;
   summary?: string;
@@ -29,6 +30,7 @@ function fitClassName(label: TherapistFitResult["label"]) {
 export function SchedulingIntelligencePanel({
   cards = [],
   conflict,
+  enableUseWindowAction = false,
   fit,
   readiness,
   summary = "Deterministic scheduling intelligence for fake pilot operations. Human review is required.",
@@ -87,11 +89,13 @@ export function SchedulingIntelligencePanel({
         </div>
       ) : null}
 
-      {windows.length > 0 ? <div className="mt-4"><SchedulingWindowList windows={windows} /></div> : null}
+      {windows.length > 0 ? <div className="mt-4"><SchedulingWindowList enableUseWindowAction={enableUseWindowAction} windows={windows} /></div> : null}
 
-      <dl className="mt-4 grid gap-2 border-t border-line pt-4 text-xs text-slate-600 sm:grid-cols-2">
+      <dl className="mt-4 grid gap-2 border-t border-line pt-4 text-xs text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
         <div className="flex justify-between gap-3"><dt>Source</dt><dd className="font-semibold text-ink">deterministic</dd></div>
         <div className="flex justify-between gap-3"><dt>External maps/geocoding</dt><dd className="font-semibold text-ink">Disabled</dd></div>
+        <div className="flex justify-between gap-3"><dt>Travel-time APIs</dt><dd className="font-semibold text-ink">Disabled</dd></div>
+        <div className="flex justify-between gap-3"><dt>External AI</dt><dd className="font-semibold text-ink">Disabled</dd></div>
         <div className="flex justify-between gap-3"><dt>Autonomous scheduling</dt><dd className="font-semibold text-ink">Disabled</dd></div>
         <div className="flex justify-between gap-3"><dt>No-PHI mode</dt><dd className="font-semibold text-ink">On</dd></div>
       </dl>

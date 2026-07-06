@@ -231,10 +231,12 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 
 - Scheduling Intelligence V1 must remain deterministic in cloud staging.
 - External maps, geocoding APIs, route optimization, and real travel-time calculation are disabled.
+- Suggested windows are business-day only for the next 5 operations business days, using 9:00 AM, 11:00 AM, 1:00 PM, and 3:00 PM local slots.
+- `Use this window` fills the manual visit form scheduled datetime field only; it must not submit, create a visit, send SMS, or bypass human review.
 - Suggested windows are operational suggestions only; humans must create or update visits manually.
 - No autonomous scheduling, SMS sending, therapist assignment, or record mutation is allowed from scheduling suggestions.
 - No PHI, full street addresses, raw SMS bodies, secrets, diagnosis, treatment details, or clinical guidance should appear in scheduling intelligence.
-- Before/after deploy, confirm `/admin/health` reports scheduling intelligence enabled, source deterministic, external APIs disabled, maps/geocoding disabled, autonomous scheduling disabled, and no-PHI enforcement on.
+- Before/after deploy, confirm `/admin/health` reports scheduling intelligence enabled, source deterministic, business-day-only windows, external APIs disabled, maps/geocoding disabled, travel-time APIs disabled, external AI disabled, autonomous scheduling disabled, and no-PHI enforcement on.
 
 Optional terminal checks:
 
