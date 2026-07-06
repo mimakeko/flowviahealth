@@ -47,6 +47,15 @@ export function BlockedNoteAlert({ className = "mt-6", searchParams }: BlockedNo
           </div>
         ) : null}
       </dl>
+      <div className="mt-3 rounded-md bg-white/75 px-3 py-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-rose-800">Safe operational examples</p>
+        <ul className="mt-2 grid gap-1 text-sm text-rose-950">
+          <li>Arrived at site.</li>
+          <li>Access issue.</li>
+          <li>Scheduling follow-up needed.</li>
+          <li>Unable to complete visit; admin follow-up needed.</li>
+        </ul>
+      </div>
       <p className="mt-3 font-semibold">{NOTE_PILOT_FIELD_REMINDER}</p>
       <p className="mt-1 text-xs text-rose-900">{SECURE_CLINICAL_NOTES_DISABLED_MESSAGE}</p>
     </div>

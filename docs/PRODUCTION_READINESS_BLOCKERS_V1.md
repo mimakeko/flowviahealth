@@ -51,11 +51,13 @@ Before any serious pilot use, an admin should:
 - Open `/admin/messages` and confirm Cloud webhook last seen, latest inbound keyword, masked phone values, consent state, and recent webhook events.
 - Open `/admin/referrals` and `/admin/visits` to confirm fake-data workflow queues are moving through assignment, scheduling, active, completed, canceled, no-show states as expected.
 - Have therapists review `/my-work`; therapist actions must remain scoped to their assigned referrals/visits and limited to operational status/note updates.
-- Confirm `/my-work` shows the Next field action near the top on phone/iPad, assigned field visits before referrals in Today, Upcoming, and Completed recently sections, no horizontal overflow, and terminal visits warn and block further therapist field updates.
-- Open `/admin/audit` and review recent audit events for safe metadata only; no secrets, raw SMS bodies, provider payloads, or PHI should appear.
+- Confirm `/my-work` shows the Next field action near the top on phone/iPad, assigned field visits before referrals in Today, Upcoming, and Completed recently sections, no horizontal overflow, inline confirmation before every therapist visit status write, safe success/error banners, and terminal visits warn and block further therapist field updates.
+- Open `/admin/visits/[id]` and confirm Current field state and Therapist field activity show safe metadata only, including blocked-note/future-completion warnings without raw note bodies.
+- Open `/admin/audit` and review recent audit events and filters for therapist field actions, blocked notes, visit status changes, and future completion warnings; no secrets, raw SMS bodies, provider payloads, full phones, note bodies, or PHI should appear.
 - Open `/admin/data` and confirm stewardship status is audit-preserving, no SMS history deletion is offered, and real SMS gate remains Off.
 - Confirm `/admin/health` shows Operations Assistant V2 as mock/deterministic, external API calls disabled, no-PHI mode on, and autonomous actions disabled.
 - Confirm `/admin/health` shows Scheduling Intelligence enabled, source deterministic, business-day-only windows, external APIs/maps/geocoding/travel-time/external AI disabled, autonomous scheduling disabled, and no-PHI mode on.
+- Confirm `/admin/health` shows therapist field confirmations, mobile action UX, blocked note safe feedback, and field activity audit enabled; autonomous field actions, external AI/API for field notes, PHI note storage, and SMS sending disabled.
 - Confirm `/admin/health` shows Therapist Field Visit Workflow enabled, phone/iPad layout enabled, manual-only, no-PHI mode on, no-PHI notes enforced, terminal visit lock enabled, SMS sending disabled, external APIs disabled, and autonomous status changes disabled.
 - Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
 - Confirm Vercel logs show no 500s and no `EMAXCONNSESSION`.

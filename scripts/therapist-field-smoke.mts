@@ -16,7 +16,9 @@ const { getTherapistAssistantCards } = await import("../lib/ai/operations-assist
 const { getPrismaClient } = await import("../lib/db/prisma.ts");
 const {
   getTherapistFieldWorkflowStatus,
+  isTherapistFieldVisitActionConfirmed,
   resolveTherapistFieldVisitAction,
+  THERAPIST_FIELD_CONFIRMATION_INTENT,
 } = await import("../lib/pilot/therapist-field-workflow.ts");
 
 const prisma = getPrismaClient();
@@ -120,6 +122,15 @@ try {
   const assignedVisit = await prisma.visit.findFirst({ where: { id: scheduledVisit.id, therapistId: therapistA.id } });
   assert.ok(assignedVisit, "Therapist should be able to scope assigned visit.");
 
+  assert.equal(isTherapistFieldVisitActionConfirmed({
+    action: "mark_completed",
+    confirmationIntent: THERAPIST_FIELD_CONFIRMATION_INTENT,
+  }), true, "Valid confirmation should allow a manual therapist field action.");
+  assert.equal(isTherapistFieldVisitActionConfirmed({
+    action: "mark_completed",
+    confirmationIntent: null,
+  }), false, "Missing confirmation should block a manual therapist field action.");
+
   const unassignedVisit = await prisma.visit.findFirst({ where: { id: otherTherapistVisit.id, therapistId: therapistA.id } });
   assert.equal(unassignedVisit, null, "Therapist must not scope another therapist visit.");
 
@@ -186,7 +197,7 @@ try {
       entityId: completed.id,
       entityType: "Visit",
       metadataJson: getSafeBlockedNoteAuditMetadata(unsafe, {
-        extra: { action: "mark_completed", referralId: referralA.id, status: completed.status, therapistId: therapistA.id },
+        extra: { attemptedAction: "mark_completed", referralId: referralA.id, status: completed.status, therapistId: therapistA.id },
         fieldLabel: "Visit note",
         route: "/my-work",
         workflow: "therapist_field_visit_action",
@@ -227,6 +238,10 @@ try {
 
   const fieldStatus = getTherapistFieldWorkflowStatus();
   assert.equal(fieldStatus.enabled, true);
+  assert.equal(fieldStatus.therapistFieldConfirmationsEnabled, true);
+  assert.equal(fieldStatus.mobileActionUxEnabled, true);
+  assert.equal(fieldStatus.safeBlockedNoteFeedbackEnabled, true);
+  assert.equal(fieldStatus.therapistFieldActivityAuditEnabled, true);
   assert.equal(fieldStatus.manualOnly, true);
   assert.equal(fieldStatus.noPhiMode, true);
   assert.equal(fieldStatus.smsSendingEnabled, false);

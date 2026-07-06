@@ -241,17 +241,21 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 ## Therapist Field Visit Workflow Policy
 
 - `/my-work` remains inside the authenticated dashboard shell and is scoped by therapist/admin RBAC.
-- `/my-work` should load as a phone/iPad-ready field workspace with the Next field action panel before lower-priority referral work.
+- `/my-work` should load as a phone/iPad-ready field workspace with the Next field action summary before lower-priority referral work.
 - Therapist field visit actions are manual-only: start, complete, no-show, or cancel assigned fake/test visits.
+- Therapist field visit status writes must require the inline action disclosure and final confirmation button before mutation.
 - The workflow does not send SMS, does not expose SMS internals, does not call external AI/APIs, and does not use maps, geocoding, or travel-time APIs.
-- Notes are blocked if they contain PHI-like or clinical content; blocked note audits must not include the raw note body.
-- `/admin/health` should report therapist field workflow enabled, phone layout enabled, iPad layout enabled, manual-only, no-PHI, no-PHI notes enforced, terminal visit lock enabled, SMS sending disabled, external APIs disabled, and autonomous status changes disabled.
+- Notes are blocked if they contain PHI-like or clinical content; blocked note feedback and audits must not include the raw note body.
+- `/admin/visits/[id]` should show Current field state and Therapist field activity with safe metadata only.
+- `/admin/audit` should filter therapist field actions, blocked notes, visit status changes, and future completion warnings.
+- `/admin/health` should report therapist field workflow enabled, phone layout enabled, iPad layout enabled, therapist field confirmations enabled, mobile action UX enabled, blocked note safe feedback enabled, field activity audit enabled, manual-only, no-PHI, no-PHI notes enforced, terminal visit lock enabled, SMS sending disabled, external AI/API for field notes disabled, PHI note storage disabled, and autonomous field actions disabled.
 - Before smoke testing field work, confirm only fake/test referrals and personal-number test records are present.
 
 Optional terminal checks:
 
 ```bash
 pnpm cloud:readiness
+pnpm therapist:confirmation-smoke
 pnpm db:pool-smoke
 pnpm telnyx:cloud-readiness
 pnpm therapist:field-smoke

@@ -21,7 +21,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - Integrity controls: validate webhook signatures, preserve event-id idempotency, and reject unsupported data modes.
 - AI controls: Operations Assistant V2 is deterministic/mock-only, no external API calls, no autonomous actions, no clinical guidance, and human review required.
 - Scheduling controls: Scheduling Intelligence V1 is deterministic only, with next-5-business-day suggestions, external maps/geocoding, route optimization, real travel-time calculation, external AI, SMS sending, and autonomous scheduling disabled.
-- Therapist field workflow controls: `/my-work` is assigned-scope only, manual-only, fake/test-data-only, no-PHI, no SMS sending, no external AI/APIs, no maps/geocoding/travel-time APIs, and no autonomous status changes.
+- Therapist field workflow controls: `/my-work` is assigned-scope only, manual-only, confirmation-gated before visit status writes, fake/test-data-only, no-PHI, no SMS sending, no external AI/APIs, no maps/geocoding/travel-time APIs, and no autonomous status changes.
 - Therapist phone/iPad workspace controls: responsive field usability must preserve masking, no-PHI note blocking, terminal visit locks, manual submit requirements, RBAC, deterministic assistant/scheduling context, and no external API/SMS/map/travel surfaces.
 - Session management: signed httpOnly cookies are acceptable for pilot only; final timeout, revocation, and recovery controls remain blockers.
 
@@ -43,5 +43,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - Operations Assistant cards use safe workflow state only and must not include PHI, clinical advice, diagnosis, or treatment guidance.
 - Scheduling Intelligence uses fake pilot city/ZIP/service-area/status/time data only and must not include PHI, full street addresses, clinical guidance, raw SMS bodies, or secrets. `Use this window` fills a form field only and must not create visits without manual human submit.
 - Therapist field visit notes are operational-only and must be rejected before persistence when note classification detects PHI-like, SMS-forbidden, diagnosis, treatment, medication, symptoms, measurements, or clinical-note content.
-- Therapist field visit audit events must store safe metadata only: visit/referral identifiers, old/new status, action, warning flags, and no raw unsafe note body, full phone, full address, secrets, SMS provider payload, diagnosis, or treatment details.
-- `/my-work` phone/iPad layouts must keep the Next field action, no-PHI guidance, masked phone values, and terminal visit warning close to the manual action controls.
+- Therapist field blocked-note feedback must show only safe reason, destination, optional safe rewrite, and operational examples; raw blocked note text must not be stored or displayed.
+- Therapist field visit audit events must store safe metadata only: visit/referral identifiers, old/new status, attempted action, blocked reason/category counts, warning flags, and no raw unsafe note body, full phone, full address, secrets, SMS provider payload, diagnosis, or treatment details.
+- `/my-work` phone/iPad layouts must keep the Next field action, no-PHI guidance, masked phone values, inline confirmation, safe success/error banners, and terminal visit warning close to the manual action controls.
+- `/admin/visits/[id]`, `/admin/audit`, and `/admin/health` must expose therapist field state and controls through safe metadata/flags only, with autonomous field actions, external AI/API for field notes, PHI note storage, and SMS sending disabled.

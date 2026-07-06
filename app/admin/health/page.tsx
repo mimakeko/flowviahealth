@@ -72,21 +72,12 @@ async function getActivitySnapshot(): Promise<ActivitySnapshot> {
   try {
     const prisma = getPrismaClient();
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [
-      lastAuditActivityCount,
-      lastWebhook,
-      lastInbound,
-      lastOutbound,
-      lastReferral,
-      lastVisit,
-    ] = await Promise.all([
-      prisma.auditLog.count({ where: { createdAt: { gte: since } } }),
-      prisma.telnyxWebhookEvent.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
-      prisma.smsMessage.findFirst({ orderBy: { createdAt: "desc" }, select: { body: true, createdAt: true }, where: { direction: "inbound" } }),
-      prisma.smsMessage.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true }, where: { direction: "outbound" } }),
-      prisma.patientReferral.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
-      prisma.visit.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
-    ]);
+    const lastAuditActivityCount = await prisma.auditLog.count({ where: { createdAt: { gte: since } } });
+    const lastWebhook = await prisma.telnyxWebhookEvent.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } });
+    const lastInbound = await prisma.smsMessage.findFirst({ orderBy: { createdAt: "desc" }, select: { body: true, createdAt: true }, where: { direction: "inbound" } });
+    const lastOutbound = await prisma.smsMessage.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true }, where: { direction: "outbound" } });
+    const lastReferral = await prisma.patientReferral.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } });
+    const lastVisit = await prisma.visit.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } });
 
     return {
       lastAuditActivityCount,
@@ -123,6 +114,16 @@ function HealthCard({ icon: Icon, metric }: { icon: typeof Activity; metric: Hea
   );
 }
 
+async function getSafeStewardshipSummary() {
+  if (!process.env.DATABASE_URL) return null;
+
+  try {
+    return await getPilotDataStewardshipSummary(getPrismaClient());
+  } catch {
+    return null;
+  }
+}
+
 export default async function AdminHealthPage() {
   requirePilotOperationsAccess();
 
@@ -139,7 +140,7 @@ export default async function AdminHealthPage() {
   const databaseStorageMode = process.env.DATABASE_URL ? "Postgres" : smsStore.label;
   const webhookEnforced = telnyx.webhookSigningConfigured && !telnyx.unsignedWebhookTestBypassEnabled;
   const dbIdenticalLabel = dbUrls.identical === null ? "Unknown" : dbUrls.identical ? "Identical" : "Non-identical";
-  const stewardshipSummary = process.env.DATABASE_URL ? await getPilotDataStewardshipSummary(getPrismaClient()) : null;
+  const stewardshipSummary = await getSafeStewardshipSummary();
   const lastStewardshipAction = stewardshipSummary?.lastStewardshipAudit
     ? `${stewardshipSummary.lastStewardshipAudit.action} / ${formatDateTime(stewardshipSummary.lastStewardshipAudit.createdAt)}`
     : "Not recorded";
@@ -176,10 +177,15 @@ export default async function AdminHealthPage() {
     { icon: ShieldCheck, metric: { label: "Field workflow mode", value: therapistFieldWorkflow.manualOnly ? "Manual only" : "Autonomous", tone: therapistFieldWorkflow.manualOnly ? "good" : "warn" } },
     { icon: ShieldCheck, metric: { label: "Field workflow no-PHI", value: therapistFieldWorkflow.noPhiMode ? "On" : "Off", tone: therapistFieldWorkflow.noPhiMode ? "good" : "warn" } },
     { icon: ShieldCheck, metric: { label: "Field no-PHI notes", value: therapistFieldWorkflow.noPhiNotesEnforced ? "Enforced" : "Not enforced", tone: therapistFieldWorkflow.noPhiNotesEnforced ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Therapist field confirmations", value: therapistFieldWorkflow.therapistFieldConfirmationsEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.therapistFieldConfirmationsEnabled ? "good" : "warn" } },
+    { icon: BriefcaseMedical, metric: { label: "Mobile action UX", value: therapistFieldWorkflow.mobileActionUxEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.mobileActionUxEnabled ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Blocked note safe feedback", value: therapistFieldWorkflow.safeBlockedNoteFeedbackEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.safeBlockedNoteFeedbackEnabled ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Field activity audit", value: therapistFieldWorkflow.therapistFieldActivityAuditEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.therapistFieldActivityAuditEnabled ? "good" : "warn" } },
     { icon: ShieldCheck, metric: { label: "Terminal visit lock", value: therapistFieldWorkflow.terminalVisitLockEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.terminalVisitLockEnabled ? "good" : "warn" } },
     { icon: ShieldCheck, metric: { label: "Field workflow SMS sending", value: therapistFieldWorkflow.smsSendingEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.smsSendingEnabled ? "warn" : "good" } },
-    { icon: ShieldCheck, metric: { label: "Field workflow external APIs", value: therapistFieldWorkflow.externalApisEnabled || therapistFieldWorkflow.externalAiEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.externalApisEnabled || therapistFieldWorkflow.externalAiEnabled ? "warn" : "good" } },
-    { icon: ShieldCheck, metric: { label: "Field autonomous status changes", value: therapistFieldWorkflow.autonomousStatusChangesEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.autonomousStatusChangesEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "Autonomous field actions", value: therapistFieldWorkflow.autonomousStatusChangesEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.autonomousStatusChangesEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "External AI/API for field notes", value: therapistFieldWorkflow.externalApisEnabled || therapistFieldWorkflow.externalAiEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.externalApisEnabled || therapistFieldWorkflow.externalAiEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "PHI note storage", value: therapistFieldWorkflow.phiNoteStorageEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.phiNoteStorageEnabled ? "warn" : "good" } },
     { icon: Activity, metric: { label: "Audit activity, last 24h", value: `${activitySnapshot.lastAuditActivityCount}` } },
     { icon: Clock, metric: { label: "Last SMS webhook event", value: formatDateTime(activitySnapshot.lastSmsWebhookEventTime) } },
     { icon: Clock, metric: { label: "Last inbound SMS", value: formatDateTime(activitySnapshot.lastInboundSmsTime) } },

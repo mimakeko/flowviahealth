@@ -28,9 +28,30 @@ type AuditFilterRow = {
   entityType?: string;
 };
 
+const AUDIT_CATEGORIES = [
+  { value: "therapist_field", label: "Therapist field actions" },
+  { value: "blocked_notes", label: "Blocked notes" },
+  { value: "visit_status_changes", label: "Visit status changes" },
+  { value: "future_completion_warnings", label: "Future completion warnings" },
+] as const;
+
+type AuditCategory = (typeof AUDIT_CATEGORIES)[number]["value"];
+
+const THERAPIST_FIELD_ACTIONS = [
+  "therapist_visit_started",
+  "therapist_visit_completed",
+  "therapist_visit_no_show",
+  "therapist_visit_canceled",
+  "therapist_visit_note_blocked",
+] as const;
+
+const BLOCKED_NOTE_ACTIONS = ["operational_note_blocked", "therapist_visit_note_blocked"] as const;
+const VISIT_STATUS_ACTIONS = ["visit_status_changed"] as const;
+
 const SAFE_METADATA_KEYS = new Set([
   "assignedTherapistId",
   "attemptedAction",
+  "blockedReason",
   "cleanupMode",
   "classification",
   "count",
@@ -39,6 +60,7 @@ const SAFE_METADATA_KEYS = new Set([
   "fieldLabel",
   "from",
   "hasOperationalNote",
+  "matchedCategoryCount",
   "matchedCategories",
   "newStatus",
   "noteAdded",
@@ -47,8 +69,10 @@ const SAFE_METADATA_KEYS = new Set([
   "referralCount",
   "referralId",
   "route",
+  "severity",
   "source",
   "status",
+  "suggestedOperationalRewriteAvailable",
   "therapistCount",
   "therapistId",
   "to",
@@ -87,6 +111,27 @@ function safeMetadataSummary(value: unknown) {
     .join(" · ");
 }
 
+function isAuditCategory(value: string | undefined): value is AuditCategory {
+  return AUDIT_CATEGORIES.some((category) => category.value === value);
+}
+
+function auditCategoryFilter(category: AuditCategory): Prisma.AuditLogWhereInput {
+  if (category === "therapist_field") return { action: { in: [...THERAPIST_FIELD_ACTIONS] } };
+  if (category === "blocked_notes") return { action: { in: [...BLOCKED_NOTE_ACTIONS] } };
+  if (category === "visit_status_changes") return { action: { in: [...VISIT_STATUS_ACTIONS] } };
+  return { action: "therapist_visit_completed" };
+}
+
+function metadataObject(log: AuditLogRow) {
+  if (!log.metadataJson || typeof log.metadataJson !== "object" || Array.isArray(log.metadataJson)) return {};
+  return log.metadataJson as Record<string, unknown>;
+}
+
+function metadataBoolean(log: AuditLogRow, key: string) {
+  const value = metadataObject(log)[key];
+  return typeof value === "boolean" ? value : false;
+}
+
 function entityHref(log: AuditLogRow) {
   if (!log.entityId) return null;
   if (log.entityType === "PatientReferral") return `/admin/referrals/${log.entityId}`;
@@ -110,7 +155,7 @@ function auditWindowStart(window: string) {
 export default async function AdminAuditPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ action?: string; entityType?: string; window?: string }>;
+  searchParams?: Promise<{ action?: string; category?: string; entityType?: string; window?: string }>;
 }) {
   requirePilotOperationsAccess();
 
@@ -118,9 +163,11 @@ export default async function AdminAuditPage({
   const selectedWindow = params?.window === "24h" || params?.window === "7d" ? params.window : "";
   const since = auditWindowStart(selectedWindow);
   const selectedAction = params?.action || "";
+  const selectedCategory = isAuditCategory(params?.category) ? params.category : "";
   const selectedEntityType = params?.entityType || "";
   const auditFilters: Prisma.AuditLogWhereInput[] = [];
 
+  if (selectedCategory) auditFilters.push(auditCategoryFilter(selectedCategory));
   if (selectedAction) auditFilters.push({ action: selectedAction });
   if (selectedEntityType) auditFilters.push({ entityType: selectedEntityType });
   if (since) auditFilters.push({ createdAt: { gte: since } });
@@ -146,7 +193,10 @@ export default async function AdminAuditPage({
     }),
   ]);
 
-  const auditLogs = logs as AuditLogRow[];
+  const rawAuditLogs = logs as AuditLogRow[];
+  const auditLogs = selectedCategory === "future_completion_warnings"
+    ? rawAuditLogs.filter((log: AuditLogRow) => metadataBoolean(log, "earlyCompletionWarning"))
+    : rawAuditLogs;
   const actionOptions = actionRows as AuditFilterRow[];
   const entityTypeOptions = entityTypeRows as AuditFilterRow[];
 
@@ -167,7 +217,14 @@ export default async function AdminAuditPage({
       </div>
 
       <form className="rounded-lg border border-line bg-white p-5">
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <label className="text-sm font-semibold text-ink">
+            Category
+            <select className="field" name="category" defaultValue={selectedCategory}>
+              <option value="">All categories</option>
+              {AUDIT_CATEGORIES.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+            </select>
+          </label>
           <label className="text-sm font-semibold text-ink">
             Action
             <select className="field" name="action" defaultValue={selectedAction}>
@@ -194,6 +251,17 @@ export default async function AdminAuditPage({
             <button className="btn-primary w-full justify-center" type="submit">Apply</button>
             <Link href="/admin/audit" className="btn-secondary w-full justify-center">Reset</Link>
           </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+          {AUDIT_CATEGORIES.map((category) => (
+            <Link
+              key={category.value}
+              href={`/admin/audit?category=${category.value}`}
+              className={`rounded-md px-2.5 py-2 ring-1 ${selectedCategory === category.value ? "bg-blue text-white ring-blue" : "bg-slate-50 text-slate-700 ring-line"}`}
+            >
+              {category.label}
+            </Link>
+          ))}
         </div>
       </form>
 

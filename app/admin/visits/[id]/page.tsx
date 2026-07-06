@@ -23,6 +23,7 @@ import {
   visitStatusField,
   VISIT_STATUSES,
 } from "@/lib/pilot/ops";
+import { isTerminalFieldVisitStatus } from "@/lib/pilot/therapist-field-workflow";
 import {
   detectVisitConflicts,
   getSchedulingReadiness,
@@ -45,8 +46,10 @@ type TherapistOption = {
 type AuditLogListItem = {
   id: string;
   action: string;
+  actorId: string | null;
   actorType: string;
   createdAt: Date | string;
+  metadataJson: unknown;
 };
 
 const VISIT_LIFECYCLE_STAGES = ["scheduled", "in_progress", "completed", "no_show", "canceled"] as const;
@@ -56,6 +59,7 @@ const THERAPIST_FIELD_AUDIT_ACTIONS = new Set([
   "therapist_visit_no_show",
   "therapist_visit_canceled",
   "therapist_visit_note_blocked",
+  "visit_status_changed",
 ]);
 
 function visitNextSteps(status: string) {
@@ -65,6 +69,42 @@ function visitNextSteps(status: string) {
   if (status === "no_show") return "Record only operational follow-up needs and keep any note free of PHI.";
   if (status === "canceled") return "Review the canceled workflow summary and audit trail before rescheduling.";
   return "Schedule the visit or assign a therapist before moving the lifecycle forward.";
+}
+
+function shortId(value: string | null | undefined) {
+  if (!value) return "not recorded";
+  return value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+}
+
+function metadataObject(log: AuditLogListItem) {
+  if (!log.metadataJson || typeof log.metadataJson !== "object" || Array.isArray(log.metadataJson)) return {};
+  return log.metadataJson as Record<string, unknown>;
+}
+
+function metadataString(log: AuditLogListItem, key: string) {
+  const value = metadataObject(log)[key];
+  return typeof value === "string" ? value : null;
+}
+
+function metadataBoolean(log: AuditLogListItem, key: string) {
+  const value = metadataObject(log)[key];
+  return typeof value === "boolean" ? value : false;
+}
+
+function actorLabel(log: AuditLogListItem) {
+  return log.actorId ? `${log.actorType} · ${shortId(log.actorId)}` : log.actorType;
+}
+
+function fieldActivitySummary(log: AuditLogListItem) {
+  const oldStatus = metadataString(log, "oldStatus") || metadataString(log, "from");
+  const newStatus = metadataString(log, "newStatus") || metadataString(log, "to");
+  const blockedReason = metadataString(log, "blockedReason") || metadataString(log, "classification");
+  const attemptedAction = metadataString(log, "attemptedAction");
+
+  if (oldStatus && newStatus) return `${statusLabel(oldStatus)} -> ${statusLabel(newStatus)}`;
+  if (blockedReason) return `Blocked note: ${blockedReason}${attemptedAction ? ` · ${attemptedAction}` : ""}`;
+  if (attemptedAction) return `Attempted action: ${attemptedAction}`;
+  return "Safe field activity metadata only.";
 }
 
 async function updateVisitAction(formData: FormData) {
@@ -311,13 +351,52 @@ export default async function VisitDetailPage({
 
         <aside className="grid gap-5">
           <section className="rounded-lg border border-line bg-white p-6">
-            <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Therapist field history</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Latest manual therapist field actions. Metadata is safe and excludes notes, phone numbers, raw SMS, provider payloads, and PHI.</p>
+            <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Current field state</h2>
+            <dl className="mt-5 grid gap-3 text-sm">
+              <div className="rounded-lg border border-line bg-slate-50 p-3">
+                <dt className="font-semibold text-ink">Visit status</dt>
+                <dd className="mt-1">
+                  <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(visit.status)}`}>{statusLabel(visit.status)}</span>
+                </dd>
+              </div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3">
+                <dt className="font-semibold text-ink">Field lock</dt>
+                <dd className="mt-1 text-slate-600">{isTerminalFieldVisitStatus(visit.status) ? "Terminal; therapist field actions locked" : "Open for manual therapist action"}</dd>
+              </div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3">
+                <dt className="font-semibold text-ink">Scheduled</dt>
+                <dd className="mt-1 text-slate-600">{formatDateTime(visit.scheduledAt)}</dd>
+              </div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3">
+                <dt className="font-semibold text-ink">Assigned therapist</dt>
+                <dd className="mt-1 text-slate-600">{visit.therapist?.name || visit.referral.assignedTherapist?.name || "Unassigned"}</dd>
+              </div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3">
+                <dt className="font-semibold text-ink">Admin review</dt>
+                <dd className="mt-1 text-slate-600">{visitNextSteps(visit.status)}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="rounded-lg border border-line bg-white p-6">
+            <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Therapist field activity</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Latest manual field actions and status changes. Metadata is safe and excludes note bodies, phone numbers, raw SMS, provider payloads, and PHI.</p>
             <div className="mt-5 space-y-3">
               {therapistFieldAuditLogs.map((log: AuditLogListItem) => (
                 <div key={log.id} className="rounded-lg border border-line p-3 text-sm">
                   <p className="font-semibold text-ink">{log.action}</p>
-                  <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {log.actorType}</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {actorLabel(log)}</p>
+                  <p className="mt-2 text-slate-600">{fieldActivitySummary(log)}</p>
+                  {metadataBoolean(log, "earlyCompletionWarning") ? (
+                    <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-950">
+                      Future scheduled visit was completed early; review operational context.
+                    </p>
+                  ) : null}
+                  {log.action.includes("note_blocked") ? (
+                    <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 p-2 text-xs font-semibold text-rose-950">
+                      Raw blocked note text is not stored or shown here.
+                    </p>
+                  ) : null}
                 </div>
               ))}
               {therapistFieldAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No therapist field actions recorded yet.</p> : null}
@@ -330,7 +409,7 @@ export default async function VisitDetailPage({
             {visitAuditLogs.map((log: AuditLogListItem) => (
               <div key={log.id} className="rounded-lg border border-line p-3 text-sm">
                 <p className="font-semibold text-ink">{log.action}</p>
-                <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {log.actorType}</p>
+                <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {actorLabel(log)}</p>
               </div>
             ))}
             {visitAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No audit events recorded for this visit yet.</p> : null}

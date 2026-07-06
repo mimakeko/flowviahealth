@@ -312,15 +312,20 @@ export function getSafeBlockedNoteAuditMetadata(
     extra?: Record<string, string | number | boolean | null | undefined>;
   }>,
 ) {
+  const blockedReason = result.matchedCategories[0] || result.classification;
+
   return {
+    blockedReason,
     classification: result.classification,
     destinationHint: result.futureDestinationHint,
     fieldLabel: context.fieldLabel,
+    matchedCategoryCount: result.matchedCategories.length,
     matchedCategories: result.matchedCategories,
     route: context.route,
     severity: result.severity,
     suggestedOperationalRewriteAvailable: Boolean(result.suggestedOperationalRewrite),
     workflow: context.workflow,
+    ...(context.extra ? context.extra : {}),
     ...(context.extra ? { context: context.extra } : {}),
   };
 }

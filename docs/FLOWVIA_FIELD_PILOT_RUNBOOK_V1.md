@@ -268,16 +268,22 @@ Admins should run each pilot day from the internal dashboard shell:
 - `/my-work` is the therapist-facing field workflow inside the dashboard shell.
 - `/my-work` is optimized as a phone and iPad field workspace: next field action near the top, one-column phone layout, tablet-readable queues, and desktop/tablet context rail where space allows.
 - Assigned visits are shown before referrals in Today, Upcoming, and Completed recently sections.
-- The top Next field action panel should be the first place a therapist can safely act on the most relevant assigned visit.
+- The top Next field action panel is a compact summary that jumps to the full assigned visit card; all status writes happen from the visit card.
 - Manual visit actions are limited to: Start visit, Mark completed, Mark no-show, and Mark canceled.
+- Each therapist visit status write must use the inline confirmation disclosure and final `Confirm ...` button before the server action mutates status.
 - Allowed transitions are deterministic: `scheduled -> in_progress`, `scheduled/in_progress -> completed`, `scheduled/in_progress -> no_show`, and `scheduled/in_progress -> canceled`.
 - Terminal visits (`completed`, `no_show`, `canceled`) show an operational warning and cannot be changed from the therapist field workflow.
 - Notes are operational-only and are blocked by note classification if they include diagnosis, treatment, medication, symptoms, measurements, clinical notes, PHI-like content, or SMS-forbidden content.
+- Blocked note feedback must show only the safe reason category, destination, optional safe rewrite, and operational examples; raw blocked note text must not be stored or displayed.
 - If SMS consent is opted out, `/my-work` warns to use non-SMS operational follow-up only; it does not block field work and does not send SMS.
 - Completing a future scheduled visit is allowed only by manual submit and is audited with an early-completion warning.
 - Therapist field actions write safe audit events: `therapist_visit_started`, `therapist_visit_completed`, `therapist_visit_no_show`, `therapist_visit_canceled`, and `therapist_visit_note_blocked`.
+- `/admin/visits/[id]` shows Current field state and Therapist field activity with safe metadata only.
+- `/admin/audit` includes quick filters for therapist field actions, blocked notes, visit status changes, and future completion warnings.
+- `/admin/health` must show therapist field confirmations, mobile action UX, blocked note safe feedback, and field activity audit enabled; autonomous field actions, external AI/API for field notes, PHI note storage, and SMS sending must remain disabled.
 - Run `pnpm therapist:field-smoke` to verify assigned-only updates, blocked unsafe notes, audit writes, no SMS, no external APIs, and admin-route RBAC.
 - Run `pnpm therapist:workspace-smoke` to verify phone/iPad layout markers, touch-sized manual actions, terminal locks, future-completion warning logic, no SMS controls, and no external API/map/travel surfaces.
+- Run `pnpm therapist:confirmation-smoke` to verify inline confirmation, safe success/error banners, blocked-note safe metadata, field activity surfaces, health flags, no SMS, and no external API surfaces.
 
 ## Supabase staging checks
 
@@ -645,9 +651,12 @@ The therapist worklist does not show SMS internals and does not send SMS.
 3. Open `/dashboard`.
 4. Click My Work in the dashboard sidebar.
 5. Confirm only referrals assigned to that therapist appear.
-6. Use Contacted, Ready to schedule, Scheduled, Visited / completed, Unable to reach, or Needs admin help.
-7. Return to `/dashboard` and confirm the therapist dashboard updates.
-8. Verify corresponding `PatientReferral` and `AuditLog` rows in Supabase Table Editor.
+6. Review the Next field action summary and use Review visit action to jump to the assigned visit card.
+7. For visit status writes, open the inline action disclosure and use the final Confirm button after reviewing the masked phone, scheduled time, terminal warning, future-completion warning if present, and no-PHI reminder.
+8. Confirm success and validation banners are safe, short, and do not include PHI, full phones, raw SMS, or note bodies.
+9. Use Contacted, Ready to schedule, Scheduled, Visited / completed, Unable to reach, or Needs admin help for referral work only.
+10. Return to `/dashboard` and confirm the therapist dashboard updates.
+11. Verify corresponding `PatientReferral`, `Visit`, and `AuditLog` rows in Supabase Table Editor. Blocked note audit metadata should include safe action/reason fields only, never the raw note body.
 
 ## SMS consent workflow
 

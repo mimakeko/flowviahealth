@@ -30,7 +30,10 @@ import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardr
 import {
   getAllowedTherapistFieldVisitActions,
   isTerminalFieldVisitStatus,
+  isTherapistFieldVisitActionConfirmed,
+  getTherapistFieldVisitSuccessMessage,
   resolveTherapistFieldVisitAction,
+  THERAPIST_FIELD_CONFIRMATION_INTENT,
   type TherapistFieldVisitActionConfig,
 } from "@/lib/pilot/therapist-field-workflow";
 import {
@@ -168,6 +171,27 @@ function fieldVisitQueueCopy(queue: FieldVisitQueue) {
   return "Terminal visits are locked and kept for safe operational review.";
 }
 
+function shortId(value: string | null | undefined) {
+  if (!value) return "not recorded";
+  return value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+}
+
+function visitDomId(visitId: string) {
+  return `visit-${visitId}`;
+}
+
+function visitSuccessMessage(status: string | null | undefined) {
+  return getTherapistFieldVisitSuccessMessage(status);
+}
+
+function visitErrorMessage(error: string | null | undefined) {
+  if (error === "not_assigned") return "That referral or visit is not assigned to the selected demo therapist.";
+  if (error === "visit_terminal") return "That visit is already terminal and cannot be changed from the therapist field workflow.";
+  if (error === "invalid_transition") return "That visit action is not available for the current status.";
+  if (error === "confirmation_required") return "Review the visit action details and use the confirmation button before submitting.";
+  return null;
+}
+
 function actionIcon(action: TherapistFieldVisitActionConfig["action"]) {
   if (action === "start_visit") return <Clock3 size={16} />;
   if (action === "mark_completed") return <CheckCircle2 size={16} />;
@@ -210,16 +234,40 @@ function VisitActionForm({
     <form action={therapistVisitAction} className="mt-4 grid gap-3">
       <input type="hidden" name="therapistId" value={selectedTherapistId} />
       <input type="hidden" name="visitId" value={visit.id} />
+      <input type="hidden" name="confirmationIntent" value={THERAPIST_FIELD_CONFIRMATION_INTENT} />
       <label className="text-sm font-semibold text-ink">
         Operational note <span className="font-normal text-slate-400">(optional, no PHI)</span>
         <textarea className="field min-h-24 resize-y" name="note" placeholder="Example: Arrived at site, access issue, or scheduling follow-up needed." />
       </label>
       <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
         {allowedActions.map((action: TherapistFieldVisitActionConfig) => (
-          <button key={action.action} className={`${action.action === "mark_completed" ? "btn-primary" : "btn-secondary"} min-h-14 w-full px-4 text-[15px]`} type="submit" name="action" value={action.action} title={action.helper}>
-            {actionIcon(action.action)}
-            <span className="truncate">{action.buttonLabel}</span>
-          </button>
+          <details key={action.action} className="group rounded-lg border border-line bg-white">
+            <summary className={`${action.action === "mark_completed" ? "btn-primary" : "btn-secondary"} min-h-14 w-full cursor-pointer list-none px-4 text-[15px] [&::-webkit-details-marker]:hidden`}>
+              {actionIcon(action.action)}
+              <span className="truncate">{action.buttonLabel}</span>
+            </summary>
+            <div className="grid gap-3 border-t border-line p-4 text-sm leading-6 text-slate-700">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Selected action</p>
+                <p className="mt-1 font-semibold text-ink">{action.buttonLabel}</p>
+              </div>
+              <dl className="grid gap-2">
+                <div className="flex justify-between gap-3"><dt className="font-semibold text-ink">Visit</dt><dd className="text-right">Referral {shortId(visit.referral.id)}</dd></div>
+                <div className="flex justify-between gap-3"><dt className="font-semibold text-ink">Phone</dt><dd className="text-right">{redactPhone(visit.referral.phone)}</dd></div>
+                <div className="flex justify-between gap-3"><dt className="font-semibold text-ink">Scheduled</dt><dd className="text-right">{formatDateTime(visit.scheduledAt)}</dd></div>
+              </dl>
+              {action.terminalResult ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-950">This action moves the visit to a terminal status. It cannot be changed from the therapist field workflow afterward.</p>
+              ) : null}
+              {action.action === "mark_completed" && isFutureVisit(visit.scheduledAt) ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-950">This visit is scheduled in the future. Confirming completion will be audited as an operational warning.</p>
+              ) : null}
+              <p className="rounded-md border border-line bg-slate-50 p-3 font-semibold text-slate-700">No PHI in notes. Do not enter diagnosis, treatment, symptoms, medications, addresses, or clinical details.</p>
+              <button className="btn-primary min-h-14 w-full" type="submit" name="action" value={action.action}>
+                {action.confirmLabel}
+              </button>
+            </div>
+          </details>
         ))}
       </div>
     </form>
@@ -236,7 +284,7 @@ function FieldVisitCard({
   visit: TherapistFieldVisit;
 }) {
   return (
-    <article className="min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5" data-field-visit-card="true">
+    <article id={visitDomId(visit.id)} className="scroll-mt-6 min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5" data-field-visit-card="true">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned visit</p>
@@ -264,12 +312,8 @@ function FieldVisitCard({
 }
 
 function NextFieldActionPanel({
-  selectedTherapistId,
-  smsConsentStatus,
   visit,
 }: {
-  selectedTherapistId: string;
-  smsConsentStatus?: string;
   visit: TherapistFieldVisit | null;
 }) {
   return (
@@ -296,8 +340,12 @@ function NextFieldActionPanel({
             <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{redactPhone(visit.referral.phone)}</dd></div>
             <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Status</dt><dd className="mt-1 text-slate-600">{statusLabel(visit.status)}</dd></div>
           </dl>
-          <VisitWarnings smsConsentStatus={smsConsentStatus} visit={visit} />
-          <VisitActionForm selectedTherapistId={selectedTherapistId} visit={visit} />
+          <a href={`#${visitDomId(visit.id)}`} className="btn-primary mt-4 min-h-14 w-full justify-center">
+            Review visit action
+          </a>
+          <p className="mt-3 rounded-lg border border-line bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-600">
+            Manual status writes are confirmed on the visit card below. No autonomous updates are performed from this summary.
+          </p>
         </>
       ) : null}
     </section>
@@ -458,6 +506,7 @@ async function therapistVisitAction(formData: FormData) {
   const therapistId = textField(formData.get("therapistId"), 80);
   const visitId = textField(formData.get("visitId"), 80);
   const action = textField(formData.get("action"), 80);
+  const confirmationIntent = textField(formData.get("confirmationIntent"), 120);
   const note = textField(formData.get("note"), 1000);
 
   if (!therapistId || !visitId || !action) {
@@ -524,6 +573,10 @@ async function therapistVisitAction(formData: FormData) {
     redirect(`/my-work?therapistId=${encodeURIComponent(therapistId)}&error=${transition?.terminalWarning ? "visit_terminal" : "invalid_transition"}`);
   }
 
+  if (!isTherapistFieldVisitActionConfirmed({ action, confirmationIntent })) {
+    redirect(`/my-work?therapistId=${encodeURIComponent(therapistId)}&error=confirmation_required`);
+  }
+
   const noteClassification = classifyOperationalNote(note, { fieldLabel: "Visit note" });
   if (hasBlockedNoteClassification(noteClassification)) {
     await prisma.auditLog.create({
@@ -535,7 +588,7 @@ async function therapistVisitAction(formData: FormData) {
         entityId: visitId,
         metadataJson: getSafeBlockedNoteAuditMetadata(noteClassification, {
           extra: {
-            action,
+            attemptedAction: action,
             referralId: visit.referralId,
             status: visit.status,
             therapistId,
@@ -600,13 +653,13 @@ async function therapistVisitAction(formData: FormData) {
       : Promise.resolve(),
   ]);
 
-  redirect(`/my-work?therapistId=${therapistId}`);
+  redirect(`/my-work?therapistId=${encodeURIComponent(therapistId)}&success=${encodeURIComponent(transition.nextStatus)}`);
 }
 
 export default async function MyWorkPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ error?: string; noteCategory?: string; noteDestination?: string; noteSuggestion?: string; therapistId?: string }>;
+  searchParams?: Promise<{ error?: string; noteCategory?: string; noteDestination?: string; noteSuggestion?: string; success?: string; therapistId?: string }>;
 }) {
   requirePilotOperationsAccess();
 
@@ -679,10 +732,6 @@ export default async function MyWorkPage({
   const upcomingVisits = assignedVisits.filter((visit: TherapistFieldVisit) => fieldVisitSection(visit) === "upcoming");
   const completedVisits = assignedVisits.filter((visit: TherapistFieldVisit) => fieldVisitSection(visit) === "completed");
   const nextVisit = nextFieldVisit(assignedVisits);
-  const nextVisitSmsConsentStatus = nextVisit ? smsConsentByPhone[normalizeE164Phone(nextVisit.referral.phone)] : undefined;
-  const listedTodayVisits = todayVisits.filter((visit: TherapistFieldVisit) => visit.id !== nextVisit?.id);
-  const listedUpcomingVisits = upcomingVisits.filter((visit: TherapistFieldVisit) => visit.id !== nextVisit?.id);
-  const listedCompletedVisits = completedVisits.filter((visit: TherapistFieldVisit) => visit.id !== nextVisit?.id);
   const assignedVisitCount = assignedVisits.length;
   const inProgressVisitCount = assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "in_progress").length;
   const completedRecentlyVisitCount = assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "completed").length;
@@ -712,6 +761,8 @@ export default async function MyWorkPage({
     upcomingNextSevenDays: assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "scheduled" || visit.status === "in_progress").length,
   });
   const assistantStatus = getOperationsAssistantV2Status();
+  const successMessage = visitSuccessMessage(params?.success);
+  const errorMessage = visitErrorMessage(params?.error);
 
   return (
     <div>
@@ -725,15 +776,15 @@ export default async function MyWorkPage({
 
         <BlockedNoteAlert searchParams={params} />
 
-        {params?.error === "not_assigned" ? (
-          <p role="alert" className="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
-            That referral or visit is not assigned to the selected demo therapist.
+        {successMessage ? (
+          <p role="status" className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-950">
+            {successMessage}
           </p>
         ) : null}
 
-        {params?.error === "visit_terminal" || params?.error === "invalid_transition" ? (
-          <p role="alert" className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">
-            {params.error === "visit_terminal" ? "That visit is already terminal and cannot be changed from the therapist field workflow." : "That visit action is not available for the current status."}
+        {errorMessage ? (
+          <p role="alert" className="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
+            {errorMessage}
           </p>
         ) : null}
 
@@ -781,27 +832,27 @@ export default async function MyWorkPage({
             <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_390px] xl:items-start">
               <div className="grid min-w-0 gap-5">
                 <div className="xl:hidden">
-                  <NextFieldActionPanel selectedTherapistId={selectedTherapistId} smsConsentStatus={nextVisitSmsConsentStatus} visit={nextVisit} />
+                  <NextFieldActionPanel visit={nextVisit} />
                 </div>
 
                 <FieldVisitSection
-                  emptyText={nextVisit && fieldVisitSection(nextVisit) === "today" ? "The top next-action card is the only assigned visit needing action today." : "No assigned visits need action today."}
+                  emptyText="No assigned visits need action today."
                   icon={CalendarClock}
                   queue="today"
                   selectedTherapistId={selectedTherapistId}
                   smsConsentByPhone={smsConsentByPhone}
                   title="Today"
-                  visits={listedTodayVisits}
+                  visits={todayVisits}
                 />
 
                 <FieldVisitSection
-                  emptyText={nextVisit && fieldVisitSection(nextVisit) === "upcoming" ? "The top next-action card is the next upcoming assigned visit." : "No upcoming assigned visits."}
+                  emptyText="No upcoming assigned visits."
                   icon={Clock3}
                   queue="upcoming"
                   selectedTherapistId={selectedTherapistId}
                   smsConsentByPhone={smsConsentByPhone}
                   title="Upcoming"
-                  visits={listedUpcomingVisits}
+                  visits={upcomingVisits}
                 />
 
                 <section className="grid min-w-0 gap-5 xl:hidden">
@@ -822,13 +873,13 @@ export default async function MyWorkPage({
                 </section>
 
                 <FieldVisitSection
-                  emptyText={nextVisit && fieldVisitSection(nextVisit) === "completed" ? "The top next-action card is the latest terminal visit for review." : "No recently completed assigned visits."}
+                  emptyText="No recently completed assigned visits."
                   icon={CheckCircle2}
                   queue="completed"
                   selectedTherapistId={selectedTherapistId}
                   smsConsentByPhone={smsConsentByPhone}
                   title="Completed recently"
-                  visits={listedCompletedVisits}
+                  visits={completedVisits}
                 />
 
                 {assignedReferrals.length > 0 ? (
@@ -886,7 +937,7 @@ export default async function MyWorkPage({
 
               <aside className="hidden min-w-0 gap-5 xl:grid">
                 <div className="sticky top-6 grid gap-5">
-                  <NextFieldActionPanel selectedTherapistId={selectedTherapistId} smsConsentStatus={nextVisitSmsConsentStatus} visit={nextVisit} />
+                  <NextFieldActionPanel visit={nextVisit} />
                   <div className="grid gap-4">
                     <FieldMetricCard label="Assigned referrals" value={assignedReferrals.length} />
                     <FieldMetricCard label="Assigned visits" value={assignedVisitCount} />

@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const { classifyOperationalNote, hasBlockedNoteClassification } = await import("../lib/compliance/note-classification.ts");
-const { getTherapistFieldWorkflowStatus, resolveTherapistFieldVisitAction } = await import("../lib/pilot/therapist-field-workflow.ts");
+const {
+  getTherapistFieldWorkflowStatus,
+  isTherapistFieldVisitActionConfirmed,
+  resolveTherapistFieldVisitAction,
+  THERAPIST_FIELD_CONFIRMATION_INTENT,
+} = await import("../lib/pilot/therapist-field-workflow.ts");
 
 const myWorkPage = await readFile(new URL("../app/my-work/page.tsx", import.meta.url), "utf8");
 const adminHealthPage = await readFile(new URL("../app/admin/health/page.tsx", import.meta.url), "utf8");
@@ -17,7 +22,13 @@ assert.match(myWorkPage, /xl:hidden/, "My Work should keep phone/tablet ordering
 assert.match(myWorkPage, /sticky top-6/, "Desktop/tablet field rail should keep the next action visible.");
 assert.match(myWorkPage, /min-h-14/, "Field action buttons should be thumb-friendly.");
 assert.match(myWorkPage, /sm:grid-cols-2 2xl:grid-cols-4/, "Field action buttons should adapt from phone to tablet/desktop.");
-assert.match(myWorkPage, /listedTodayVisits/, "The top next-action visit should not be duplicated in the Today queue.");
+assert.match(myWorkPage, /Review visit action/, "The top next-action panel should jump to the full visit action card.");
+assert.match(myWorkPage, /id=\{visitDomId\(visit\.id\)\}/, "Visit cards should expose stable anchors for the next-action jump.");
+assert.doesNotMatch(myWorkPage, /listedTodayVisits|listedUpcomingVisits|listedCompletedVisits/, "Assigned visits should remain visible in their queue instead of being hidden behind the summary card.");
+assert.match(myWorkPage, /THERAPIST_FIELD_CONFIRMATION_INTENT/, "Visit status writes must carry a confirmation intent.");
+assert.match(myWorkPage, /<details/, "Visit status writes should use inline confirmation disclosures.");
+assert.match(myWorkPage, /confirmation_required/, "Missing confirmation should produce a safe error banner.");
+assert.match(myWorkPage, /role="status"/, "Successful visit writes should show a safe success banner.");
 assert.match(myWorkPage, /redactPhone\(visit\.referral\.phone\)/, "Visit phone display must stay masked.");
 assert.match(myWorkPage, /redactPhone\(referral\.phone\)/, "Referral phone display must stay masked.");
 assert.match(myWorkPage, /No PHI in notes/, "No-PHI guidance must remain close to visit note inputs.");
@@ -55,9 +66,22 @@ const futureCompletion = resolveTherapistFieldVisitAction({
 assert.equal(futureCompletion?.allowed, true, "Future completion remains a manual action, not an automatic block.");
 assert.equal(futureCompletion?.earlyCompletionWarning, true, "Future completion must keep an auditable warning flag.");
 
+assert.equal(isTherapistFieldVisitActionConfirmed({
+  action: "mark_completed",
+  confirmationIntent: THERAPIST_FIELD_CONFIRMATION_INTENT,
+}), true, "Valid confirmation intent should allow a manual visit action to proceed.");
+assert.equal(isTherapistFieldVisitActionConfirmed({
+  action: "mark_completed",
+  confirmationIntent: null,
+}), false, "Missing confirmation intent must block a manual visit action.");
+
 const fieldStatus = getTherapistFieldWorkflowStatus();
 assert.equal(fieldStatus.phoneLayoutEnabled, true);
 assert.equal(fieldStatus.ipadLayoutEnabled, true);
+assert.equal(fieldStatus.mobileActionUxEnabled, true);
+assert.equal(fieldStatus.therapistFieldConfirmationsEnabled, true);
+assert.equal(fieldStatus.safeBlockedNoteFeedbackEnabled, true);
+assert.equal(fieldStatus.therapistFieldActivityAuditEnabled, true);
 assert.equal(fieldStatus.manualOnly, true);
 assert.equal(fieldStatus.noPhiMode, true);
 assert.equal(fieldStatus.noPhiNotesEnforced, true);
@@ -72,6 +96,13 @@ assert.equal(fieldStatus.autonomousStatusChangesEnabled, false);
 assert.match(adminHealthPage, /Field phone layout/);
 assert.match(adminHealthPage, /Field iPad layout/);
 assert.match(adminHealthPage, /Field no-PHI notes/);
+assert.match(adminHealthPage, /Therapist field confirmations/);
+assert.match(adminHealthPage, /Mobile action UX/);
+assert.match(adminHealthPage, /Blocked note safe feedback/);
+assert.match(adminHealthPage, /Field activity audit/);
+assert.match(adminHealthPage, /Autonomous field actions/);
+assert.match(adminHealthPage, /External AI\/API for field notes/);
+assert.match(adminHealthPage, /PHI note storage/);
 assert.match(adminHealthPage, /Terminal visit lock/);
 
 console.log("Therapist workspace smoke passed: phone/iPad layout markers, touch actions, no-PHI notes, terminal locks, future warning, RBAC, no SMS, and no external API surfaces verified.");

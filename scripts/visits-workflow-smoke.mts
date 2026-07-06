@@ -11,7 +11,11 @@ if (!process.env.DATABASE_URL) {
 }
 
 const { getPrismaClient } = await import("../lib/db/prisma.ts");
-const { resolveTherapistFieldVisitAction } = await import("../lib/pilot/therapist-field-workflow.ts");
+const {
+  isTherapistFieldVisitActionConfirmed,
+  resolveTherapistFieldVisitAction,
+  THERAPIST_FIELD_CONFIRMATION_INTENT,
+} = await import("../lib/pilot/therapist-field-workflow.ts");
 const prisma = getPrismaClient();
 const runId = randomUUID().slice(0, 8);
 const phoneSuffix = runId
@@ -63,6 +67,15 @@ try {
       therapistId: therapist.id,
     },
   });
+
+  assert.equal(isTherapistFieldVisitActionConfirmed({
+    action: "start_visit",
+    confirmationIntent: THERAPIST_FIELD_CONFIRMATION_INTENT,
+  }), true, "Visit lifecycle actions should require a valid therapist confirmation intent.");
+  assert.equal(isTherapistFieldVisitActionConfirmed({
+    action: "start_visit",
+    confirmationIntent: null,
+  }), false, "Visit lifecycle actions should reject missing therapist confirmation intent.");
 
   const start = resolveTherapistFieldVisitAction({ action: "start_visit", now: new Date("2026-07-10T15:30:00.000Z"), scheduledAt: scheduledVisit.scheduledAt, status: scheduledVisit.status });
   assert.equal(start?.allowed, true);
