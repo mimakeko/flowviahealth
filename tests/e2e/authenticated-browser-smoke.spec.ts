@@ -103,8 +103,9 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
   try {
     await login(page, adminEmail!, adminPassword!);
     await expect(page).toHaveURL(/\/dashboard/);
-    await expect(page.getByRole("navigation", { name: /internal workspace navigation/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Referral Operations/i })).toBeVisible();
+    const workspaceNav = page.getByRole("navigation", { name: /internal workspace navigation/i });
+    await expect(workspaceNav).toBeVisible();
+    await expect(workspaceNav.getByRole("link", { name: /Referral Operations/i })).toBeVisible();
 
     await gotoProtected(page, "/dashboard");
     await expectAnyText(page, [/Pilot operations overview/i, /Dashboard blocked by pilot gate/i], "/dashboard");
