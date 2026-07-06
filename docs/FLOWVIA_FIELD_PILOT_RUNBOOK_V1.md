@@ -235,10 +235,24 @@ Admins should run each pilot day from the internal dashboard shell:
 - PHI remains blocked. Do not enter real patient data, clinical notes, diagnosis, treatment details, medication, symptoms, wound details, therapy plans, pain scores, or emergency details.
 - Do not delete audit logs. Audit rows must remain available even when fake operational records are archived.
 - Do not delete SMS consent enrollments, SMS messages, or Telnyx webhook history from dashboard tools.
-- Prefer archive over delete. `/admin/data` archives completed/canceled fake referrals and smoke-test operational records by marking operational notes, not by deleting audit/SMS history.
+- Prefer archive over delete. `/admin/data` archives completed/canceled fake referrals, smoke-test operational records, and old demo scenario records by marking operational notes, not by deleting audit/SMS/webhook/consent history.
 - Personal-number tests should end in `opted_out` unless active testing is underway.
 - Data stewardship actions must not send real SMS and must not expose full phone numbers, raw SMS bodies, secrets, or provider payloads.
-- Run `pnpm data:inventory` for safe counts only and `pnpm data:stewardship-smoke` to validate cleanup guardrails.
+- Run `pnpm data:inventory` for safe counts only, `pnpm data:stewardship-smoke` to validate cleanup guardrails, and `pnpm data:demo-smoke` to validate demo reset behavior.
+
+## Pilot Data Reset and Demo Scenarios
+
+- `/admin/data` is the only dashboard location for pilot reset and demo scenario controls.
+- All controls are admin-only and require exact confirmation phrases.
+- Archive smoke/test clutter requires: `ARCHIVE SMOKE TEST DATA`.
+- Reset demo scenarios requires: `RESET DEMO SCENARIOS`.
+- Reset demo scenarios archives old fake/demo operational records first, marks old open demo workflows terminal, and then seeds predictable fake/demo referrals, visits, and one opted-out consent state.
+- Scenario options include ready-to-schedule, upcoming visit, opted-out non-SMS follow-up, possible duplicate pair, missing therapist intake review, therapist field today/in-progress, completed recently, and no-show follow-up.
+- Archived operational records are hidden from normal referral, visit, scheduling, and therapist work queues by the stewardship archive marker, while records remain queryable in the database and audit history.
+- Data reset tools must not hard-delete audit logs, SMS messages, Telnyx webhook events, or SMS consent enrollments.
+- Data reset tools must not reset real-looking records, send SMS, add SMS send controls, call external APIs, call maps/geocoding/travel-time APIs, or use external AI.
+- `/admin/health` should show pilot demo reset tools enabled, smoke/test archive enabled, demo scenario seeding enabled, audit/SMS/webhook/consent preservation enforced, hard delete mode disabled, real data reset disabled, and external reset APIs disabled.
+- `/admin/audit` should filter data stewardship, smoke archive, demo reset, and demo seed events with safe metadata only.
 
 ## No-PHI AI Operations Assistant Policy
 

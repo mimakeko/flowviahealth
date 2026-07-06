@@ -6,6 +6,7 @@ import { OperationsAssistantPanel } from "@/components/operations-assistant-pane
 import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getOperationsAssistantV2Status, getQueueAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
+import { visibleOperationalReferralWhere } from "@/lib/pilot/data-stewardship";
 import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import {
   evaluateReferralIntakeQuality,
@@ -88,7 +89,7 @@ export default async function AdminReferralsPage({
   const intakeGroups = ["needs_scheduling", "ready_scheduling", "needs_intake_review", "possible_duplicate", "missing_therapist", "opted_out"] as const;
   const selectedGroup = intakeGroups.includes(params?.group as (typeof intakeGroups)[number]) ? (params?.group as (typeof intakeGroups)[number]) : "";
   const needsSchedulingStatuses: ReferralStatusValue[] = ["new", "contacted"];
-  const referralFilters: Prisma.PatientReferralWhereInput[] = [];
+  const referralFilters: Prisma.PatientReferralWhereInput[] = [visibleOperationalReferralWhere()];
   const now = new Date();
   const sevenDaysFromNow = new Date(now);
   sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);

@@ -29,6 +29,10 @@ type AuditFilterRow = {
 };
 
 const AUDIT_CATEGORIES = [
+  { value: "data_stewardship", label: "Data stewardship events" },
+  { value: "smoke_archive", label: "Smoke archive events" },
+  { value: "demo_reset", label: "Demo reset events" },
+  { value: "demo_seed", label: "Demo seed events" },
   { value: "referral_intake", label: "Referral intake events" },
   { value: "duplicate_guard", label: "Duplicate guard" },
   { value: "unsafe_intake_notes", label: "Unsafe intake notes" },
@@ -62,13 +66,27 @@ const REFERRAL_INTAKE_ACTIONS = [
 ] as const;
 const DUPLICATE_GUARD_ACTIONS = ["referral_duplicate_warning", "referral_duplicate_override"] as const;
 const REFERRAL_READINESS_ACTIONS = ["referral_created", "referral_updated", "referral_status_changed", "therapist_assigned"] as const;
+const DATA_STEWARDSHIP_ACTIONS = [
+  "pilot_data_seeded",
+  "pilot_data_refreshed",
+  "pilot_data_archived",
+  "pilot_test_data_archived",
+  "data_stewardship_smoke_archive",
+  "data_stewardship_demo_reset",
+  "data_stewardship_demo_seed",
+  "pilot_personal_test_phone_opted_out",
+] as const;
 
 const SAFE_METADATA_KEYS = new Set([
+  "archivedReferralCount",
+  "archivedVisitCount",
   "assignedTherapistId",
   "attemptedAction",
+  "auditPreserved",
   "blockedReason",
   "cleanupMode",
   "classification",
+  "consentPreserved",
   "count",
   "destinationHint",
   "duplicateCandidateCount",
@@ -77,8 +95,10 @@ const SAFE_METADATA_KEYS = new Set([
   "fieldLabel",
   "from",
   "hasOperationalNote",
+  "hardDeleteMode",
   "matchedCategoryCount",
   "matchedCategories",
+  "messageLedgerPreserved",
   "newStatus",
   "noteAdded",
   "oldStatus",
@@ -88,6 +108,10 @@ const SAFE_METADATA_KEYS = new Set([
   "referralCount",
   "referralId",
   "route",
+  "scenarioCount",
+  "seededConsentCount",
+  "seededReferralCount",
+  "seededVisitCount",
   "severity",
   "source",
   "status",
@@ -98,6 +122,7 @@ const SAFE_METADATA_KEYS = new Set([
   "visitCount",
   "visitId",
   "warningCodes",
+  "webhookPreserved",
   "workflow",
 ]);
 
@@ -136,6 +161,10 @@ function isAuditCategory(value: string | undefined): value is AuditCategory {
 }
 
 function auditCategoryFilter(category: AuditCategory): Prisma.AuditLogWhereInput {
+  if (category === "data_stewardship") return { action: { in: [...DATA_STEWARDSHIP_ACTIONS] } };
+  if (category === "smoke_archive") return { action: "data_stewardship_smoke_archive" };
+  if (category === "demo_reset") return { action: "data_stewardship_demo_reset" };
+  if (category === "demo_seed") return { action: "data_stewardship_demo_seed" };
   if (category === "referral_intake") return { action: { in: [...REFERRAL_INTAKE_ACTIONS] } };
   if (category === "duplicate_guard") return { action: { in: [...DUPLICATE_GUARD_ACTIONS] } };
   if (category === "unsafe_intake_notes") return { action: "operational_note_blocked", entityType: "PatientReferral" };

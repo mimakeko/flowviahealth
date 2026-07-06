@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { AlertTriangle, Archive, Database, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Archive, Database, ListChecks, RefreshCw, ShieldCheck } from "lucide-react";
 import { getPrismaClient } from "@/lib/db/prisma";
 import {
   ARCHIVE_FAKE_DATA_CONFIRMATION,
+  ARCHIVE_SMOKE_TEST_DATA_CONFIRMATION,
   archiveCompletedCanceledFakeReferrals,
   archiveSmokeTestOperationalRecords,
-  CLEAR_TEST_DATA_CONFIRMATION,
+  DEMO_SCENARIO_OPTIONS,
   getPilotDataStewardshipSummary,
   MARK_TEST_PHONE_OPTED_OUT_CONFIRMATION,
   markConfiguredPersonalTestPhoneOptedOut,
   REFRESH_FAKE_DATA_CONFIRMATION,
+  RESET_DEMO_SCENARIOS_CONFIRMATION,
+  resetDemoScenarios,
   seedOrRefreshFakePilotData,
   validateStewardshipConfirmation,
 } from "@/lib/pilot/data-stewardship";
@@ -95,6 +98,23 @@ async function clearSmokeDataAction(formData: FormData) {
   }
 }
 
+async function resetDemoScenariosAction(formData: FormData) {
+  "use server";
+
+  requirePilotOperationsAccess();
+  const session = await requirePilotSession(["admin"], "/admin/data");
+  const confirmation = textField(formData.get("confirmation"), 80);
+  const scenarios = formData.getAll("scenario").filter((item): item is string => typeof item === "string");
+
+  try {
+    const prisma = getPrismaClient();
+    const result = await resetDemoScenarios(prisma, session.email, confirmation, scenarios);
+    redirectWithResult(`Demo scenarios reset: archived ${result.archivedReferralCount} old demo referrals and ${result.archivedVisitCount} old visits; seeded ${result.seededReferralCount} referrals, ${result.seededVisitCount} visits, and ${result.seededConsentCount} consent states.`);
+  } catch (error) {
+    redirectWithError(error instanceof Error ? error.message : "Demo scenario reset failed safely.");
+  }
+}
+
 async function markPersonalTestPhoneOptedOutAction(formData: FormData) {
   "use server";
 
@@ -123,8 +143,43 @@ function WarningList() {
         <li>Audit logs, SMS consent records, SMS messages, and Telnyx webhook events are preserved.</li>
         <li>Cleanup archives operational fake/smoke records instead of deleting audit history.</li>
         <li>Real SMS is not sent by any Data Stewardship action.</li>
+        <li>Demo reset tools are fake-data only and do not reset real-looking operational records.</li>
       </ul>
     </div>
+  );
+}
+
+function DemoScenarioPanel() {
+  return (
+    <form action={resetDemoScenariosAction} className="rounded-lg border border-line bg-white p-5 xl:col-span-2">
+      <div className="flex items-start gap-3">
+        <div className="rounded-lg bg-ice p-2 text-blue"><ListChecks size={20} /></div>
+        <div>
+          <h2 className="text-lg font-semibold tracking-[-.02em] text-ink">Reset demo scenarios</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Archives old demo operational rows, keeps protected history tables intact, and seeds selected fake/demo scenarios for referrals, scheduling, visits, and therapist field workflow.
+          </p>
+        </div>
+      </div>
+      <WarningList />
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {DEMO_SCENARIO_OPTIONS.map((scenario) => (
+          <label key={scenario.key} className="flex gap-3 rounded-lg border border-line bg-slate-50 p-3 text-sm leading-6">
+            <input className="mt-1 h-4 w-4 shrink-0" type="checkbox" name="scenario" value={scenario.key} defaultChecked />
+            <span>
+              <span className="block font-semibold text-ink">{scenario.label}</span>
+              <span className="block text-slate-600">{scenario.description}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <label className="mt-4 block text-sm font-semibold text-ink">
+        Confirmation
+        <input className="field" name="confirmation" placeholder={RESET_DEMO_SCENARIOS_CONFIRMATION} />
+      </label>
+      <p className="mt-2 text-xs font-semibold text-slate-500">Type exactly: {RESET_DEMO_SCENARIOS_CONFIRMATION}</p>
+      <button className="btn-primary mt-4" type="submit">Reset demo scenarios</button>
+    </form>
   );
 }
 
@@ -177,14 +232,19 @@ export default async function AdminDataStewardshipPage({
     ? `${summary.lastStewardshipAudit.action} / ${formatDateTime(summary.lastStewardshipAudit.createdAt)}`
     : "Not recorded";
   const cards: StewardshipCard[] = [
-    { label: "Total fake referrals", value: `${summary.fakeReferralCount}` },
-    { label: "Total fake visits", value: `${summary.fakeVisitCount}` },
+    { label: "Active demo referrals", value: `${summary.activeDemoReferralCount}` },
+    { label: "Active smoke/test referrals", value: `${summary.activeSmokeReferralCount}`, tone: summary.activeSmokeReferralCount > 0 ? "warn" : "good" },
+    { label: "Active demo visits", value: `${summary.activeDemoVisitCount}` },
+    { label: "Active smoke/test visits", value: `${summary.activeSmokeVisitCount}`, tone: summary.activeSmokeVisitCount > 0 ? "warn" : "good" },
+    { label: "Terminal demo records", value: `${summary.terminalDemoRecordCount}` },
     { label: "Archived fake referrals", value: `${summary.archivedFakeReferralCount}` },
-    { label: "Total therapists", value: `${summary.therapistCount}` },
+    { label: "Audit activity, last 24h", value: `${summary.recentAuditLogCount}` },
     { label: "SMS consent enrollments", value: `${summary.smsConsentEnrollmentCount}` },
     { label: "SMS messages", value: `${summary.smsMessageCount}` },
     { label: "Telnyx webhook events", value: `${summary.telnyxWebhookEventCount}` },
-    { label: "Audit logs", value: `${summary.auditLogCount}` },
+    { label: "Audit logs preserved", value: `${summary.auditLogCount}`, tone: summary.auditPreservingCleanupEnabled ? "good" : "warn" },
+    { label: "Protected history", value: "SMS / consent / webhook preserved", tone: "good" },
+    { label: "Hard delete mode", value: summary.hardDeleteMode, tone: summary.hardDeleteMode === "disabled" ? "good" : "warn" },
     { label: "Personal-number test mode", value: summary.personalNumberTestModeStatus, tone: summary.personalTestEnrollment.configured ? "neutral" : "warn" },
     { label: "Real SMS gate", value: summary.realSmsGateStatus, tone: summary.realSmsGateStatus === "Off" ? "good" : "warn" },
     { label: "Data mode", value: summary.dataModeLabel, tone: summary.dataModeLabel.toLowerCase().includes("phi") ? "good" : "neutral" },
@@ -243,11 +303,12 @@ export default async function AdminDataStewardshipPage({
         <ActionPanel
           action={clearSmokeDataAction}
           buttonLabel="Archive smoke-test data"
-          confirmation={CLEAR_TEST_DATA_CONFIRMATION}
+          confirmation={ARCHIVE_SMOKE_TEST_DATA_CONFIRMATION}
           description="Targets only explicit smoke-test operational referrals/visits and deactivates smoke therapists. SMS and audit tables are not deleted."
           icon={Archive}
-          title="Clear smoke-test operational records"
+          title="Archive smoke-test operational records"
         />
+        <DemoScenarioPanel />
         <ActionPanel
           action={markPersonalTestPhoneOptedOutAction}
           buttonLabel="Mark opted out"

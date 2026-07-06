@@ -11,33 +11,23 @@ async function main() {
   requirePostgres();
 
   const { getPrismaClient } = await import("../lib/db/prisma.ts");
+  const { getPilotDataStewardshipSummary } = await import("../lib/pilot/data-stewardship.ts");
   const prisma = getPrismaClient();
-  const [
-    referrals,
-    visits,
-    therapists,
-    smsEnrollments,
-    smsMessages,
-    auditLogs,
-    webhookEvents,
-  ] = await Promise.all([
-    prisma.patientReferral.count(),
-    prisma.visit.count(),
-    prisma.therapist.count(),
-    prisma.smsConsentEnrollment.count(),
-    prisma.smsMessage.count(),
-    prisma.auditLog.count(),
-    prisma.telnyxWebhookEvent.count(),
-  ]);
+  const summary = await getPilotDataStewardshipSummary(prisma);
 
   console.log("Flowvia data inventory (safe counts only)");
-  console.log(`referrals=${referrals}`);
-  console.log(`visits=${visits}`);
-  console.log(`therapists=${therapists}`);
-  console.log(`sms_enrollments=${smsEnrollments}`);
-  console.log(`sms_messages=${smsMessages}`);
-  console.log(`audit_logs=${auditLogs}`);
-  console.log(`webhook_events=${webhookEvents}`);
+  console.log(`active_demo_referrals=${summary.activeDemoReferralCount}`);
+  console.log(`active_smoke_test_referrals=${summary.activeSmokeReferralCount}`);
+  console.log(`active_demo_visits=${summary.activeDemoVisitCount}`);
+  console.log(`active_smoke_test_visits=${summary.activeSmokeVisitCount}`);
+  console.log(`terminal_demo_records=${summary.terminalDemoRecordCount}`);
+  console.log(`latest_data_stewardship_action=${summary.lastStewardshipAudit?.action || "not_recorded"}`);
+  console.log(`audit_preserved=${summary.auditPreservingCleanupEnabled}`);
+  console.log(`sms_webhook_consent_preserved=${summary.smsLedgerPreservationEnforced && summary.webhookPreservationEnforced && summary.consentPreservationEnforced}`);
+  console.log(`sms_enrollments=${summary.smsConsentEnrollmentCount}`);
+  console.log(`sms_messages=${summary.smsMessageCount}`);
+  console.log(`audit_logs=${summary.auditLogCount}`);
+  console.log(`webhook_events=${summary.telnyxWebhookEventCount}`);
 
   await prisma.$disconnect();
 }

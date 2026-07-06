@@ -17,6 +17,7 @@
     "db:pool-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/db-pool-smoke.mts",
     "data:stewardship-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/data-stewardship-smoke.mts",
     "data:inventory": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/data-inventory.mts",
+    "data:demo-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/data-demo-smoke.mts",
     "visits:workflow-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/visits-workflow-smoke.mts",
     "therapist:field-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/therapist-field-smoke.mts",
     "therapist:workspace-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/therapist-workspace-smoke.mts",

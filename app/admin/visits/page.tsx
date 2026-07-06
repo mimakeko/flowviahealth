@@ -6,6 +6,7 @@ import { OperationsAssistantPanel } from "@/components/operations-assistant-pane
 import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getOperationsAssistantV2Status, getQueueAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
+import { visibleOperationalVisitWhere } from "@/lib/pilot/data-stewardship";
 import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import {
   formatDateTime,
@@ -53,7 +54,7 @@ export default async function AdminVisitsPage({
   const selectedGroup = params?.group === "upcoming" || params?.group === "unscheduled" ? params.group : "";
   const now = new Date();
   const upcomingStatuses: VisitStatusValue[] = ["scheduled", "in_progress"];
-  const visitFilters: Prisma.VisitWhereInput[] = [];
+  const visitFilters: Prisma.VisitWhereInput[] = [visibleOperationalVisitWhere()];
 
   if (selectedStatus) visitFilters.push({ status: selectedStatus });
   if (selectedTherapistId === "unassigned") visitFilters.push({ therapistId: null });

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Activity, AlertTriangle, BriefcaseMedical, CalendarClock, Clock, Database, KeyRound, MessageSquareText, Radio, ShieldCheck } from "lucide-react";
+import { Activity, AlertTriangle, Archive, BriefcaseMedical, CalendarClock, Clock, Database, KeyRound, MessageSquareText, Radio, ShieldCheck } from "lucide-react";
 import { getOperationsAssistantStatus } from "@/lib/ai/operations-assistant";
 import { getOperationsAssistantV2Status } from "@/lib/ai/operations-assistant-v2";
 import { getFlowviaDataModeStatus } from "@/lib/compliance/data-mode";
@@ -9,7 +9,7 @@ import {
   getDatabaseUrlComparison,
   safeInboundKeywordLabel,
 } from "@/lib/pilot/cloud-health";
-import { getPilotDataStewardshipSummary } from "@/lib/pilot/data-stewardship";
+import { getPilotDataStewardshipSummary, getPilotDemoResetStatus } from "@/lib/pilot/data-stewardship";
 import { requirePilotOperationsAccess } from "@/lib/pilot/ops";
 import { redactPhone } from "@/lib/sms/compliance";
 import { getSmsStoreStatus } from "@/lib/sms/store";
@@ -138,6 +138,7 @@ export default async function AdminHealthPage() {
   const schedulingStatus = getSchedulingIntelligenceStatus();
   const therapistFieldWorkflow = getTherapistFieldWorkflowStatus();
   const referralIntakeQuality = getReferralIntakeQualityStatus();
+  const demoResetStatus = getPilotDemoResetStatus();
   const activitySnapshot = await getActivitySnapshot();
   const databaseStorageMode = process.env.DATABASE_URL ? "Postgres" : smsStore.label;
   const webhookEnforced = telnyx.webhookSigningConfigured && !telnyx.unsignedWebhookTestBypassEnabled;
@@ -215,6 +216,16 @@ export default async function AdminHealthPage() {
     { icon: Database, metric: { label: "Data stewardship", value: stewardshipSummary ? "Audit-preserving cleanup enabled" : "Unavailable", tone: stewardshipSummary?.auditPreservingCleanupEnabled ? "good" : "warn" } },
     { icon: Clock, metric: { label: "Last seed/reset/archive action", value: lastStewardshipAction } },
     { icon: ShieldCheck, metric: { label: "Cleanup mode", value: stewardshipSummary?.auditPreservingCleanupEnabled ? "Archive only / audit preserved" : "Disabled", tone: stewardshipSummary?.auditPreservingCleanupEnabled ? "good" : "warn" } },
+    { icon: Database, metric: { label: "Pilot demo reset tools", value: demoResetStatus.enabled ? "Enabled" : "Disabled", tone: demoResetStatus.enabled ? "good" : "warn" } },
+    { icon: Archive, metric: { label: "Smoke/test archive", value: demoResetStatus.smokeTestArchiveEnabled ? "Enabled" : "Disabled", tone: demoResetStatus.smokeTestArchiveEnabled ? "good" : "warn" } },
+    { icon: Database, metric: { label: "Demo scenario seeding", value: demoResetStatus.demoScenarioSeedingEnabled ? "Enabled" : "Disabled", tone: demoResetStatus.demoScenarioSeedingEnabled ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Audit preservation", value: demoResetStatus.auditPreservationEnforced ? "Enforced" : "Not enforced", tone: demoResetStatus.auditPreservationEnforced ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "SMS ledger preservation", value: demoResetStatus.smsLedgerPreservationEnforced ? "Enforced" : "Not enforced", tone: demoResetStatus.smsLedgerPreservationEnforced ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Webhook preservation", value: demoResetStatus.webhookPreservationEnforced ? "Enforced" : "Not enforced", tone: demoResetStatus.webhookPreservationEnforced ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Consent preservation", value: demoResetStatus.consentPreservationEnforced ? "Enforced" : "Not enforced", tone: demoResetStatus.consentPreservationEnforced ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Hard delete mode", value: demoResetStatus.hardDeleteMode, tone: demoResetStatus.hardDeleteMode === "disabled" ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Real data reset", value: demoResetStatus.realDataResetEnabled ? "Enabled" : "Disabled", tone: demoResetStatus.realDataResetEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "External reset APIs", value: demoResetStatus.externalResetApisEnabled ? "Enabled" : "Disabled", tone: demoResetStatus.externalResetApisEnabled ? "warn" : "good" } },
   ];
 
   return (

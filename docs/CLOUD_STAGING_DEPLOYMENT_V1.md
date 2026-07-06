@@ -251,6 +251,19 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 - `/admin/health` should report referral intake quality enabled, duplicate guard warning-only, duplicate source deterministic/local data, auto-assignment disabled, auto visit creation disabled, intake PHI storage disabled, external duplicate APIs disabled, SMS sending from intake disabled, and full phone display disabled/masked.
 - Run `pnpm referral:intake-smoke` before and after staging changes that touch referral intake, scheduling readiness, duplicate warnings, note blocking, audit metadata, or health flags.
 
+## Pilot Data Reset and Demo Scenario Policy
+
+- `/admin/data` provides admin-only pilot reset/demo controls inside the dashboard shell.
+- Archive smoke/test clutter requires exact confirmation `ARCHIVE SMOKE TEST DATA`.
+- Reset demo scenarios requires exact confirmation `RESET DEMO SCENARIOS`.
+- Smoke/test archive marks explicit fake/smoke/test operational referrals and visits with stewardship archive markers and deactivates smoke therapists; it does not delete audit logs, SMS messages, Telnyx webhook events, or consent enrollments.
+- Demo reset archives old fake/demo operational records, marks old open demo workflows terminal, then seeds selected fake/demo scenarios for referral intake, scheduling, visits, therapist field work, duplicate review, opt-out review, completed recent work, and no-show follow-up.
+- Archived operational rows are hidden from normal referral, visit, scheduling, and therapist queues by the archive marker, but audit and protected history remain queryable.
+- Hard delete mode is disabled. Real data reset is disabled. External reset APIs are disabled.
+- Data reset/demo tools must not send SMS, expose full phone numbers, expose raw SMS bodies, expose provider payloads, call external AI/APIs, call maps/geocoding/travel-time APIs, or reset real patient data.
+- Before/after deploy, confirm `/admin/health` reports pilot demo reset tools enabled, smoke/test archive enabled, demo scenario seeding enabled, audit/SMS/webhook/consent preservation enforced, hard delete mode disabled, real data reset disabled, and external reset APIs disabled.
+- Run `pnpm data:demo-smoke` after changes to Data Stewardship reset, archive, demo scenario seeding, health flags, or audit filters.
+
 ## Therapist Field Visit Workflow Policy
 
 - `/my-work` remains inside the authenticated dashboard shell and is scoped by therapist/admin RBAC.
@@ -279,6 +292,7 @@ pnpm telnyx:cloud-readiness
 pnpm therapist:field-smoke
 pnpm therapist:workspace-smoke
 pnpm referral:intake-smoke
+pnpm data:demo-smoke
 ```
 
 ## Troubleshooting

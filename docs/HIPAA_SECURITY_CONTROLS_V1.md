@@ -16,6 +16,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - RBAC: admins and therapists must keep separate route and data access.
 - Audit controls: retain login, referral, SMS consent, webhook, and operational audit events.
 - Data stewardship: fake/personal-number pilot cleanup must preserve audit history, preserve SMS consent/message/webhook history, and archive operational records instead of deleting audit evidence.
+- Demo reset controls: pilot reset/demo scenario tools are admin-only, exact-confirmation-gated, fake-data-only, archive-first, no hard-delete for protected history, no real data reset, no SMS sending, no full phone exposure, no raw SMS bodies, no provider payloads, no external AI/APIs, and no maps/geocoding/travel-time APIs.
 - Transmission security: require HTTPS, signed Telnyx webhooks, secure database connections, and secret-managed API keys.
 - Encryption: use managed encrypted storage and avoid secrets in source, screenshots, logs, and tickets.
 - Integrity controls: validate webhook signatures, preserve event-id idempotency, and reject unsupported data modes.
@@ -41,6 +42,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - `FLOWVIA_ALLOW_UNSIGNED_TELNYX_WEBHOOK_TEST=false` by default.
 - Message Ledger masks phone numbers and does not expose secrets.
 - Data Stewardship tools are admin-only, confirmation-gated, fake-data-only, audit-preserving, and do not send SMS.
+- Data reset/demo scenario tools use `ARCHIVE SMOKE TEST DATA` and `RESET DEMO SCENARIOS` exact confirmation phrases, preserve audit/SMS/webhook/consent history, hide archived operational rows from normal work queues, and keep hard delete mode, real data reset, external reset APIs, SMS sending, maps/geocoding, and travel-time APIs disabled.
 - Operations Assistant cards use safe workflow state only and must not include PHI, clinical advice, diagnosis, or treatment guidance.
 - Referral intake quality uses safe operational fields only and must not include PHI, clinical advice, diagnosis, treatment guidance, full phone exposure, raw blocked note text, raw SMS bodies, provider payloads, secrets, external duplicate APIs, SMS sending, autonomous therapist assignment, or autonomous visit creation.
 - Scheduling Intelligence uses fake pilot city/ZIP/service-area/status/time data only and must not include PHI, full street addresses, clinical guidance, raw SMS bodies, or secrets. `Use this window` fills a form field only and must not create visits without manual human submit.

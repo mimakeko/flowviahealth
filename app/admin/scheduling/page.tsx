@@ -4,6 +4,7 @@ import { CalendarClock, ArrowRight } from "lucide-react";
 import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { formatDateTime, requirePilotOperationsAccess, statusClassName, statusLabel } from "@/lib/pilot/ops";
+import { visibleOperationalReferralWhere, visibleOperationalVisitWhere } from "@/lib/pilot/data-stewardship";
 import {
   evaluateReferralIntakeQuality,
   getReferralDuplicateCandidates,
@@ -109,9 +110,14 @@ export default async function AdminSchedulingPage() {
       orderBy: { updatedAt: "desc" },
       take: 10,
       where: {
-        assignedTherapistId: { not: null },
-        status: { in: ["contacted", "active"] },
-        visits: { none: { status: { in: ["scheduled", "in_progress"] } } },
+        AND: [
+          visibleOperationalReferralWhere(),
+          {
+            assignedTherapistId: { not: null },
+            status: { in: ["contacted", "active"] },
+            visits: { none: { status: { in: ["scheduled", "in_progress"] } } },
+          },
+        ],
       },
     }),
     prisma.visit.findMany({
@@ -125,7 +131,7 @@ export default async function AdminSchedulingPage() {
       },
       orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
       take: 20,
-      where: { status: { in: ["scheduled", "in_progress"] } },
+      where: { AND: [visibleOperationalVisitWhere(), { status: { in: ["scheduled", "in_progress"] } }] },
     }),
     prisma.patientReferral.count({
       where: {
@@ -139,7 +145,7 @@ export default async function AdminSchedulingPage() {
     prisma.therapist.count({ where: { active: true, visits: { some: { status: { in: ["scheduled", "in_progress"] } } } } }),
     prisma.visit.findMany({
       select: { id: true, scheduledAt: true, status: true, therapistId: true },
-      where: { status: { in: ["scheduled", "in_progress"] } },
+      where: { AND: [visibleOperationalVisitWhere(), { status: { in: ["scheduled", "in_progress"] } }] },
     }),
   ]);
 
