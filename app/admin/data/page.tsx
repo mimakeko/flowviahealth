@@ -18,7 +18,7 @@ import {
   validateStewardshipConfirmation,
 } from "@/lib/pilot/data-stewardship";
 import { requirePilotSession } from "@/lib/pilot/auth";
-import { formatDateTime, requirePilotOperationsAccess, statusLabel, textField } from "@/lib/pilot/ops";
+import { formatDateTime, requirePilotOperationsAccess, textField } from "@/lib/pilot/ops";
 
 export const metadata: Metadata = {
   title: "Data Stewardship",
@@ -32,6 +32,26 @@ type StewardshipSearchParams = {
   result?: string;
 };
 
+const stewardshipResultMessages = {
+  archive_fake: "Completed/canceled fake workflows archived. Protected history preserved.",
+  archive_smoke: "Smoke-test operational records archived. Protected history preserved.",
+  mark_test_phone_opted_out: "Configured personal test phone marked opted out. Protected history preserved.",
+  refresh_fake: "Fake pilot data refreshed. Protected history preserved.",
+  reset_demo: "Demo scenarios reset. Protected history preserved.",
+} as const;
+
+const stewardshipErrorMessages = {
+  archive_fake_confirmation: "Confirmation text did not match ARCHIVE FAKE DATA.",
+  archive_smoke_confirmation: "Confirmation text did not match ARCHIVE SMOKE TEST DATA.",
+  mark_test_phone_opted_out_confirmation: "Confirmation text did not match MARK TEST PHONE OPTED OUT.",
+  refresh_fake_confirmation: "Confirmation text did not match REFRESH FAKE DATA.",
+  reset_demo_confirmation: "Confirmation text did not match RESET DEMO SCENARIOS.",
+  safe_failure: "Data Stewardship action failed safely. Protected history was not deleted.",
+} as const;
+
+type StewardshipResultKey = keyof typeof stewardshipResultMessages;
+type StewardshipErrorKey = keyof typeof stewardshipErrorMessages;
+
 type StewardshipCard = {
   label: string;
   value: string;
@@ -44,12 +64,26 @@ function cardToneClassName(tone: StewardshipCard["tone"] = "neutral") {
   return "border-line bg-white text-ink";
 }
 
-function redirectWithResult(result: string) {
+function redirectWithResult(result: StewardshipResultKey) {
   redirect(`/admin/data?result=${encodeURIComponent(result)}`);
 }
 
-function redirectWithError(error: string) {
+function redirectWithError(error: StewardshipErrorKey) {
   redirect(`/admin/data?error=${encodeURIComponent(error)}`);
+}
+
+function safeResultMessage(value: string | undefined) {
+  if (!value) return null;
+  return stewardshipResultMessages[value as StewardshipResultKey] ?? null;
+}
+
+function safeErrorMessage(value: string | undefined) {
+  if (!value) return null;
+  return stewardshipErrorMessages[value as StewardshipErrorKey] ?? stewardshipErrorMessages.safe_failure;
+}
+
+function exactConfirmationPattern(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function seedFakeDataAction(formData: FormData) {
@@ -59,12 +93,16 @@ async function seedFakeDataAction(formData: FormData) {
   const session = await requirePilotSession(["admin"], "/admin/data");
   const confirmation = textField(formData.get("confirmation"), 80);
   if (!validateStewardshipConfirmation(confirmation, REFRESH_FAKE_DATA_CONFIRMATION)) {
-    redirectWithError("Type REFRESH FAKE DATA to refresh fake pilot data.");
+    redirectWithError("refresh_fake_confirmation");
   }
 
   const prisma = getPrismaClient();
-  const result = await seedOrRefreshFakePilotData(prisma, session.email);
-  redirectWithResult(`Fake pilot data refreshed: ${result.referralCount} referrals, ${result.visitCount} visits, ${result.therapistCount} therapists.`);
+  try {
+    await seedOrRefreshFakePilotData(prisma, session.email);
+  } catch {
+    redirectWithError("safe_failure");
+  }
+  redirectWithResult("refresh_fake");
 }
 
 async function archiveFakeDataAction(formData: FormData) {
@@ -74,12 +112,16 @@ async function archiveFakeDataAction(formData: FormData) {
   const session = await requirePilotSession(["admin"], "/admin/data");
   const confirmation = textField(formData.get("confirmation"), 80);
   if (!validateStewardshipConfirmation(confirmation, ARCHIVE_FAKE_DATA_CONFIRMATION)) {
-    redirectWithError("Type ARCHIVE FAKE DATA to archive completed/canceled fake referrals.");
+    redirectWithError("archive_fake_confirmation");
   }
 
   const prisma = getPrismaClient();
-  const result = await archiveCompletedCanceledFakeReferrals(prisma, session.email);
-  redirectWithResult(`Archived ${result.referralCount} completed/canceled fake referrals and ${result.visitCount} attached visits.`);
+  try {
+    await archiveCompletedCanceledFakeReferrals(prisma, session.email);
+  } catch {
+    redirectWithError("safe_failure");
+  }
+  redirectWithResult("archive_fake");
 }
 
 async function clearSmokeDataAction(formData: FormData) {
@@ -88,14 +130,17 @@ async function clearSmokeDataAction(formData: FormData) {
   requirePilotOperationsAccess();
   const session = await requirePilotSession(["admin"], "/admin/data");
   const confirmation = textField(formData.get("confirmation"), 80);
+  if (!validateStewardshipConfirmation(confirmation, ARCHIVE_SMOKE_TEST_DATA_CONFIRMATION)) {
+    redirectWithError("archive_smoke_confirmation");
+  }
 
   try {
     const prisma = getPrismaClient();
-    const result = await archiveSmokeTestOperationalRecords(prisma, session.email, confirmation);
-    redirectWithResult(`Archived ${result.referralCount} smoke referrals, ${result.visitCount} smoke visits, and deactivated ${result.therapistCount} smoke therapists.`);
-  } catch (error) {
-    redirectWithError(error instanceof Error ? error.message : "Smoke cleanup failed safely.");
+    await archiveSmokeTestOperationalRecords(prisma, session.email, confirmation);
+  } catch {
+    redirectWithError("safe_failure");
   }
+  redirectWithResult("archive_smoke");
 }
 
 async function resetDemoScenariosAction(formData: FormData) {
@@ -105,14 +150,17 @@ async function resetDemoScenariosAction(formData: FormData) {
   const session = await requirePilotSession(["admin"], "/admin/data");
   const confirmation = textField(formData.get("confirmation"), 80);
   const scenarios = formData.getAll("scenario").filter((item): item is string => typeof item === "string");
+  if (!validateStewardshipConfirmation(confirmation, RESET_DEMO_SCENARIOS_CONFIRMATION)) {
+    redirectWithError("reset_demo_confirmation");
+  }
 
   try {
     const prisma = getPrismaClient();
-    const result = await resetDemoScenarios(prisma, session.email, confirmation, scenarios);
-    redirectWithResult(`Demo scenarios reset: archived ${result.archivedReferralCount} old demo referrals and ${result.archivedVisitCount} old visits; seeded ${result.seededReferralCount} referrals, ${result.seededVisitCount} visits, and ${result.seededConsentCount} consent states.`);
-  } catch (error) {
-    redirectWithError(error instanceof Error ? error.message : "Demo scenario reset failed safely.");
+    await resetDemoScenarios(prisma, session.email, confirmation, scenarios);
+  } catch {
+    redirectWithError("safe_failure");
   }
+  redirectWithResult("reset_demo");
 }
 
 async function markPersonalTestPhoneOptedOutAction(formData: FormData) {
@@ -121,14 +169,17 @@ async function markPersonalTestPhoneOptedOutAction(formData: FormData) {
   requirePilotOperationsAccess();
   const session = await requirePilotSession(["admin"], "/admin/data");
   const confirmation = textField(formData.get("confirmation"), 80);
+  if (!validateStewardshipConfirmation(confirmation, MARK_TEST_PHONE_OPTED_OUT_CONFIRMATION)) {
+    redirectWithError("mark_test_phone_opted_out_confirmation");
+  }
 
   try {
     const prisma = getPrismaClient();
-    const result = await markConfiguredPersonalTestPhoneOptedOut(prisma, session.email, confirmation);
-    redirectWithResult(`Personal test phone status: ${result.maskedPhone} / ${statusLabel(result.status)}${result.changed ? "" : " (unchanged)"}.`);
-  } catch (error) {
-    redirectWithError(error instanceof Error ? error.message : "Personal test cleanup failed safely.");
+    await markConfiguredPersonalTestPhoneOptedOut(prisma, session.email, confirmation);
+  } catch {
+    redirectWithError("safe_failure");
   }
+  redirectWithResult("mark_test_phone_opted_out");
 }
 
 function WarningList() {
@@ -175,7 +226,7 @@ function DemoScenarioPanel() {
       </div>
       <label className="mt-4 block text-sm font-semibold text-ink">
         Confirmation
-        <input className="field" name="confirmation" placeholder={RESET_DEMO_SCENARIOS_CONFIRMATION} />
+        <input className="field" name="confirmation" pattern={exactConfirmationPattern(RESET_DEMO_SCENARIOS_CONFIRMATION)} placeholder={RESET_DEMO_SCENARIOS_CONFIRMATION} required />
       </label>
       <p className="mt-2 text-xs font-semibold text-slate-500">Type exactly: {RESET_DEMO_SCENARIOS_CONFIRMATION}</p>
       <button className="btn-primary mt-4" type="submit">Reset demo scenarios</button>
@@ -210,7 +261,7 @@ function ActionPanel({
       <WarningList />
       <label className="mt-4 block text-sm font-semibold text-ink">
         Confirmation
-        <input className="field" name="confirmation" placeholder={confirmation} />
+        <input className="field" name="confirmation" pattern={exactConfirmationPattern(confirmation)} placeholder={confirmation} required />
       </label>
       <p className="mt-2 text-xs font-semibold text-slate-500">Type exactly: {confirmation}</p>
       <button className="btn-primary mt-4" type="submit">{buttonLabel}</button>
@@ -228,6 +279,8 @@ export default async function AdminDataStewardshipPage({
   const params = await searchParams;
   const prisma = getPrismaClient();
   const summary = await getPilotDataStewardshipSummary(prisma);
+  const resultMessage = safeResultMessage(params?.result);
+  const errorMessage = safeErrorMessage(params?.error);
   const lastAction = summary.lastStewardshipAudit
     ? `${summary.lastStewardshipAudit.action} / ${formatDateTime(summary.lastStewardshipAudit.createdAt)}`
     : "Not recorded";
@@ -268,11 +321,11 @@ export default async function AdminDataStewardshipPage({
         </div>
       </div>
 
-      {params?.result ? (
-        <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-950">{params.result}</p>
+      {resultMessage ? (
+        <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-950">{resultMessage}</p>
       ) : null}
-      {params?.error ? (
-        <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-950">{params.error}</p>
+      {errorMessage ? (
+        <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-950">{errorMessage}</p>
       ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

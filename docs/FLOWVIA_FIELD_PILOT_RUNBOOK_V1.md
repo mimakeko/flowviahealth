@@ -238,7 +238,7 @@ Admins should run each pilot day from the internal dashboard shell:
 - Prefer archive over delete. `/admin/data` archives completed/canceled fake referrals, smoke-test operational records, and old demo scenario records by marking operational referral and visit notes, not by deleting audit/SMS/webhook/consent history.
 - Personal-number tests should end in `opted_out` unless active testing is underway.
 - Data stewardship actions must not send real SMS and must not expose full phone numbers, raw SMS bodies, secrets, or provider payloads.
-- Run `pnpm data:inventory` for safe counts only, `pnpm data:stewardship-smoke` to validate cleanup guardrails, and `pnpm data:demo-smoke` to validate demo reset behavior.
+- Run `pnpm data:inventory` for safe counts only, `pnpm data:action-ux-smoke` to validate safe action result banners, `pnpm data:stewardship-smoke` to validate cleanup guardrails, and `pnpm data:demo-smoke` to validate demo reset behavior.
 
 ## Pilot Data Reset and Demo Scenarios
 
@@ -246,6 +246,7 @@ Admins should run each pilot day from the internal dashboard shell:
 - All controls are admin-only and require exact confirmation phrases.
 - Archive smoke/test clutter requires: `ARCHIVE SMOKE TEST DATA`.
 - Reset demo scenarios requires: `RESET DEMO SCENARIOS`.
+- Successful Data Stewardship actions return to `/admin/data` with fixed safe success banners only. Confirmation failures return fixed human-readable messages; raw framework errors such as `NEXT_REDIRECT`, stack traces, Prisma errors, secrets, provider payloads, and raw SMS content must never render in the banner.
 - Reset demo scenarios archives old fake/demo and explicit smoke/test operational records first, marks old open fake workflows terminal, and then seeds predictable fake/demo referrals, visits, and one opted-out consent state.
 - Scenario options include ready-to-schedule, upcoming visit, opted-out non-SMS follow-up, possible duplicate pair, missing therapist intake review, therapist field today/in-progress, completed recently, and no-show follow-up.
 - Normal workflow queues (`/dashboard`, `/admin/referrals`, `/admin/visits`, `/admin/scheduling`, and `/my-work`) exclude archived operational rows and explicit smoke/test operational rows by default. Archived records remain queryable in the database, `/admin/data` safe counts, and audit history.

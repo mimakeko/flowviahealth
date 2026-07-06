@@ -16,6 +16,7 @@
     "db:smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/db-smoke.mts",
     "db:pool-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/db-pool-smoke.mts",
     "data:stewardship-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/data-stewardship-smoke.mts",
+    "data:action-ux-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/data-action-ux-smoke.mts",
     "data:inventory": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/data-inventory.mts",
     "data:demo-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/data-demo-smoke.mts",
     "data:queue-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/scheduling-ready-gate-smoke.mts",

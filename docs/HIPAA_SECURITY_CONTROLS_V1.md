@@ -41,7 +41,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - `FLOWVIA_ALLOW_REAL_SMS_TEST=false` by default.
 - `FLOWVIA_ALLOW_UNSIGNED_TELNYX_WEBHOOK_TEST=false` by default.
 - Message Ledger masks phone numbers and does not expose secrets.
-- Data Stewardship tools are admin-only, confirmation-gated, fake-data-only, audit-preserving, and do not send SMS.
+- Data Stewardship tools are admin-only, confirmation-gated, fake-data-only, audit-preserving, render fixed safe action-result banners only, and do not send SMS.
 - Data reset/demo scenario tools use `ARCHIVE SMOKE TEST DATA` and `RESET DEMO SCENARIOS` exact confirmation phrases, preserve audit/SMS/webhook/consent history, hide archived and explicit smoke/test operational rows from normal work queues, keep protected history queryable, and keep hard delete mode, real data reset, external reset APIs, SMS sending, maps/geocoding, and travel-time APIs disabled.
 - Operations Assistant cards use safe workflow state only and must not include PHI, clinical advice, diagnosis, or treatment guidance.
 - Referral intake quality uses safe operational fields only and must not include PHI, clinical advice, diagnosis, treatment guidance, full phone exposure, raw blocked note text, raw SMS bodies, provider payloads, secrets, external duplicate APIs, SMS sending, autonomous therapist assignment, or autonomous visit creation. Failed create-visit gate attempts write safe metadata only.
