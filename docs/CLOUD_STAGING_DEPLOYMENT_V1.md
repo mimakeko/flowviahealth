@@ -241,10 +241,11 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 ## Therapist Field Visit Workflow Policy
 
 - `/my-work` remains inside the authenticated dashboard shell and is scoped by therapist/admin RBAC.
+- `/my-work` should load as a phone/iPad-ready field workspace with the Next field action panel before lower-priority referral work.
 - Therapist field visit actions are manual-only: start, complete, no-show, or cancel assigned fake/test visits.
 - The workflow does not send SMS, does not expose SMS internals, does not call external AI/APIs, and does not use maps, geocoding, or travel-time APIs.
 - Notes are blocked if they contain PHI-like or clinical content; blocked note audits must not include the raw note body.
-- `/admin/health` should report therapist field workflow enabled, manual-only, no-PHI, SMS sending disabled, external APIs disabled, and autonomous status changes disabled.
+- `/admin/health` should report therapist field workflow enabled, phone layout enabled, iPad layout enabled, manual-only, no-PHI, no-PHI notes enforced, terminal visit lock enabled, SMS sending disabled, external APIs disabled, and autonomous status changes disabled.
 - Before smoke testing field work, confirm only fake/test referrals and personal-number test records are present.
 
 Optional terminal checks:
@@ -254,6 +255,7 @@ pnpm cloud:readiness
 pnpm db:pool-smoke
 pnpm telnyx:cloud-readiness
 pnpm therapist:field-smoke
+pnpm therapist:workspace-smoke
 ```
 
 ## Troubleshooting

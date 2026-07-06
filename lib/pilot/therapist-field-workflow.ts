@@ -98,10 +98,14 @@ export function getTherapistFieldWorkflowStatus() {
     externalAiEnabled: false,
     externalApisEnabled: false,
     geocodingEnabled: false,
+    ipadLayoutEnabled: true,
     manualOnly: true,
     noPhiMode: true,
+    noPhiNotesEnforced: true,
+    phoneLayoutEnabled: true,
     smsSendingEnabled: false,
     source: "deterministic",
+    terminalVisitLockEnabled: true,
     travelTimeApisEnabled: false,
   };
 }

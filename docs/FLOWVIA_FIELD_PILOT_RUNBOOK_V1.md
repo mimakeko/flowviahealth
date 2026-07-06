@@ -266,7 +266,9 @@ Admins should run each pilot day from the internal dashboard shell:
 ## Therapist Field Visit Workflow Policy
 
 - `/my-work` is the therapist-facing field workflow inside the dashboard shell.
+- `/my-work` is optimized as a phone and iPad field workspace: next field action near the top, one-column phone layout, tablet-readable queues, and desktop/tablet context rail where space allows.
 - Assigned visits are shown before referrals in Today, Upcoming, and Completed recently sections.
+- The top Next field action panel should be the first place a therapist can safely act on the most relevant assigned visit.
 - Manual visit actions are limited to: Start visit, Mark completed, Mark no-show, and Mark canceled.
 - Allowed transitions are deterministic: `scheduled -> in_progress`, `scheduled/in_progress -> completed`, `scheduled/in_progress -> no_show`, and `scheduled/in_progress -> canceled`.
 - Terminal visits (`completed`, `no_show`, `canceled`) show an operational warning and cannot be changed from the therapist field workflow.
@@ -275,6 +277,7 @@ Admins should run each pilot day from the internal dashboard shell:
 - Completing a future scheduled visit is allowed only by manual submit and is audited with an early-completion warning.
 - Therapist field actions write safe audit events: `therapist_visit_started`, `therapist_visit_completed`, `therapist_visit_no_show`, `therapist_visit_canceled`, and `therapist_visit_note_blocked`.
 - Run `pnpm therapist:field-smoke` to verify assigned-only updates, blocked unsafe notes, audit writes, no SMS, no external APIs, and admin-route RBAC.
+- Run `pnpm therapist:workspace-smoke` to verify phone/iPad layout markers, touch-sized manual actions, terminal locks, future-completion warning logic, no SMS controls, and no external API/map/travel surfaces.
 
 ## Supabase staging checks
 
