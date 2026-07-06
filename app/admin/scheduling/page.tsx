@@ -6,8 +6,10 @@ import { getPrismaClient } from "@/lib/db/prisma";
 import { formatDateTime, requirePilotOperationsAccess, statusClassName, statusLabel } from "@/lib/pilot/ops";
 import { activeWorkflowVisitWhere, activeWorkflowWhereClause } from "@/lib/pilot/data-stewardship";
 import {
+  canCreateVisitForReferral,
   evaluateReferralIntakeQuality,
   getReferralDuplicateCandidates,
+  type CreateVisitGateResult,
   type ReferralIntakeDuplicateSource,
   type ReferralIntakeQualityResult,
 } from "@/lib/pilot/referral-intake-quality";
@@ -38,14 +40,17 @@ type SchedulingReferralRow = {
   city: string | null;
   createdAt: Date | string;
   id: string;
+  notes: string | null;
   patientName: string;
   phone: string;
+  referralSource: string | null;
   status: string;
   visits: { scheduledAt: Date | null; status: string }[];
   zip: string | null;
 };
 
 type SchedulingQualityReferralRow = SchedulingReferralRow & {
+  createVisitGate: CreateVisitGateResult;
   intakeQuality: ReferralIntakeQualityResult;
   smsConsentStatus: string;
 };
@@ -90,7 +95,7 @@ export default async function AdminSchedulingPage() {
   const sevenDaysFromNow = new Date(now);
   sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
   const [
-    readyReferrals,
+    schedulingReferrals,
     upcomingVisits,
     contactedWithoutFutureVisit,
     unassignedReferrals,
@@ -108,13 +113,12 @@ export default async function AdminSchedulingPage() {
         },
       },
       orderBy: { updatedAt: "desc" },
-      take: 10,
+      take: 25,
       where: {
         AND: [
           activeWorkflowWhereClause(),
           {
-            assignedTherapistId: { not: null },
-            status: { in: ["contacted", "active"] },
+            status: { in: ["new", "contacted", "active"] },
             visits: { none: { status: { in: ["scheduled", "in_progress"] } } },
           },
         ],
@@ -149,7 +153,7 @@ export default async function AdminSchedulingPage() {
     }),
   ]);
 
-  const referralRows = readyReferrals as SchedulingReferralRow[];
+  const referralRows = schedulingReferrals as SchedulingReferralRow[];
   const duplicateSourceRows = duplicateSources(referralRows);
   const normalizedPhones = Array.from(new Set(referralRows.map((referral: SchedulingReferralRow) => normalizeE164Phone(referral.phone)).filter(Boolean)));
   const smsConsentRows = normalizedPhones.length > 0
@@ -169,23 +173,43 @@ export default async function AdminSchedulingPage() {
       },
       sources: duplicateSourceRows,
     });
+    const intakeQuality = evaluateReferralIntakeQuality({
+      assignedTherapistId: referral.assignedTherapistId,
+      assignedTherapistName: referral.assignedTherapist?.name,
+      careType: referral.careType,
+      city: referral.city,
+      duplicateCandidates,
+      patientName: referral.patientName,
+      phone: referral.phone,
+      smsConsentStatus,
+      status: referral.status,
+      zip: referral.zip,
+    });
     return {
       ...referral,
-      intakeQuality: evaluateReferralIntakeQuality({
+      createVisitGate: canCreateVisitForReferral({
+        activeWorkflowVisible: true,
         assignedTherapistId: referral.assignedTherapistId,
         assignedTherapistName: referral.assignedTherapist?.name,
         careType: referral.careType,
         city: referral.city,
         duplicateCandidates,
+        futureVisitCount: referral.visits.length,
+        intakeQuality,
+        notes: referral.notes,
         patientName: referral.patientName,
         phone: referral.phone,
+        referralSource: referral.referralSource,
         smsConsentStatus,
         status: referral.status,
         zip: referral.zip,
       }),
+      intakeQuality,
       smsConsentStatus,
     };
   });
+  const readyToCreateRows = qualityRows.filter((referral: SchedulingQualityReferralRow) => referral.createVisitGate.allowed);
+  const needsReviewRows = qualityRows.filter((referral: SchedulingQualityReferralRow) => !referral.createVisitGate.allowed);
   const visitRows = upcomingVisits as SchedulingVisitRow[];
   const pastOpenVisits = visitRows.filter((visit: SchedulingVisitRow) => visit.scheduledAt && visit.scheduledAt < now).length;
   const schedulingCards = getSchedulingQueueCards({
@@ -193,14 +217,14 @@ export default async function AdminSchedulingPage() {
     capacityCautions,
     conflicts: pastOpenVisits,
     contactedWithoutFutureVisit,
-    intakeReviewNeeded: qualityRows.filter((referral: SchedulingQualityReferralRow) => referral.intakeQuality.readinessLevel !== "ready").length,
+    intakeReviewNeeded: needsReviewRows.length,
     optedOutContacts,
-    possibleDuplicates: qualityRows.filter((referral: SchedulingQualityReferralRow) => referral.intakeQuality.duplicateCandidates.length > 0).length,
-    readyToSchedule: qualityRows.filter((referral: SchedulingQualityReferralRow) => referral.intakeQuality.schedulingReady).length,
+    possibleDuplicates: qualityRows.filter((referral: SchedulingQualityReferralRow) => referral.intakeQuality.duplicateReviewRequired || referral.intakeQuality.duplicateCandidates.length > 0).length,
+    readyToSchedule: readyToCreateRows.length,
     unassignedReferrals,
     upcomingNextSevenDays: visitRows.filter((visit: SchedulingVisitRow) => visit.scheduledAt && visit.scheduledAt >= now && visit.scheduledAt <= sevenDaysFromNow).length,
   });
-  const firstReadyReferral = qualityRows.find((referral: SchedulingQualityReferralRow) => referral.intakeQuality.schedulingReady) || qualityRows[0];
+  const firstReadyReferral = readyToCreateRows[0];
   const firstReferralTherapistVisits = firstReadyReferral?.assignedTherapistId
     ? openVisits.filter((visit) => visit.therapistId === firstReadyReferral.assignedTherapistId)
     : [];
@@ -228,7 +252,7 @@ export default async function AdminSchedulingPage() {
         <div>
           <h2 className="mb-3 text-xl font-semibold tracking-[-.02em] text-ink">Ready-to-schedule referrals</h2>
           <div className="overflow-hidden rounded-lg border border-line bg-white">
-            {qualityRows.map((referral: SchedulingQualityReferralRow) => {
+            {readyToCreateRows.map((referral: SchedulingQualityReferralRow) => {
               const readiness = getSchedulingReadiness({
                 assignedTherapistId: referral.assignedTherapistId,
                 futureVisitCount: referral.visits.length,
@@ -252,16 +276,37 @@ export default async function AdminSchedulingPage() {
                     </div>
                     <p className="mt-1 text-sm text-slate-600">{referral.intakeQuality.readinessLabel} · {readiness.readiness.replaceAll("_", " ")} · {fit.label.replaceAll("_", " ")} · {referral.assignedTherapist?.name || "Unassigned"}</p>
                     <p className="mt-1 text-xs text-slate-500">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
-                    {!referral.intakeQuality.schedulingReady ? <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-950">Needs intake review before scheduling.</p> : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Link href={`/admin/referrals/${referral.id}`} className="font-semibold text-blue underline">Open</Link>
-                    {referral.intakeQuality.schedulingReady ? <Link href={`/admin/visits/new?referralId=${referral.id}`} className="inline-flex items-center gap-1 font-semibold text-blue underline">Create visit <ArrowRight size={14} /></Link> : null}
+                    <Link href={`/admin/visits/new?referralId=${referral.id}`} className="inline-flex items-center gap-1 font-semibold text-blue underline">Create visit <ArrowRight size={14} /></Link>
                   </div>
                 </div>
               );
             })}
-            {qualityRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No ready-to-schedule referrals found.</p> : null}
+            {readyToCreateRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No create-ready referrals found.</p> : null}
+          </div>
+
+          <h2 className="mb-3 mt-6 text-xl font-semibold tracking-[-.02em] text-ink">Needs review before scheduling</h2>
+          <div className="overflow-hidden rounded-lg border border-line bg-white">
+            {needsReviewRows.map((referral: SchedulingQualityReferralRow) => (
+              <div key={referral.id} className="grid gap-3 border-b border-line p-4 last:border-b-0 md:grid-cols-[1fr_auto] md:items-center">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-ink">{referral.patientName}</p>
+                    <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>{statusLabel(referral.status)}</span>
+                    <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${referral.createVisitGate.severity === "blocker" ? "bg-rose-50 text-rose-800 ring-rose-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>Review only</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">{referral.intakeQuality.readinessLabel} · {referral.assignedTherapist?.name || "Unassigned"}</p>
+                  <p className="mt-1 text-xs text-slate-500">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
+                  <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-950">{referral.createVisitGate.reasons.slice(0, 3).join(" · ") || "Needs intake review"}.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link href={`/admin/referrals/${referral.id}`} className="font-semibold text-blue underline">Open</Link>
+                </div>
+              </div>
+            ))}
+            {needsReviewRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No review-only referrals in the scheduling queue.</p> : null}
           </div>
         </div>
 

@@ -234,6 +234,7 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 - External maps, geocoding APIs, route optimization, and real travel-time calculation are disabled.
 - Suggested windows are business-day only for the next 5 operations business days, using 9:00 AM, 11:00 AM, 1:00 PM, and 3:00 PM local slots.
 - `Use this window` fills the manual visit form scheduled datetime field only; it must not submit, create a visit, send SMS, or bypass human review.
+- `/admin/scheduling` must show `Create visit` only for referrals that pass the deterministic create-visit gate. Duplicate-review, opted-out/non-SMS, missing intake, missing therapist, terminal, archived, and explicit smoke/test rows are review-only.
 - Suggested windows are operational suggestions only; humans must create or update visits manually.
 - No autonomous scheduling, SMS sending, therapist assignment, or record mutation is allowed from scheduling suggestions.
 - No PHI, full street addresses, raw SMS bodies, secrets, diagnosis, treatment details, or clinical guidance should appear in scheduling intelligence.
@@ -246,10 +247,10 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 - The checklist verifies operational contact, fake city/ZIP, service area/workflow type, therapist assignment, non-terminal status, duplicate review, and note-safety signals.
 - Duplicate guard compares only local referral rows and safe workflow fields. It must not call external duplicate, identity, maps, geocoding, travel-time, or AI APIs.
 - Duplicate override reasons must remain operational-only and blocked before write if note classification detects PHI-like or clinical content.
-- Intake warnings must not auto-assign therapists, create visits, send SMS, expose full phone numbers, store raw blocked note text, or bypass human review.
+- Intake warnings must not auto-assign therapists, create visits, send SMS, expose full phone numbers, store raw blocked note text, or bypass human review. `/admin/visits/new` blocks failed ready-gate referrals and records safe audit metadata; manual override is disabled.
 - `/admin/audit` should filter referral intake events, duplicate guard events, unsafe intake notes, and referral readiness changes with safe metadata only.
-- `/admin/health` should report referral intake quality enabled, duplicate guard warning-only, duplicate source deterministic/local data, auto-assignment disabled, auto visit creation disabled, intake PHI storage disabled, external duplicate APIs disabled, SMS sending from intake disabled, and full phone display disabled/masked.
-- Run `pnpm referral:intake-smoke` before and after staging changes that touch referral intake, scheduling readiness, duplicate warnings, note blocking, audit metadata, or health flags.
+- `/admin/health` should report referral intake quality enabled, scheduling ready gate enabled, create-visit gate source deterministic referral intake quality, duplicate/non-SMS/intake-review create-visit blocks enabled, manual override disabled, duplicate guard warning-only, duplicate source deterministic/local data, auto-assignment disabled, auto visit creation disabled, intake PHI storage disabled, external duplicate APIs disabled, SMS sending from intake disabled, and full phone display disabled/masked.
+- Run `pnpm referral:intake-smoke` and `pnpm scheduling:ready-gate-smoke` before and after staging changes that touch referral intake, scheduling readiness, duplicate warnings, note blocking, audit metadata, or health flags.
 
 ## Pilot Data Reset and Demo Scenario Policy
 

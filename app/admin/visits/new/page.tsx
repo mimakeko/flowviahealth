@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Save } from "lucide-react";
+import type { PrismaClient } from "@prisma/client";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
 import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getPrismaClient } from "@/lib/db/prisma";
+import { activeWorkflowVisitWhere, activeWorkflowWhereClause } from "@/lib/pilot/data-stewardship";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
 import { requirePilotSession } from "@/lib/pilot/auth";
 import {
@@ -24,8 +26,10 @@ import {
   getTherapistFit,
 } from "@/lib/pilot/scheduling-intelligence";
 import {
+  canCreateVisitForReferral,
   evaluateReferralIntakeQuality,
   getReferralDuplicateCandidates,
+  type CreateVisitGateResult,
   type ReferralIntakeDuplicateSource,
   type ReferralIntakeQualityResult,
 } from "@/lib/pilot/referral-intake-quality";
@@ -62,8 +66,10 @@ type SelectedReferral = {
   city: string | null;
   createdAt: Date | string;
   id: string;
+  notes: string | null;
   patientName: string;
   phone: string;
+  referralSource: string | null;
   status: string;
   visits: { scheduledAt: Date | null; status: string }[];
   zip: string | null;
@@ -81,6 +87,92 @@ type DuplicateReferralRow = {
   visits: { id: string }[];
   zip: string | null;
 };
+
+async function getCreateVisitGateForReferral(prisma: PrismaClient, referralId: string): Promise<CreateVisitGateResult | null> {
+  const referral = await prisma.patientReferral.findUnique({
+    include: {
+      assignedTherapist: { select: { name: true } },
+      visits: {
+        select: { scheduledAt: true, status: true },
+        where: { status: { in: ["scheduled", "in_progress"] } },
+      },
+    },
+    where: { id: referralId },
+  });
+  if (!referral) return null;
+
+  const [activeWorkflowVisible, smsConsent, duplicateRows] = await Promise.all([
+    prisma.patientReferral.count({ where: activeWorkflowWhereClause({ id: referralId }) }),
+    prisma.smsConsentEnrollment.findUnique({
+      select: { status: true },
+      where: { normalizedPhone: normalizeE164Phone(referral.phone) },
+    }),
+    prisma.patientReferral.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        assignedTherapist: { select: { name: true } },
+        assignedTherapistId: true,
+        city: true,
+        createdAt: true,
+        id: true,
+        patientName: true,
+        phone: true,
+        status: true,
+        visits: {
+          select: { id: true },
+          where: { status: { in: ["scheduled", "in_progress"] } },
+        },
+        zip: true,
+      },
+      take: 150,
+      where: activeWorkflowWhereClause({ status: { notIn: ["completed", "canceled"] } }),
+    }),
+  ]);
+  const duplicateCandidates = getReferralDuplicateCandidates({
+    draft: {
+      assignedTherapistId: referral.assignedTherapistId,
+      assignedTherapistName: referral.assignedTherapist?.name,
+      city: referral.city,
+      createdAt: referral.createdAt,
+      id: referral.id,
+      patientName: referral.patientName,
+      phone: referral.phone,
+      status: referral.status,
+      zip: referral.zip,
+    },
+    sources: duplicateSources(duplicateRows as DuplicateReferralRow[]),
+  });
+  const intakeQuality = evaluateReferralIntakeQuality({
+    assignedTherapistId: referral.assignedTherapistId,
+    assignedTherapistName: referral.assignedTherapist?.name,
+    careType: referral.careType,
+    city: referral.city,
+    duplicateCandidates,
+    patientName: referral.patientName,
+    phone: referral.phone,
+    smsConsentStatus: smsConsent?.status || "none",
+    status: referral.status,
+    zip: referral.zip,
+  });
+
+  return canCreateVisitForReferral({
+    activeWorkflowVisible: activeWorkflowVisible > 0,
+    assignedTherapistId: referral.assignedTherapistId,
+    assignedTherapistName: referral.assignedTherapist?.name,
+    careType: referral.careType,
+    city: referral.city,
+    duplicateCandidates,
+    futureVisitCount: referral.visits.length,
+    intakeQuality,
+    notes: referral.notes,
+    patientName: referral.patientName,
+    phone: referral.phone,
+    referralSource: referral.referralSource,
+    smsConsentStatus: smsConsent?.status || "none",
+    status: referral.status,
+    zip: referral.zip,
+  });
+}
 
 function duplicateSources(rows: DuplicateReferralRow[]): ReferralIntakeDuplicateSource[] {
   return rows.map((row: DuplicateReferralRow) => ({
@@ -122,6 +214,25 @@ async function createVisitAction(formData: FormData) {
     workflow: "visit_create",
   });
   if (blockedNoteSearch) redirect(`/admin/visits/new?referralId=${encodeURIComponent(referralId)}&${blockedNoteSearch}`);
+
+  const createVisitGate = await getCreateVisitGateForReferral(prisma, referralId);
+  if (!createVisitGate) notFound();
+  if (!createVisitGate.allowed) {
+    await prisma.auditLog.create({
+      data: {
+        actorType: "pilot_admin",
+        action: "visit_create_blocked",
+        entityType: "PatientReferral",
+        entityId: referralId,
+        metadataJson: {
+          reason: createVisitGate.reasons.slice(0, 5).join(","),
+          route: "/admin/visits/new",
+          severity: createVisitGate.severity,
+        },
+      },
+    });
+    redirect(`/admin/visits/new?referralId=${encodeURIComponent(referralId)}&error=visit_create_blocked`);
+  }
 
   const visit = await prisma.visit.create({
     data: {
@@ -184,7 +295,7 @@ export default async function NewVisitPage({
         zip: true,
       },
       take: 100,
-      where: { status: { notIn: ["completed", "canceled"] } },
+      where: activeWorkflowWhereClause({ status: { notIn: ["completed", "canceled"] } }),
     }),
     prisma.therapist.findMany({
       orderBy: { name: "asc" },
@@ -221,7 +332,7 @@ export default async function NewVisitPage({
             zip: true,
           },
           take: 150,
-          where: { status: { notIn: ["completed", "canceled"] } },
+          where: activeWorkflowWhereClause({ status: { notIn: ["completed", "canceled"] } }),
         })
       : Promise.resolve([]),
   ]);
@@ -238,11 +349,13 @@ export default async function NewVisitPage({
     ? await prisma.visit.findMany({
         orderBy: { scheduledAt: "asc" },
         select: { id: true, scheduledAt: true, status: true },
-        where: {
-          therapistId: selectedReferral.assignedTherapistId,
-          status: { in: ["scheduled", "in_progress"] },
-        },
-      })
+      where: {
+          ...activeWorkflowVisitWhere({
+            therapistId: selectedReferral.assignedTherapistId,
+            status: { in: ["scheduled", "in_progress"] },
+          }),
+      },
+    })
     : [];
   const schedulingReadiness = selectedReferral
     ? getSchedulingReadiness({
@@ -282,6 +395,25 @@ export default async function NewVisitPage({
         zip: selectedReferral.zip,
       })
     : null;
+  const createVisitGate = selectedReferral && intakeQuality
+    ? canCreateVisitForReferral({
+        activeWorkflowVisible: await prisma.patientReferral.count({ where: activeWorkflowWhereClause({ id: selectedReferral.id }) }) > 0,
+        assignedTherapistId: selectedReferral.assignedTherapistId,
+        assignedTherapistName: selectedReferral.assignedTherapist?.name,
+        careType: selectedReferral.careType,
+        city: selectedReferral.city,
+        duplicateCandidates,
+        futureVisitCount: selectedReferral.visits.length,
+        intakeQuality,
+        notes: selectedReferral.notes,
+        patientName: selectedReferral.patientName,
+        phone: selectedReferral.phone,
+        referralSource: selectedReferral.referralSource,
+        smsConsentStatus: smsConsent?.status || "none",
+        status: selectedReferral.status,
+        zip: selectedReferral.zip,
+      })
+    : null;
   const therapistFit = selectedReferral
     ? getTherapistFit({
         active: selectedReferral.assignedTherapist?.active ?? false,
@@ -308,6 +440,12 @@ export default async function NewVisitPage({
 
       <BlockedNoteAlert searchParams={params} />
 
+      {params?.error === "visit_create_blocked" ? (
+        <section className="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-950">
+          Visit creation was blocked by the deterministic scheduling ready gate. Review the referral before trying again.
+        </section>
+      ) : null}
+
       <div className="mt-8">
         {selectedReferral && schedulingReadiness ? (
           <SchedulingIntelligencePanel
@@ -326,14 +464,17 @@ export default async function NewVisitPage({
       </div>
 
       {intakeQuality ? (
-        <section className={`mt-6 rounded-lg border p-5 text-sm leading-6 ${intakeQuality.schedulingReady ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
+        <section className={`mt-6 rounded-lg border p-5 text-sm leading-6 ${createVisitGate?.allowed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="font-semibold text-ink">Referral intake quality: {intakeQuality.readinessLabel}</p>
               <p className="mt-1">Deterministic local checks only. This panel does not auto-create visits, assign therapists, send SMS, or call external duplicate APIs.</p>
             </div>
-            <span className="inline-flex w-fit rounded-md bg-white/70 px-2.5 py-1 text-xs font-semibold ring-1 ring-current">{intakeQuality.readinessLevel.replaceAll("_", " ")}</span>
+            <span className="inline-flex w-fit rounded-md bg-white/70 px-2.5 py-1 text-xs font-semibold ring-1 ring-current">{createVisitGate?.allowed ? "create-ready" : "review-only"}</span>
           </div>
+          {createVisitGate && !createVisitGate.allowed ? (
+            <p className="mt-3 rounded-md bg-white/70 p-2 font-semibold">Create visit blocked: <span className="font-normal">{createVisitGate.reasons.join(" · ")}</span></p>
+          ) : null}
           {intakeQuality.warnings.length > 0 ? (
             <div className="mt-3 grid gap-2">
               {intakeQuality.warnings.slice(0, 4).map((item) => (
@@ -351,7 +492,13 @@ export default async function NewVisitPage({
         <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue="scheduled">{VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
         <label className="text-sm font-semibold text-ink">Scheduling timezone<span className="field flex items-center text-slate-500">{FLOWVIA_OPERATIONS_TIME_ZONE}</span></label>
         <label className="text-sm font-semibold text-ink md:col-span-2">Operational note <span className="font-normal text-slate-400">(optional, no PHI or clinical detail)</span><textarea className="field min-h-28" name="notes" /></label>
-        <div className="md:col-span-2"><button className="btn-primary" type="submit"><Save size={18} />Create visit</button></div>
+        <div className="md:col-span-2">
+          {createVisitGate && !createVisitGate.allowed ? (
+            <button className="btn-secondary cursor-not-allowed opacity-70" type="button"><Save size={18} />Review referral first</button>
+          ) : (
+            <button className="btn-primary" type="submit"><Save size={18} />Create visit</button>
+          )}
+        </div>
       </form>
     </div>
   );

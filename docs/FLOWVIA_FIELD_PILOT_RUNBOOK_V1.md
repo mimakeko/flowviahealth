@@ -273,11 +273,13 @@ Admins should run each pilot day from the internal dashboard shell:
 - It uses fake pilot city, ZIP family, therapist service-area text, active status, visit timing, and workflow status only.
 - Suggested windows are limited to the next 5 business days in the configured operations timezone and use safe local slots only: 9:00 AM, 11:00 AM, 1:00 PM, and 3:00 PM.
 - The New Visit `Use this window` action fills the scheduled datetime field only; it does not submit the form, create a visit, assign a therapist, send SMS, or bypass human review.
+- Create-visit eligibility is gated by deterministic referral intake quality. Duplicate-review, opted-out/non-SMS, missing therapist, missing location/workflow, terminal, archived, and explicit smoke/test referrals are review-only and must not show `Create visit` in the ready queue.
 - It must not use PHI, full street addresses, raw SMS bodies, secrets, diagnosis, treatment details, or clinical guidance.
 - It must not create visits, assign therapists, send SMS, or perform autonomous scheduling.
 - Suggested windows are operational suggestions only and require human review in the existing visit creation/update flows.
 - Passive scheduling suggestions are not audit events; explicit user actions such as `visit_created`, `visit_status_changed`, and `therapist_assigned` remain audited.
 - Run `pnpm scheduling:intelligence-smoke` to verify fit scoring, readiness, conflicts, suggested windows, deterministic source, and no external API mode.
+- Run `pnpm scheduling:ready-gate-smoke` to verify the ready queue, duplicate/non-SMS/intake-review blocks, visit-create block, archived/smoke exclusion, and protected history preservation.
 
 ## Referral Intake Quality Policy
 
@@ -287,11 +289,11 @@ Admins should run each pilot day from the internal dashboard shell:
 - Duplicate warnings are warning-only. Admins must review possible duplicate signals manually before continuing or scheduling.
 - Duplicate override reasons must be operational-only. Unsafe override text is blocked before write and audited with safe metadata only.
 - `/admin/referrals/new` previews missing intake fields and warns on possible duplicates before creating a referral.
-- `/admin/referrals` can filter ready-for-scheduling, needs-intake-review, possible-duplicate, missing-therapist, and opted-out queues.
+- `/admin/referrals` can filter ready-for-scheduling, needs-intake-review, possible-duplicate, missing-therapist, and opted-out queues. The ready-for-scheduling badge must use the same create-visit gate as `/admin/scheduling`.
 - `/admin/referrals/[id]` shows the intake checklist, duplicate warnings, safe intake history, and only links into visit creation when intake and scheduling readiness are both complete.
-- `/admin/scheduling` and `/admin/visits/new` surface intake quality before scheduling work; humans still submit the existing manual visit forms.
+- `/admin/scheduling` separates true create-ready referrals from review-only referrals. `/admin/visits/new` blocks selected referrals that fail the gate and writes safe audit metadata for blocked create attempts; no manual override is enabled.
 - `/admin/audit` includes filters for referral intake events, duplicate guard events, unsafe intake notes, and referral readiness changes.
-- `/admin/health` must show referral intake quality enabled, duplicate guard warning-only, deterministic/local duplicate source, auto-assignment disabled, auto visit creation disabled, intake PHI storage disabled, external duplicate APIs disabled, SMS sending from intake disabled, and full phone display disabled/masked.
+- `/admin/health` must show referral intake quality enabled, scheduling ready gate enabled, create-visit gate source deterministic referral intake quality, duplicate/non-SMS/intake-review create-visit blocks enabled, manual override disabled, duplicate guard warning-only, deterministic/local duplicate source, auto-assignment disabled, auto visit creation disabled, intake PHI storage disabled, external duplicate APIs disabled, SMS sending from intake disabled, and full phone display disabled/masked.
 - Run `pnpm referral:intake-smoke` to verify checklist behavior, duplicate warnings, safe blocked-note metadata, no SMS, no external APIs, and Prisma wrapper use.
 
 ## Therapist Field Visit Workflow Policy

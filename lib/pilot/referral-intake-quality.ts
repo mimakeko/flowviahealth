@@ -1,4 +1,5 @@
 import { hasBlockedNoteClassification, type NoteClassificationResult } from "../compliance/note-classification.ts";
+import { isArchivedOperationalRecord, isSmokeTestOperationalRecord } from "./data-stewardship.ts";
 import { normalizeE164Phone, redactPhone } from "../sms/compliance.ts";
 
 export type ReferralIntakeReadinessLevel = "ready" | "needs_review" | "blocked";
@@ -87,6 +88,22 @@ export type ReferralIntakeQualityResult = Readonly<{
 
 type ReferralIntakeWarning = ReferralIntakeQualityResult["warnings"][number];
 
+export type CreateVisitGateSeverity = "info" | "caution" | "blocker";
+
+export type CreateVisitGateInput = ReferralIntakeInput & Readonly<{
+  activeWorkflowVisible?: boolean;
+  futureVisitCount?: number;
+  intakeQuality?: ReferralIntakeQualityResult;
+  notes?: string | null;
+  referralSource?: string | null;
+}>;
+
+export type CreateVisitGateResult = Readonly<{
+  allowed: boolean;
+  reasons: readonly string[];
+  severity: CreateVisitGateSeverity;
+}>;
+
 export function getReferralIntakeQualityStatus() {
   return {
     autoAssignmentEnabled: false,
@@ -98,6 +115,8 @@ export function getReferralIntakeQualityStatus() {
     externalDuplicateApisEnabled: false,
     fullPhoneDisplayEnabled: false,
     intakePhiStorageEnabled: false,
+    schedulingReadyGateEnabled: true,
+    schedulingReadyGateSource: "deterministic referral intake quality",
     smsSendingEnabled: false,
     source: "deterministic",
   };
@@ -239,5 +258,49 @@ export function evaluateReferralIntakeQuality(input: ReferralIntakeInput): Refer
     },
     schedulingReady,
     warnings,
+  };
+}
+
+function gateReasonLabels(input: {
+  futureVisitCount: number;
+  input: CreateVisitGateInput;
+  intakeQuality: ReferralIntakeQualityResult;
+}) {
+  const reasons: string[] = [];
+  const quality = input.intakeQuality;
+  const checklist = quality.checklist;
+
+  if (input.input.activeWorkflowVisible === false) reasons.push("Not in active workflow queue");
+  if (isArchivedOperationalRecord(input.input)) reasons.push("Archived operational record");
+  if (isSmokeTestOperationalRecord(input.input)) reasons.push("Smoke/test operational record");
+  if (!checklist.hasAssignedTherapist) reasons.push("Missing therapist");
+  if (!checklist.hasRequiredContact) reasons.push("Missing usable fake/pilot phone");
+  if (!normalizedText(input.input.city)) reasons.push("Missing city");
+  if (!normalizedZip(input.input.zip)) reasons.push("Missing ZIP");
+  if (!checklist.hasServiceArea) reasons.push("Missing service area/workflow type");
+  if (!checklist.hasNonTerminalStatus) reasons.push("Terminal referral");
+  if (!checklist.statusIsScheduleReady) reasons.push("Needs contacted/active status");
+  if (input.futureVisitCount > 0) reasons.push("Existing open/future visit");
+  if (quality.duplicateReviewRequired || quality.duplicateCandidates.length > 0) reasons.push("Duplicate review");
+  if (input.input.smsConsentStatus === "opted_out") reasons.push("Non-SMS only");
+  if (quality.readinessLevel !== "ready" || !quality.schedulingReady) reasons.push("Needs intake review");
+  if (quality.warnings.some((item) => item.level === "blocker")) reasons.push("Blocked intake warning");
+
+  return [...new Set(reasons)];
+}
+
+export function canCreateVisitForReferral(input: CreateVisitGateInput): CreateVisitGateResult {
+  const intakeQuality = input.intakeQuality ?? evaluateReferralIntakeQuality(input);
+  const reasons = gateReasonLabels({
+    futureVisitCount: input.futureVisitCount ?? 0,
+    input,
+    intakeQuality,
+  });
+  const allowed = reasons.length === 0;
+
+  return {
+    allowed,
+    reasons,
+    severity: allowed ? "info" : reasons.some((reason) => reason.includes("Archived") || reason.includes("Smoke/test") || reason.includes("Terminal") || reason.includes("Non-SMS") || reason.includes("Blocked")) ? "blocker" : "caution",
   };
 }

@@ -255,6 +255,7 @@ export function getSchedulingReadiness(input: SchedulingReadinessInput): Schedul
 
   if (input.smsConsentStatus === "opted_out") {
     cards.push(card("Opted out - non-SMS follow-up", "blocker", "This contact is opted out of SMS.", "Use non-SMS operational follow-up only."));
+    return { cards, nextAction: "Use non-SMS operational follow-up only.", readiness: "blocked" };
   } else if (input.smsConsentStatus === "pending_confirmation") {
     cards.push(card("Consent pending", "caution", "SMS consent is pending confirmation.", "Use non-SMS follow-up until consent is active."));
   }
