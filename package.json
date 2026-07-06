@@ -17,6 +17,8 @@
     "db:pool-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/db-pool-smoke.mts",
     "data:stewardship-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/data-stewardship-smoke.mts",
     "data:inventory": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/data-inventory.mts",
+    "visits:workflow-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/visits-workflow-smoke.mts",
+    "therapist:field-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/therapist-field-smoke.mts",
     "db:studio": "prisma studio",
     "auth:hash": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/hash-pilot-password.mts",
     "auth:smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/pilot-auth-smoke.mts",

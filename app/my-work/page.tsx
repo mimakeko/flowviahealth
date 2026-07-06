@@ -1,14 +1,26 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { BriefcaseMedical, CircleAlert, Save } from "lucide-react";
+import { BriefcaseMedical, CalendarClock, CheckCircle2, CircleAlert, Clock3, Save, ShieldAlert, XCircle } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
 import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getOperationsAssistantV2Status, getTherapistAssistantCards } from "@/lib/ai/operations-assistant-v2";
+import {
+  buildBlockedNoteSearchParams,
+  classifyOperationalNote,
+  getSafeBlockedNoteAuditMetadata,
+  hasBlockedNoteClassification,
+} from "@/lib/compliance/note-classification";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import { requirePilotSession } from "@/lib/pilot/auth";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
+import {
+  getAllowedTherapistFieldVisitActions,
+  isTerminalFieldVisitStatus,
+  resolveTherapistFieldVisitAction,
+  type TherapistFieldVisitActionConfig,
+} from "@/lib/pilot/therapist-field-workflow";
 import {
   appendOperationalNote,
   formatDateTime,
@@ -18,6 +30,7 @@ import {
   statusLabel,
   textField,
 } from "@/lib/pilot/ops";
+import { normalizeE164Phone } from "@/lib/sms/compliance";
 
 export const metadata: Metadata = {
   title: "My Work",
@@ -35,8 +48,6 @@ const THERAPIST_ACTIONS = [
   { value: "needs_admin_help", label: "Needs admin help", status: null },
 ] as const;
 
-const THERAPIST_VISIT_STATUSES = ["in_progress", "completed", "no_show"] as const;
-type TherapistVisitStatus = (typeof THERAPIST_VISIT_STATUSES)[number];
 type TherapistAction = (typeof THERAPIST_ACTIONS)[number];
 
 type TherapistOption = {
@@ -63,11 +74,38 @@ type TherapistWorkReferral = {
   zip: string | null;
 };
 
+type TherapistFieldVisit = {
+  id: string;
+  notes: string | null;
+  scheduledAt: Date | string | null;
+  status: string;
+  referral: {
+    city: string | null;
+    id: string;
+    patientName: string;
+    phone: string;
+    status: string;
+    zip: string | null;
+  };
+};
+
+type SmsConsentLookup = Record<string, string | undefined>;
+
 function isSameOperationsDay(value: Date | string | null | undefined) {
   if (!value) return false;
   const itemDate = new Date(value);
   const now = new Date();
   return itemDate.toDateString() === now.toDateString();
+}
+
+function isPastOrToday(value: Date | string | null | undefined) {
+  if (!value) return false;
+  return new Date(value).getTime() <= Date.now();
+}
+
+function isFutureVisit(value: Date | string | null | undefined) {
+  if (!value) return false;
+  return new Date(value).getTime() > Date.now();
 }
 
 function referralWorkLabel(referral: TherapistWorkReferral) {
@@ -84,6 +122,89 @@ function visitWorkLabel(visit: TherapistWorkVisit) {
   if (visit.status === "in_progress") return "In progress";
   if (visit.status === "completed") return isSameOperationsDay(visit.scheduledAt) ? "Completed today" : "Completed recently";
   return statusLabel(visit.status);
+}
+
+function fieldVisitSection(visit: TherapistFieldVisit) {
+  if (visit.status === "completed" || visit.status === "no_show" || visit.status === "canceled") return "completed";
+  if (isSameOperationsDay(visit.scheduledAt) || visit.status === "in_progress") return "today";
+  return "upcoming";
+}
+
+function actionIcon(action: TherapistFieldVisitActionConfig["action"]) {
+  if (action === "start_visit") return <Clock3 size={16} />;
+  if (action === "mark_completed") return <CheckCircle2 size={16} />;
+  if (action === "mark_no_show") return <ShieldAlert size={16} />;
+  return <XCircle size={16} />;
+}
+
+function FieldVisitCard({
+  selectedTherapistId,
+  smsConsentStatus,
+  visit,
+}: {
+  selectedTherapistId: string;
+  smsConsentStatus?: string;
+  visit: TherapistFieldVisit;
+}) {
+  const allowedActions = getAllowedTherapistFieldVisitActions(visit.status);
+  const isTerminal = isTerminalFieldVisitStatus(visit.status);
+  const isFuture = isFutureVisit(visit.scheduledAt);
+
+  return (
+    <article className="rounded-lg border border-line bg-white p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned visit</p>
+          <h3 className="text-lg font-semibold tracking-[-.02em] text-ink">{visit.referral.patientName}</h3>
+          <p className="mt-1 text-sm text-slate-600">{formatDateTime(visit.scheduledAt)} · {[visit.referral.city, visit.referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <span className="inline-flex w-fit rounded-md bg-ice px-2 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">{visitWorkLabel(visit)}</span>
+          <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(visit.status)}`}>{statusLabel(visit.status)}</span>
+        </div>
+      </div>
+
+      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+        <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{redactPhone(visit.referral.phone)}</dd></div>
+        <div><dt className="font-semibold text-ink">Referral status</dt><dd className="mt-1 text-slate-600">{statusLabel(visit.referral.status)}</dd></div>
+        <div><dt className="font-semibold text-ink">Visit id</dt><dd className="mt-1 font-mono text-xs text-slate-500">{visit.id.slice(0, 8)}...{visit.id.slice(-4)}</dd></div>
+      </dl>
+
+      <div className="mt-4 grid gap-2 text-sm">
+        {isTerminal ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-950">This visit is terminal. No therapist field action is available.</p>
+        ) : null}
+        {smsConsentStatus === "opted_out" ? (
+          <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 font-semibold text-rose-950">SMS consent is opted out. Use non-SMS operational follow-up only.</p>
+        ) : null}
+        {isFuture ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-950">This visit is scheduled in the future. Completing early will be audited as an operational warning.</p>
+        ) : null}
+        <p className="rounded-lg border border-line bg-slate-50 p-3 text-slate-600">No PHI in notes. Use scheduling/access/status wording only; no diagnosis, treatment, symptoms, medications, or clinical details.</p>
+      </div>
+
+      {allowedActions.length > 0 ? (
+        <form action={therapistVisitAction} className="mt-4 grid gap-3">
+          <input type="hidden" name="therapistId" value={selectedTherapistId} />
+          <input type="hidden" name="visitId" value={visit.id} />
+          <label className="text-sm font-semibold text-ink">
+            Operational note <span className="font-normal text-slate-400">(optional, no PHI)</span>
+            <textarea className="field min-h-24" name="note" placeholder="Example: Arrived at site, access issue, or scheduling follow-up needed." />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {allowedActions.map((action: TherapistFieldVisitActionConfig) => (
+              <button key={action.action} className={action.action === "mark_completed" ? "btn-primary" : "btn-secondary"} type="submit" name="action" value={action.action} title={action.helper}>
+                {actionIcon(action.action)}
+                {action.buttonLabel}
+              </button>
+            ))}
+          </div>
+        </form>
+      ) : null}
+
+      {visit.notes ? <p className="mt-4 whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-600">{visit.notes}</p> : null}
+    </article>
+  );
 }
 
 async function therapistReferralAction(formData: FormData) {
@@ -191,25 +312,12 @@ async function therapistVisitAction(formData: FormData) {
   const prisma = getPrismaClient();
   const therapistId = textField(formData.get("therapistId"), 80);
   const visitId = textField(formData.get("visitId"), 80);
-  const status = textField(formData.get("status"), 80) as TherapistVisitStatus;
+  const action = textField(formData.get("action"), 80);
   const note = textField(formData.get("note"), 1000);
 
-  if (!therapistId || !visitId || !THERAPIST_VISIT_STATUSES.includes(status)) {
+  if (!therapistId || !visitId || !action) {
     redirect("/my-work");
   }
-
-  const blockedNoteSearch = await getBlockedOperationalNoteRedirectSearch({
-    actorId: session.role === "therapist" ? session.email : therapistId,
-    actorType: session.role === "admin" ? "pilot_admin" : "therapist_pilot",
-    entityId: visitId,
-    entityType: "Visit",
-    extra: { status },
-    fieldLabel: "Visit note",
-    route: "/my-work",
-    value: note,
-    workflow: "therapist_visit_update",
-  });
-  if (blockedNoteSearch) redirect(`/my-work?therapistId=${encodeURIComponent(therapistId)}&${blockedNoteSearch}`);
 
   if (session.role === "therapist") {
     const therapist = await prisma.therapist.findFirst({
@@ -246,15 +354,65 @@ async function therapistVisitAction(formData: FormData) {
     redirect(`/my-work?therapistId=${therapistId}&error=not_assigned`);
   }
 
+  const transition = resolveTherapistFieldVisitAction({
+    action,
+    scheduledAt: visit.scheduledAt,
+    status: visit.status,
+  });
+
+  if (!transition || !transition.allowed) {
+    await prisma.auditLog.create({
+      data: {
+        actorType: session.role === "admin" ? "pilot_admin" : "therapist_pilot",
+        actorId: therapistId,
+        action: "permission_denied",
+        entityType: "Visit",
+        entityId: visitId,
+        metadataJson: {
+          attemptedAction: action,
+          reason: transition?.terminalWarning ? "visit_terminal" : "invalid_visit_transition",
+          referralId: visit.referralId,
+          status: visit.status,
+        },
+      },
+    }).catch(() => undefined);
+    redirect(`/my-work?therapistId=${encodeURIComponent(therapistId)}&error=${transition?.terminalWarning ? "visit_terminal" : "invalid_transition"}`);
+  }
+
+  const noteClassification = classifyOperationalNote(note, { fieldLabel: "Visit note" });
+  if (hasBlockedNoteClassification(noteClassification)) {
+    await prisma.auditLog.create({
+      data: {
+        actorType: session.role === "admin" ? "pilot_admin" : "therapist_pilot",
+        actorId: therapistId,
+        action: "therapist_visit_note_blocked",
+        entityType: "Visit",
+        entityId: visitId,
+        metadataJson: getSafeBlockedNoteAuditMetadata(noteClassification, {
+          extra: {
+            action,
+            referralId: visit.referralId,
+            status: visit.status,
+            therapistId,
+          },
+          fieldLabel: "Visit note",
+          route: "/my-work",
+          workflow: "therapist_field_visit_action",
+        }),
+      },
+    }).catch(() => undefined);
+    redirect(`/my-work?therapistId=${encodeURIComponent(therapistId)}&${buildBlockedNoteSearchParams(noteClassification)}`);
+  }
+
   const updated = await prisma.visit.update({
     where: { id: visitId },
     data: {
-      notes: note ? appendOperationalNote(visit.notes, `Therapist visit note: ${note}`) : visit.notes,
-      status,
+      notes: note ? appendOperationalNote(visit.notes, `Therapist field note: ${note}`) : visit.notes,
+      status: transition.nextStatus,
     },
   });
 
-  const referralStatus = status === "in_progress" ? "active" : status === "completed" ? "completed" : visit.referral.status;
+  const referralStatus = transition.nextStatus === "in_progress" ? "active" : transition.nextStatus === "completed" ? "completed" : visit.referral.status;
   if (referralStatus !== visit.referral.status) {
     await prisma.patientReferral.update({
       where: { id: visit.referralId },
@@ -267,12 +425,15 @@ async function therapistVisitAction(formData: FormData) {
       data: {
         actorType: "therapist_pilot",
         actorId: therapistId,
-        action: "therapist_status_update",
+        action: transition.auditAction,
         entityType: "Visit",
         entityId: visitId,
         metadataJson: {
+          earlyCompletionWarning: transition.earlyCompletionWarning,
+          newStatus: updated.status,
+          oldStatus: visit.status,
           referralId: visit.referralId,
-          status: updated.status,
+          therapistId,
         },
       },
     }),
@@ -328,38 +489,77 @@ export default async function MyWorkPage({
     ? params.therapistId
     : therapistOptions[0]?.id;
 
-  const referrals = selectedTherapistId
-    ? await prisma.patientReferral.findMany({
-        where: { assignedTherapistId: selectedTherapistId },
-        include: {
-          visits: {
-            orderBy: { scheduledAt: "asc" },
-            take: 3,
+  const [referrals, visits] = selectedTherapistId
+    ? await Promise.all([
+        prisma.patientReferral.findMany({
+          where: { assignedTherapistId: selectedTherapistId },
+          include: {
+            visits: {
+              orderBy: { scheduledAt: "asc" },
+              take: 3,
+            },
           },
-        },
-        orderBy: { updatedAt: "desc" },
+          orderBy: { updatedAt: "desc" },
+        }),
+        prisma.visit.findMany({
+          include: {
+            referral: {
+              select: {
+                city: true,
+                id: true,
+                patientName: true,
+                phone: true,
+                status: true,
+                zip: true,
+              },
+            },
+          },
+          orderBy: [{ scheduledAt: "asc" }, { updatedAt: "desc" }],
+          take: 100,
+          where: { therapistId: selectedTherapistId },
+        }),
+      ])
+    : [[], []];
+  const assignedReferrals = referrals as TherapistWorkReferral[];
+  const assignedVisits = visits as TherapistFieldVisit[];
+  const normalizedPhones = Array.from(new Set(assignedVisits.map((visit: TherapistFieldVisit) => normalizeE164Phone(visit.referral.phone)).filter(Boolean)));
+  const smsConsentRows = normalizedPhones.length > 0
+    ? await prisma.smsConsentEnrollment.findMany({
+        select: { normalizedPhone: true, status: true },
+        where: { normalizedPhone: { in: normalizedPhones } },
       })
     : [];
-  const assignedReferrals = referrals as TherapistWorkReferral[];
-  const assignedVisitCount = assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + referral.visits.length, 0);
-  const inProgressVisitCount = assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + referral.visits.filter((visit: TherapistWorkVisit) => visit.status === "in_progress").length, 0);
-  const recentlyCompletedCount = assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + (referral.status === "completed" ? 1 : 0) + referral.visits.filter((visit: TherapistWorkVisit) => visit.status === "completed").length, 0);
+  const smsConsentByPhone: SmsConsentLookup = Object.fromEntries(smsConsentRows.map((row) => [row.normalizedPhone, row.status]));
+  const todayVisits = assignedVisits.filter((visit: TherapistFieldVisit) => fieldVisitSection(visit) === "today");
+  const upcomingVisits = assignedVisits.filter((visit: TherapistFieldVisit) => fieldVisitSection(visit) === "upcoming");
+  const completedVisits = assignedVisits.filter((visit: TherapistFieldVisit) => fieldVisitSection(visit) === "completed");
+  const assignedVisitCount = assignedVisits.length;
+  const inProgressVisitCount = assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "in_progress").length;
+  const completedRecentlyVisitCount = assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "completed").length;
+  const noShowVisitCount = assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "no_show").length;
+  const optedOutContactCount = assignedVisits.filter((visit: TherapistFieldVisit) => smsConsentByPhone[normalizeE164Phone(visit.referral.phone)] === "opted_out").length;
+  const readyToStartVisitCount = assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "scheduled" && isPastOrToday(visit.scheduledAt)).length;
+  const recentlyCompletedCount = assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "completed").length + completedRecentlyVisitCount;
   const assistantCards = getTherapistAssistantCards({
+    completedRecentlyVisits: completedRecentlyVisitCount,
     inProgressVisits: inProgressVisitCount,
     needsContact: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "new").length,
+    noShowVisits: noShowVisitCount,
+    optedOutContacts: optedOutContactCount,
     readyToSchedule: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted").length,
     recentlyCompleted: recentlyCompletedCount,
-    upcomingVisits: assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + referral.visits.filter((visit: TherapistWorkVisit) => visit.status === "scheduled").length, 0),
+    readyToStartVisits: readyToStartVisitCount,
+    upcomingVisits: assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "scheduled").length,
   });
   const schedulingCards = getSchedulingQueueCards({
     archiveCandidates: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "completed" || referral.status === "canceled").length,
     capacityCautions: assignedVisitCount >= 6 ? 1 : 0,
     conflicts: inProgressVisitCount,
     contactedWithoutFutureVisit: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted" && referral.visits.length === 0).length,
-    optedOutContacts: 0,
+    optedOutContacts: optedOutContactCount,
     readyToSchedule: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted" && referral.visits.length === 0).length,
     unassignedReferrals: 0,
-    upcomingNextSevenDays: assignedReferrals.reduce((count: number, referral: TherapistWorkReferral) => count + referral.visits.filter((visit: TherapistWorkVisit) => visit.status === "scheduled" || visit.status === "in_progress").length, 0),
+    upcomingNextSevenDays: assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "scheduled" || visit.status === "in_progress").length,
   });
   const assistantStatus = getOperationsAssistantV2Status();
 
@@ -378,6 +578,12 @@ export default async function MyWorkPage({
         {params?.error === "not_assigned" ? (
           <p role="alert" className="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
             That referral or visit is not assigned to the selected demo therapist.
+          </p>
+        ) : null}
+
+        {params?.error === "visit_terminal" || params?.error === "invalid_transition" ? (
+          <p role="alert" className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">
+            {params.error === "visit_terminal" ? "That visit is already terminal and cannot be changed from the therapist field workflow." : "That visit action is not available for the current status."}
           </p>
         ) : null}
 
@@ -436,6 +642,67 @@ export default async function MyWorkPage({
             </div>
           ) : null}
 
+          {selectedTherapistId ? (
+            <section className="grid gap-4">
+              <div className="flex items-center gap-2">
+                <CalendarClock size={18} className="text-blue" />
+                <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Today</h2>
+              </div>
+              {todayVisits.map((visit: TherapistFieldVisit) => (
+                <FieldVisitCard
+                  key={visit.id}
+                  selectedTherapistId={selectedTherapistId}
+                  smsConsentStatus={smsConsentByPhone[normalizeE164Phone(visit.referral.phone)]}
+                  visit={visit}
+                />
+              ))}
+              {todayVisits.length === 0 ? <p className="rounded-lg border border-line bg-white p-5 text-sm text-slate-500">No assigned visits need action today.</p> : null}
+            </section>
+          ) : null}
+
+          {selectedTherapistId ? (
+            <section className="grid gap-4">
+              <div className="flex items-center gap-2">
+                <Clock3 size={18} className="text-blue" />
+                <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Upcoming</h2>
+              </div>
+              {upcomingVisits.map((visit: TherapistFieldVisit) => (
+                <FieldVisitCard
+                  key={visit.id}
+                  selectedTherapistId={selectedTherapistId}
+                  smsConsentStatus={smsConsentByPhone[normalizeE164Phone(visit.referral.phone)]}
+                  visit={visit}
+                />
+              ))}
+              {upcomingVisits.length === 0 ? <p className="rounded-lg border border-line bg-white p-5 text-sm text-slate-500">No upcoming assigned visits.</p> : null}
+            </section>
+          ) : null}
+
+          {selectedTherapistId ? (
+            <section className="grid gap-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-blue" />
+                <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Completed recently</h2>
+              </div>
+              {completedVisits.map((visit: TherapistFieldVisit) => (
+                <FieldVisitCard
+                  key={visit.id}
+                  selectedTherapistId={selectedTherapistId}
+                  smsConsentStatus={smsConsentByPhone[normalizeE164Phone(visit.referral.phone)]}
+                  visit={visit}
+                />
+              ))}
+              {completedVisits.length === 0 ? <p className="rounded-lg border border-line bg-white p-5 text-sm text-slate-500">No recently completed assigned visits.</p> : null}
+            </section>
+          ) : null}
+
+          {selectedTherapistId && assignedReferrals.length > 0 ? (
+            <div className="flex items-center gap-2">
+              <BriefcaseMedical size={18} className="text-blue" />
+              <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Assigned referrals</h2>
+            </div>
+          ) : null}
+
           {assignedReferrals.map((referral: TherapistWorkReferral) => (
             <article key={referral.id} className="rounded-lg border border-line bg-white p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -459,34 +726,6 @@ export default async function MyWorkPage({
                 <div><dt className="font-semibold text-ink">Service area</dt><dd className="mt-1 text-slate-600">{referral.careType || "Not provided"}</dd></div>
                 <div><dt className="font-semibold text-ink">Next visit</dt><dd className="mt-1 text-slate-600">{formatDateTime(referral.visits[0]?.scheduledAt)}</dd></div>
               </dl>
-
-              {referral.visits.length > 0 ? (
-                <div className="mt-5 grid gap-3">
-                  <h3 className="text-sm font-semibold text-ink">Assigned visits</h3>
-                  {referral.visits.map((visit: TherapistWorkVisit) => (
-                    <div key={visit.id} className="rounded-lg border border-line p-4">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned visit</p>
-                          <p className="mt-1 text-sm font-semibold text-ink">{formatDateTime(visit.scheduledAt)}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <span className="inline-flex w-fit rounded-md bg-ice px-2 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">{visitWorkLabel(visit)}</span>
-                          <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(visit.status)}`}>{statusLabel(visit.status)}</span>
-                        </div>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-600">{visit.notes || "No operational visit note."}</p>
-                      <form action={therapistVisitAction} className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                        <input type="hidden" name="therapistId" value={selectedTherapistId || ""} />
-                        <input type="hidden" name="visitId" value={visit.id} />
-                        <label className="text-sm font-semibold text-ink">Visit status<select className="field" name="status" defaultValue={visit.status}>{THERAPIST_VISIT_STATUSES.map((item: TherapistVisitStatus) => <option key={item} value={item}>{statusLabel(item)}</option>)}</select></label>
-                        <label className="text-sm font-semibold text-ink">Operational note <span className="font-normal text-slate-400">(optional)</span><input className="field" name="note" placeholder="No PHI" /></label>
-                        <div className="flex items-end"><button className="btn-secondary w-full" type="submit"><Save size={18} />Update visit</button></div>
-                      </form>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
 
               {referral.notes ? (
                 <p className="mt-4 whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-600">{referral.notes}</p>

@@ -36,10 +36,14 @@ export type QueueAssistantInput = Readonly<{
 }>;
 
 export type TherapistAssistantInput = Readonly<{
+  completedRecentlyVisits?: number;
   inProgressVisits: number;
   needsContact: number;
+  noShowVisits?: number;
+  optedOutContacts?: number;
   readyToSchedule: number;
   recentlyCompleted: number;
+  readyToStartVisits?: number;
   upcomingVisits: number;
 }>;
 
@@ -167,10 +171,14 @@ export function getQueueAssistantCards(input: QueueAssistantInput): OperationsAs
 export function getTherapistAssistantCards(input: TherapistAssistantInput): OperationsAssistantCard[] {
   const cards: OperationsAssistantCard[] = [];
 
+  if ((input.readyToStartVisits ?? 0) > 0) cards.push(card("Visits ready to start", "info", `${input.readyToStartVisits} assigned visit${input.readyToStartVisits === 1 ? " is" : "s are"} scheduled for today or earlier.`, "Open the visit card and manually start the field workflow when ready."));
   if (input.needsContact > 0) cards.push(card("Your next best operational step", "warning", `${input.needsContact} assigned referral${input.needsContact === 1 ? " needs" : "s need"} first contact.`, "Start with first-contact workflow and keep notes operational."));
   if (input.readyToSchedule > 0) cards.push(card("Ready to schedule", "info", `${input.readyToSchedule} assigned referral${input.readyToSchedule === 1 ? " is" : "s are"} ready for scheduling review.`, "Flag scheduling readiness for admin if no visit exists."));
   if (input.upcomingVisits > 0) cards.push(card("Upcoming visit", "info", `${input.upcomingVisits} assigned visit${input.upcomingVisits === 1 ? " is" : "s are"} scheduled or open.`, "Review timing and update status after the visit window."));
   if (input.inProgressVisits > 0) cards.push(card("In progress", "warning", `${input.inProgressVisits} assigned visit${input.inProgressVisits === 1 ? " is" : "s are"} in progress.`, "Complete or update operational status when finished."));
+  if ((input.noShowVisits ?? 0) > 0) cards.push(card("No-show follow-up needed", "warning", `${input.noShowVisits} assigned visit${input.noShowVisits === 1 ? " is" : "s are"} marked no-show.`, "Use non-SMS operational follow-up if needed and keep notes free of clinical detail."));
+  if ((input.optedOutContacts ?? 0) > 0) cards.push(card("Opted-out contact - non-SMS follow-up only", "blocker", `${input.optedOutContacts} assigned contact${input.optedOutContacts === 1 ? " is" : "s are"} opted out of SMS.`, "Do not text. Use non-SMS operational follow-up only."));
+  if ((input.completedRecentlyVisits ?? 0) > 0) cards.push(card("Field visits completed recently", "info", `${input.completedRecentlyVisits} assigned visit${input.completedRecentlyVisits === 1 ? " was" : "s were"} completed recently.`, "Review whether any operational follow-up scheduling is needed."));
   if (input.recentlyCompleted > 0) cards.push(card("Completed recently", "info", `${input.recentlyCompleted} assigned item${input.recentlyCompleted === 1 ? " was" : "s were"} completed recently.`, "Review whether any follow-up scheduling is needed."));
 
   return cards.length > 0 ? cards : [card("Your next best operational step", "info", "No assigned urgent workflow signal was detected.", "Continue normal worklist review.")];

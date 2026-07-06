@@ -221,7 +221,7 @@ Admins should run each pilot day from the internal dashboard shell:
 2. Open `/admin/messages` and review the Message Ledger for consent state, masked phone values, latest inbound keyword, webhook activity, and delivery status. Do not use bulk messaging.
 3. Open `/admin/referrals`, filter for `New`, `Contacted`, or `Needs scheduling`, then assign therapists and schedule visits from referral detail pages.
 4. Open `/admin/visits`, filter for `Upcoming`, `Needs scheduling`, or in-progress statuses, then update only operational lifecycle status and no-PHI notes.
-5. Have therapists use `/my-work` for their assigned referrals and visits. Therapist actions remain limited to operational status and notes; no assignment, SMS send, or bulk controls are exposed.
+5. Have therapists use `/my-work` for their assigned referrals and visits. Therapist actions remain limited to manual operational status and notes; no assignment, SMS send, autonomous action, clinical note, or bulk controls are exposed.
 6. Open `/admin/audit` and review recent audit events for expected status changes, assignment changes, visit updates, SMS consent events, and permission denials.
 7. Open `/admin/data` only when fake pilot data needs stewardship. Use archive/refresh tools with exact confirmation text and verify audit events afterward.
 8. Keep all notes free of PHI: no diagnosis, symptoms, treatment details, medication, emergency details, wound details, therapy plans, pain scores, full addresses, or clinical narratives.
@@ -262,6 +262,19 @@ Admins should run each pilot day from the internal dashboard shell:
 - Suggested windows are operational suggestions only and require human review in the existing visit creation/update flows.
 - Passive scheduling suggestions are not audit events; explicit user actions such as `visit_created`, `visit_status_changed`, and `therapist_assigned` remain audited.
 - Run `pnpm scheduling:intelligence-smoke` to verify fit scoring, readiness, conflicts, suggested windows, deterministic source, and no external API mode.
+
+## Therapist Field Visit Workflow Policy
+
+- `/my-work` is the therapist-facing field workflow inside the dashboard shell.
+- Assigned visits are shown before referrals in Today, Upcoming, and Completed recently sections.
+- Manual visit actions are limited to: Start visit, Mark completed, Mark no-show, and Mark canceled.
+- Allowed transitions are deterministic: `scheduled -> in_progress`, `scheduled/in_progress -> completed`, `scheduled/in_progress -> no_show`, and `scheduled/in_progress -> canceled`.
+- Terminal visits (`completed`, `no_show`, `canceled`) show an operational warning and cannot be changed from the therapist field workflow.
+- Notes are operational-only and are blocked by note classification if they include diagnosis, treatment, medication, symptoms, measurements, clinical notes, PHI-like content, or SMS-forbidden content.
+- If SMS consent is opted out, `/my-work` warns to use non-SMS operational follow-up only; it does not block field work and does not send SMS.
+- Completing a future scheduled visit is allowed only by manual submit and is audited with an early-completion warning.
+- Therapist field actions write safe audit events: `therapist_visit_started`, `therapist_visit_completed`, `therapist_visit_no_show`, `therapist_visit_canceled`, and `therapist_visit_note_blocked`.
+- Run `pnpm therapist:field-smoke` to verify assigned-only updates, blocked unsafe notes, audit writes, no SMS, no external APIs, and admin-route RBAC.
 
 ## Supabase staging checks
 

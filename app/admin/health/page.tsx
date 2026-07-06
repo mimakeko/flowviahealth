@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Activity, AlertTriangle, CalendarClock, Clock, Database, KeyRound, MessageSquareText, Radio, ShieldCheck } from "lucide-react";
+import { Activity, AlertTriangle, BriefcaseMedical, CalendarClock, Clock, Database, KeyRound, MessageSquareText, Radio, ShieldCheck } from "lucide-react";
 import { getOperationsAssistantStatus } from "@/lib/ai/operations-assistant";
 import { getOperationsAssistantV2Status } from "@/lib/ai/operations-assistant-v2";
 import { getFlowviaDataModeStatus } from "@/lib/compliance/data-mode";
@@ -15,6 +15,7 @@ import { redactPhone } from "@/lib/sms/compliance";
 import { getSmsStoreStatus } from "@/lib/sms/store";
 import { getTelnyxConfigStatus } from "@/lib/sms/telnyx";
 import { getSchedulingIntelligenceStatus } from "@/lib/pilot/scheduling-intelligence";
+import { getTherapistFieldWorkflowStatus } from "@/lib/pilot/therapist-field-workflow";
 
 export const metadata: Metadata = {
   title: "Cloud Pilot Health",
@@ -133,6 +134,7 @@ export default async function AdminHealthPage() {
   const smsStore = getSmsStoreStatus();
   const dbUrls = getDatabaseUrlComparison();
   const schedulingStatus = getSchedulingIntelligenceStatus();
+  const therapistFieldWorkflow = getTherapistFieldWorkflowStatus();
   const activitySnapshot = await getActivitySnapshot();
   const databaseStorageMode = process.env.DATABASE_URL ? "Postgres" : smsStore.label;
   const webhookEnforced = telnyx.webhookSigningConfigured && !telnyx.unsignedWebhookTestBypassEnabled;
@@ -168,6 +170,12 @@ export default async function AdminHealthPage() {
     { icon: ShieldCheck, metric: { label: "Travel-time APIs", value: schedulingStatus.travelTimeApisEnabled ? "Enabled" : "Disabled", tone: schedulingStatus.travelTimeApisEnabled ? "warn" : "good" } },
     { icon: ShieldCheck, metric: { label: "Scheduling external AI", value: schedulingStatus.externalAiEnabled ? "Enabled" : "Disabled", tone: schedulingStatus.externalAiEnabled ? "warn" : "good" } },
     { icon: ShieldCheck, metric: { label: "Autonomous scheduling", value: schedulingStatus.autonomousSchedulingEnabled ? "Enabled" : "Disabled", tone: schedulingStatus.autonomousSchedulingEnabled ? "warn" : "good" } },
+    { icon: BriefcaseMedical, metric: { label: "Therapist field workflow", value: therapistFieldWorkflow.enabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.enabled ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Field workflow mode", value: therapistFieldWorkflow.manualOnly ? "Manual only" : "Autonomous", tone: therapistFieldWorkflow.manualOnly ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Field workflow no-PHI", value: therapistFieldWorkflow.noPhiMode ? "On" : "Off", tone: therapistFieldWorkflow.noPhiMode ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Field workflow SMS sending", value: therapistFieldWorkflow.smsSendingEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.smsSendingEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "Field workflow external APIs", value: therapistFieldWorkflow.externalApisEnabled || therapistFieldWorkflow.externalAiEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.externalApisEnabled || therapistFieldWorkflow.externalAiEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "Field autonomous status changes", value: therapistFieldWorkflow.autonomousStatusChangesEnabled ? "Enabled" : "Disabled", tone: therapistFieldWorkflow.autonomousStatusChangesEnabled ? "warn" : "good" } },
     { icon: Activity, metric: { label: "Audit activity, last 24h", value: `${activitySnapshot.lastAuditActivityCount}` } },
     { icon: Clock, metric: { label: "Last SMS webhook event", value: formatDateTime(activitySnapshot.lastSmsWebhookEventTime) } },
     { icon: Clock, metric: { label: "Last inbound SMS", value: formatDateTime(activitySnapshot.lastInboundSmsTime) } },

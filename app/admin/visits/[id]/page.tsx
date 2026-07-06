@@ -50,6 +50,13 @@ type AuditLogListItem = {
 };
 
 const VISIT_LIFECYCLE_STAGES = ["scheduled", "in_progress", "completed", "no_show", "canceled"] as const;
+const THERAPIST_FIELD_AUDIT_ACTIONS = new Set([
+  "therapist_visit_started",
+  "therapist_visit_completed",
+  "therapist_visit_no_show",
+  "therapist_visit_canceled",
+  "therapist_visit_note_blocked",
+]);
 
 function visitNextSteps(status: string) {
   if (status === "scheduled") return "Confirm therapist readiness and monitor the upcoming visit.";
@@ -174,6 +181,7 @@ export default async function VisitDetailPage({
 
   const therapistOptions = therapists as TherapistOption[];
   const visitAuditLogs = auditLogs as AuditLogListItem[];
+  const therapistFieldAuditLogs = visitAuditLogs.filter((log: AuditLogListItem) => THERAPIST_FIELD_AUDIT_ACTIONS.has(log.action));
   const therapistOpenVisits = visit.therapistId
     ? await prisma.visit.findMany({
         orderBy: { scheduledAt: "asc" },
@@ -301,7 +309,22 @@ export default async function VisitDetailPage({
           </form>
         </div>
 
-        <aside className="rounded-lg border border-line bg-white p-6">
+        <aside className="grid gap-5">
+          <section className="rounded-lg border border-line bg-white p-6">
+            <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Therapist field history</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Latest manual therapist field actions. Metadata is safe and excludes notes, phone numbers, raw SMS, provider payloads, and PHI.</p>
+            <div className="mt-5 space-y-3">
+              {therapistFieldAuditLogs.map((log: AuditLogListItem) => (
+                <div key={log.id} className="rounded-lg border border-line p-3 text-sm">
+                  <p className="font-semibold text-ink">{log.action}</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {log.actorType}</p>
+                </div>
+              ))}
+              {therapistFieldAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No therapist field actions recorded yet.</p> : null}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-line bg-white p-6">
           <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Audit trail</h2>
           <div className="mt-5 space-y-3">
             {visitAuditLogs.map((log: AuditLogListItem) => (
@@ -312,6 +335,7 @@ export default async function VisitDetailPage({
             ))}
             {visitAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No audit events recorded for this visit yet.</p> : null}
           </div>
+          </section>
         </aside>
       </div>
     </div>

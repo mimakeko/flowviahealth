@@ -16,6 +16,7 @@ Flowvia is not approved for real patients or PHI yet. This list blocks productio
 - AI real-provider mode must remain disabled/mock-only until no-PHI routing, audit-only controls, legal/vendor review, and explicit approval are complete.
 - Operations Assistant V2 must remain deterministic/mock-only: no external AI/API calls, no autonomous actions, no clinical advice, no diagnosis/treatment guidance, and no PHI in inputs or outputs.
 - Scheduling Intelligence V1 must remain deterministic: next-5-business-day windows only, no external maps/geocoding APIs, no real travel-time calculation, no autonomous scheduling, no PHI, and human review required.
+- Therapist Field Visit Workflow must remain fake/test-data-only and manual-only: assigned visit start/complete/no-show/cancel actions only, no autonomous status changes, no SMS sending, no full-address exposure, no PHI, and no clinical documentation.
 - Backup/restore policy and tested restore process are needed.
 - Retention/deletion policy is needed.
 - Incident response policy is needed.
@@ -49,10 +50,12 @@ Before any serious pilot use, an admin should:
 - Open `/admin/messages` and confirm Cloud webhook last seen, latest inbound keyword, masked phone values, consent state, and recent webhook events.
 - Open `/admin/referrals` and `/admin/visits` to confirm fake-data workflow queues are moving through assignment, scheduling, active, completed, canceled, no-show states as expected.
 - Have therapists review `/my-work`; therapist actions must remain scoped to their assigned referrals/visits and limited to operational status/note updates.
+- Confirm `/my-work` shows assigned field visits before referrals in Today, Upcoming, and Completed recently sections; terminal visits should warn and block further therapist field updates.
 - Open `/admin/audit` and review recent audit events for safe metadata only; no secrets, raw SMS bodies, provider payloads, or PHI should appear.
 - Open `/admin/data` and confirm stewardship status is audit-preserving, no SMS history deletion is offered, and real SMS gate remains Off.
 - Confirm `/admin/health` shows Operations Assistant V2 as mock/deterministic, external API calls disabled, no-PHI mode on, and autonomous actions disabled.
 - Confirm `/admin/health` shows Scheduling Intelligence enabled, source deterministic, business-day-only windows, external APIs/maps/geocoding/travel-time/external AI disabled, autonomous scheduling disabled, and no-PHI mode on.
+- Confirm `/admin/health` shows Therapist Field Visit Workflow enabled, manual-only, no-PHI mode on, SMS sending disabled, external APIs disabled, and autonomous status changes disabled.
 - Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
 - Confirm Vercel logs show no 500s and no `EMAXCONNSESSION`.
 - Confirm no TLS/certificate errors.
@@ -63,6 +66,8 @@ Before any serious pilot use, an admin should:
 - Real patient referrals are blocked.
 - Real visit schedules are blocked.
 - Therapist workflow actions are pilot-only and not final clinical documentation.
+- Therapist field visit actions must remain assigned-only and deterministic: scheduled to in-progress, scheduled/in-progress to completed, scheduled/in-progress to no-show, or scheduled/in-progress to canceled.
+- Therapist field notes must be operational-only and blocked before write when note classification detects PHI-like, SMS-forbidden, diagnosis, treatment, medication, symptoms, measurements, or clinical-note content.
 - SMS send actions are blocked from referral/visit workflow pages.
 - Audit trail metadata must remain summarized and safe; do not expose raw SMS payloads, provider payloads, secrets, or PHI.
 - Data stewardship tools must not hard-delete audit logs or SMS history and must require exact confirmation for archive/cleanup actions.

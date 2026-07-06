@@ -238,12 +238,22 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 - No PHI, full street addresses, raw SMS bodies, secrets, diagnosis, treatment details, or clinical guidance should appear in scheduling intelligence.
 - Before/after deploy, confirm `/admin/health` reports scheduling intelligence enabled, source deterministic, business-day-only windows, external APIs disabled, maps/geocoding disabled, travel-time APIs disabled, external AI disabled, autonomous scheduling disabled, and no-PHI enforcement on.
 
+## Therapist Field Visit Workflow Policy
+
+- `/my-work` remains inside the authenticated dashboard shell and is scoped by therapist/admin RBAC.
+- Therapist field visit actions are manual-only: start, complete, no-show, or cancel assigned fake/test visits.
+- The workflow does not send SMS, does not expose SMS internals, does not call external AI/APIs, and does not use maps, geocoding, or travel-time APIs.
+- Notes are blocked if they contain PHI-like or clinical content; blocked note audits must not include the raw note body.
+- `/admin/health` should report therapist field workflow enabled, manual-only, no-PHI, SMS sending disabled, external APIs disabled, and autonomous status changes disabled.
+- Before smoke testing field work, confirm only fake/test referrals and personal-number test records are present.
+
 Optional terminal checks:
 
 ```bash
 pnpm cloud:readiness
 pnpm db:pool-smoke
 pnpm telnyx:cloud-readiness
+pnpm therapist:field-smoke
 ```
 
 ## Troubleshooting
