@@ -2,6 +2,12 @@
 
 This runbook is for a small Flowvia pilot with 1-2 therapists. The goal is to validate scheduling, consent, SMS delivery, opt-out handling, and the internal ledger before building a larger operating system.
 
+## Product mission boundary
+
+Flowvia is the therapist-first operational intelligence layer around an agency's existing EMR. It should become the operating system therapists open every morning to review assigned visits, accept referral opportunities, coordinate scheduling, communicate safely, prepare for field work, and organize documentation context before entering the official EMR.
+
+Flowvia is not an EMR, billing system, claims system, Medicare/OASIS platform, or official clinical record. Do not add regulatory documentation, billing, claims, OASIS, Medicare compliance, or official charting workflows to the pilot dashboard.
+
 ## Dashboard-first rule
 
 Flowvia operational work starts from the internal dashboard. New admin, referral, message, therapist, visit, SMS, and audit features must be integrated into the shared dashboard/workspace shell instead of being shipped as disconnected standalone pages.
@@ -88,6 +94,12 @@ FLOWVIA_AUTH_SMOKE_PASSWORD=
 FLOWVIA_AUTH_SMOKE_THERAPIST_EMAIL=
 FLOWVIA_AUTH_SMOKE_THERAPIST_PASSWORD=
 FLOWVIA_AUTH_ROUTE_SMOKE_BASE_URL=http://localhost:3000
+FLOWVIA_BROWSER_SMOKE_BASE_URL=http://localhost:3000
+FLOWVIA_BROWSER_SMOKE_ADMIN_EMAIL=
+FLOWVIA_BROWSER_SMOKE_ADMIN_PASSWORD=
+FLOWVIA_BROWSER_SMOKE_THERAPIST_EMAIL=
+FLOWVIA_BROWSER_SMOKE_THERAPIST_PASSWORD=
+FLOWVIA_BROWSER_SMOKE_RUN_MUTATION_CHECKS=false
 FLOWVIA_TELNYX_WEBHOOK_SMOKE_BASE_URL=http://localhost:3000
 ```
 
@@ -155,6 +167,19 @@ Auth smoke env vars:
 
 `pnpm auth:route-smoke` expects the dev server to be running and verifies public routes, the login POST route, admin access, therapist `/my-work`, and therapist blocks from admin routes.
 
+`pnpm browser:auth-smoke` is the local-only Playwright browser smoke. It starts or reuses the local Next app, logs in through `/login`, visits protected dashboard routes, saves screenshots under `artifacts/browser-smoke/`, checks for dangerous visible text and full phone leaks, and verifies therapist RBAC if therapist smoke credentials are configured. It is read-only except for login/logout session cookies and never clicks Data Stewardship actions, SMS controls, referral submit, visit submit, or therapist status-change submit buttons.
+
+Browser smoke env vars:
+
+- `FLOWVIA_BROWSER_SMOKE_BASE_URL`: local base URL, default `http://localhost:3000`; non-local URLs are refused.
+- `FLOWVIA_BROWSER_SMOKE_ADMIN_EMAIL`: local pilot admin smoke email.
+- `FLOWVIA_BROWSER_SMOKE_ADMIN_PASSWORD`: local pilot admin smoke password.
+- `FLOWVIA_BROWSER_SMOKE_THERAPIST_EMAIL`: optional local therapist smoke email.
+- `FLOWVIA_BROWSER_SMOKE_THERAPIST_PASSWORD`: optional local therapist smoke password.
+- `FLOWVIA_BROWSER_SMOKE_RUN_MUTATION_CHECKS`: must remain `false`.
+
+If admin browser smoke credentials are missing, `pnpm browser:auth-smoke` exits successfully with `SKIP_BROWSER_AUTH_SMOKE: missing local browser smoke credentials` and prints a compact skip summary without secret values. If Chromium browser binaries are missing for a credentialed run, install them locally with `pnpm exec playwright install chromium`.
+
 Protected routes:
 
 - `/dashboard`
@@ -195,6 +220,7 @@ pnpm ops:guardrail-smoke
 pnpm lint
 pnpm typecheck
 pnpm build
+pnpm browser:auth-smoke
 pnpm audit --audit-level moderate
 ```
 

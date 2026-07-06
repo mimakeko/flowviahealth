@@ -2,6 +2,8 @@
 
 This is a readiness/control framework for Flowvia Health. It is not a legal certification and does not by itself authorize PHI or real patient use.
 
+Flowvia's approved pilot scope is a therapist-first operational intelligence layer around existing EMRs. EMR replacement, billing, claims, Medicare/OASIS, regulatory documentation, and official charting workflows are outside scope.
+
 ## Administrative Safeguards
 
 - Risk analysis: maintain `docs/HIPAA_RISK_REGISTER_V1.md` and review before any PHI use.
@@ -25,6 +27,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - Scheduling controls: Scheduling Intelligence V1 is deterministic only, with next-5-business-day suggestions, external maps/geocoding, route optimization, real travel-time calculation, external AI, SMS sending, and autonomous scheduling disabled. Manual create-visit override is disabled for referrals that fail the deterministic gate.
 - Therapist field workflow controls: `/my-work` is assigned-scope only, manual-only, confirmation-gated before visit status writes, fake/test-data-only, no-PHI, no SMS sending, no external AI/APIs, no maps/geocoding/travel-time APIs, and no autonomous status changes.
 - Therapist phone/iPad workspace controls: responsive field usability, calm empty states, safe loading/error states, query minimization, and transient action banners must preserve masking, no-PHI note blocking, terminal visit locks, manual submit requirements, RBAC, deterministic assistant/scheduling context, and no external API/SMS/map/travel surfaces.
+- Authenticated browser smoke controls: `pnpm browser:auth-smoke` is local-only, read-only except for login/logout cookies, refuses non-local base URLs, skips safely when local credentials are missing, saves local screenshots only under `artifacts/browser-smoke/`, and must not click destructive Data Stewardship controls, SMS controls, referral/visit submit buttons, or therapist status-change submit buttons.
 - Session management: signed httpOnly cookies are acceptable for pilot only; final timeout, revocation, and recovery controls remain blockers.
 
 ## Physical Safeguards
@@ -53,3 +56,4 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - `/my-work` empty/loading/error states must be operational-only and must not expose stack traces, database URLs, internal ids, full phone numbers, raw SMS bodies, secrets, provider payloads, clinical detail, or PHI.
 - `/my-work` data loading must keep using the existing Prisma wrapper and explicit selected fields; workspace rendering must not select or expose raw SMS bodies.
 - `/admin/visits/[id]`, `/admin/audit`, and `/admin/health` must expose therapist field state and controls through safe metadata/flags only, with autonomous field actions, external AI/API for field notes, PHI note storage, and SMS sending disabled.
+- Browser smoke screenshots and traces must remain local artifacts, not committed evidence, and must not contain full phone numbers, raw SMS bodies, provider payloads, stack traces, database URLs, secrets, PHI, or EMR/billing/OASIS/claims workflow surfaces.

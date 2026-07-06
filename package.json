@@ -29,6 +29,7 @@
     "auth:hash": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/hash-pilot-password.mts",
     "auth:smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/pilot-auth-smoke.mts",
     "auth:route-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/pilot-auth-route-smoke.mts",
+    "browser:auth-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/authenticated-browser-smoke.mts",
     "ai:ops-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/ai-ops-smoke.mts",
     "scheduling:intelligence-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/scheduling-intelligence-smoke.mts",
     "scheduling:ready-gate-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/scheduling-ready-gate-smoke.mts",
@@ -58,6 +59,7 @@
     "resend": "^6.14.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.2",

@@ -4,6 +4,8 @@ Goal: deploy always-on Flowvia cloud staging at `https://flowviahealth.com` afte
 
 Boundary: fake data only, personal phone only, no PHI, no real patients, no clinical notes, no real SMS except the short controlled owner-phone test window.
 
+Product boundary: Flowvia is a therapist-first operational intelligence workspace around existing EMRs. It must not become an EMR, billing, claims, Medicare/OASIS, regulatory documentation, or official charting system.
+
 ## Tomorrow Checklist
 
 1. Review git status.
@@ -18,6 +20,7 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
    pnpm db:smoke
    pnpm notes:classification-smoke
    pnpm ops:guardrail-smoke
+   pnpm browser:auth-smoke
    FLOWVIA_ALLOW_REAL_SMS_TEST=false FLOWVIA_SMS_STORE_MODE=test pnpm test:telnyx
    pnpm cloud:readiness
    pnpm hipaa:readiness
@@ -46,6 +49,12 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
      FLOWVIA_AUTH_SMOKE_THERAPIST_EMAIL='demo.north.dallas@flowviahealth.test' \
      FLOWVIA_AUTH_SMOKE_THERAPIST_PASSWORD='FlowviaTherapist123!' \
      pnpm auth:route-smoke
+   FLOWVIA_ALLOW_REAL_SMS_TEST=false FLOWVIA_SMS_STORE_MODE=test \
+     FLOWVIA_BROWSER_SMOKE_ADMIN_EMAIL='support@flowviahealth.com' \
+     FLOWVIA_BROWSER_SMOKE_ADMIN_PASSWORD='FlowviaTest123!' \
+     FLOWVIA_BROWSER_SMOKE_THERAPIST_EMAIL='demo.north.dallas@flowviahealth.test' \
+     FLOWVIA_BROWSER_SMOKE_THERAPIST_PASSWORD='FlowviaTherapist123!' \
+     pnpm browser:auth-smoke
    ```
 
 5. Stop the local dev server.
@@ -185,9 +194,11 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
 ## Hard Stops
 
 - Do not deploy from prep-only prompts.
+- Do not run authenticated browser smoke against production/staging domains; it is local-only in this pass.
 - Do not send real SMS except during the explicit personal-phone test window.
 - Do not use ngrok for cloud staging cutover.
 - Do not enter PHI, real patient data, diagnosis, medication, treatment details, symptoms, clinical notes, wound details, therapy plans, pain scores, or emergency details.
+- Do not add EMR, billing, claims, Medicare/OASIS, regulatory documentation, or official charting workflows.
 - Do not leave `FLOWVIA_ALLOW_UNSIGNED_TELNYX_WEBHOOK_TEST=true` in any Vercel environment.
 - Do not leave `FLOWVIA_ALLOW_REAL_SMS_TEST=true` after controlled testing.
 

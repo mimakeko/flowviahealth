@@ -15,5 +15,6 @@ tsconfig.tsbuildinfo
 out
 dist
 qa-screenshots/
+artifacts/browser-smoke/
 .flowvia-sms-store*.json
 data/flowvia-sms-store*.json

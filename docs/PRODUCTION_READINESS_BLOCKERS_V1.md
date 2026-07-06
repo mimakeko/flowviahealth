@@ -2,6 +2,8 @@
 
 Flowvia is not approved for real patients or PHI yet. This list blocks production clinical use until each item is resolved and reviewed.
 
+Flowvia's production direction is a therapist-first operational intelligence layer around existing EMRs, not an EMR replacement. Billing, claims, Medicare/OASIS, regulatory documentation, and official charting workflows remain out of scope unless a future approved product/security/legal review changes that boundary.
+
 ## Current Blockers
 
 - No real patients/PHI yet.
@@ -30,6 +32,8 @@ Flowvia is not approved for real patients or PHI yet. This list blocks productio
 - Cloud pilot health checks must remain green: `/admin/health`, `/admin/messages`, `/admin/audit`, `/admin/data`, no Vercel 500s, no `EMAXCONNSESSION`, no TLS/certificate errors, Real SMS gate Off except controlled personal-phone tests, and data mode `personal_test` or `phi_blocked`.
 - Data stewardship is fake-data-only: no audit deletion, no SMS history deletion, archive over delete, archived/smoke operational rows hidden from active workflow queues, and personal-number tests end `opted_out` unless active testing is underway.
 - Pilot data reset/demo scenario tools are fake-data-only and admin-only: exact confirmation phrases required, archive-first cleanup for fake/demo and smoke/test operational records, no hard delete of audit/SMS/webhook/consent history, no real data reset, no SMS sending, no external reset APIs, and no maps/geocoding/travel-time APIs.
+- Authenticated browser smoke is local-only in this pass: it must refuse production/staging domains, skip safely without local credentials, remain read-only except login/logout cookies, and never click destructive Data Stewardship actions, SMS controls, referral/visit submit buttons, or therapist status-change submits.
+- Browser smoke screenshots and traces are local artifacts only and must not be committed or used as proof of PHI readiness.
 
 ## Required Auth Improvements
 
@@ -81,6 +85,7 @@ Before any serious pilot use, an admin should:
 - Audit trail metadata must remain summarized and safe; do not expose raw SMS payloads, provider payloads, secrets, or PHI.
 - Data stewardship tools must not hard-delete audit logs or SMS history and must require exact confirmation for archive/cleanup actions. Archived records remain queryable through database/audit history while active workflow queues hide them. Action result banners must not expose `NEXT_REDIRECT`, stack traces, Prisma errors, secrets, provider payloads, raw SMS bodies, or full phone numbers.
 - Demo reset tools must not reset real-looking records, hard-delete protected history, send SMS, create external API calls, or bypass RBAC. `ARCHIVE SMOKE TEST DATA` and `RESET DEMO SCENARIOS` remain exact confirmation gates, and normal workflow queues must exclude explicit smoke/test operational records by default.
+- Browser smoke must continue to assert that the therapist workspace, referral decision/readiness flow, scheduling intelligence, data stewardship, health, and audit guardrails exist without adding EMR, billing, claims, Medicare/OASIS, regulatory documentation, or official charting scope.
 - Assistant suggestions must remain operational-only and human-reviewed; do not enable real provider mode or autonomous actions before production controls are approved.
 - Scheduling suggestions must remain operational-only and human-reviewed. `Use this window` may fill a datetime field only; do not enable route optimization, maps/geocoding APIs, travel-time calculation, autonomous visit creation, SMS sending, ready-gate override, or submit bypass before production controls are approved.
 - Referral detail decisions and duplicate warnings must remain operational-only and human-reviewed. Do not enable external duplicate search, automatic merging, therapist auto-assignment, automatic visit creation, SMS sending, full-phone display, full-address display, raw SMS/body/provider-payload exposure, or PHI storage before production controls are approved.
