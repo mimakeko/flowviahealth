@@ -95,6 +95,19 @@ async function expectAnyText(page: Page, patterns: RegExp[], route: string) {
   expect(matched, `${route} should include one of: ${patterns.map(String).join(", ")}`).toBe(true);
 }
 
+async function expectBlockedSchedulingRowHasNoCreateVisit(page: Page, label: string) {
+  const reviewReferrals = page.getByTestId("scheduling-review-referrals");
+  const row = reviewReferrals.locator("> div").filter({ hasText: new RegExp(label, "i") });
+  const rowCount = await row.count();
+
+  if (rowCount === 0) {
+    console.log(`Browser auth smoke note: blocked scheduling row not present, skipping label check: ${label}`);
+    return;
+  }
+
+  await expect(row.first().getByRole("link", { name: /Create visit/i }), `${label} should stay review-only`).toHaveCount(0);
+}
+
 test("authenticated Flowvia dashboard smoke is read-only and local", async ({ page }) => {
   test.skip(!adminEmail || !adminPassword, "missing local browser smoke credentials");
 
@@ -147,11 +160,25 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     await gotoProtected(page, "/admin/scheduling");
     await expect(page.getByRole("heading", { name: /Scheduling Intelligence/i })).toBeVisible();
     await expectAnyText(page, [/ready-to-schedule/i, /ready gate/i, /No maps/i, /No create-ready referrals/i], "/admin/scheduling");
-    const reviewRows = page.locator("text=Review only").first();
-    if (await reviewRows.count()) {
-      const reviewSection = page.locator("section").filter({ hasText: /Needs review before scheduling/i });
-      await expect(reviewSection.getByRole("link", { name: /Create visit/i })).toHaveCount(0);
+    const readyReferrals = page.getByTestId("scheduling-ready-referrals");
+    const reviewReferrals = page.getByTestId("scheduling-review-referrals");
+    const upcomingVisits = page.getByTestId("scheduling-upcoming-visits");
+    await expect(readyReferrals).toBeVisible();
+    await expect(reviewReferrals).toBeVisible();
+    await expect(upcomingVisits).toBeVisible();
+
+    const readyCreateVisitLinks = readyReferrals.getByRole("link", { name: /Create visit/i });
+    const readyEmptyStateCount = await readyReferrals.getByText(/No create-ready referrals found/i).count();
+    if (readyEmptyStateCount > 0) {
+      await expect(readyCreateVisitLinks).toHaveCount(0);
+    } else {
+      expect(await readyCreateVisitLinks.count(), "ready scheduling rows should expose manual Create visit links").toBeGreaterThan(0);
     }
+    await expect(reviewReferrals.getByRole("link", { name: /Create visit/i })).toHaveCount(0);
+    await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Duplicate A");
+    await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Duplicate B");
+    await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Non SMS Follow Up");
+    await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Intake Review");
     await screenshot(page, "admin-scheduling.png");
 
     await gotoProtected(page, "/admin/data");

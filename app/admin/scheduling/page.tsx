@@ -251,7 +251,7 @@ export default async function AdminSchedulingPage() {
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <div>
           <h2 className="mb-3 text-xl font-semibold tracking-[-.02em] text-ink">Ready-to-schedule referrals</h2>
-          <div className="overflow-hidden rounded-lg border border-line bg-white">
+          <div data-testid="scheduling-ready-referrals" className="overflow-hidden rounded-lg border border-line bg-white">
             {readyToCreateRows.map((referral: SchedulingQualityReferralRow) => {
               const readiness = getSchedulingReadiness({
                 assignedTherapistId: referral.assignedTherapistId,
@@ -288,7 +288,7 @@ export default async function AdminSchedulingPage() {
           </div>
 
           <h2 className="mb-3 mt-6 text-xl font-semibold tracking-[-.02em] text-ink">Needs review before scheduling</h2>
-          <div className="overflow-hidden rounded-lg border border-line bg-white">
+          <div data-testid="scheduling-review-referrals" className="overflow-hidden rounded-lg border border-line bg-white">
             {needsReviewRows.map((referral: SchedulingQualityReferralRow) => (
               <div key={referral.id} className="grid gap-3 border-b border-line p-4 last:border-b-0 md:grid-cols-[1fr_auto] md:items-center">
                 <div>
@@ -312,7 +312,7 @@ export default async function AdminSchedulingPage() {
 
         <div>
           <h2 className="mb-3 text-xl font-semibold tracking-[-.02em] text-ink">Upcoming/open visits</h2>
-          <div className="overflow-hidden rounded-lg border border-line bg-white">
+          <div data-testid="scheduling-upcoming-visits" className="overflow-hidden rounded-lg border border-line bg-white">
             {visitRows.map((visit: SchedulingVisitRow) => {
               const therapistVisits = visit.therapistId ? openVisits.filter((item) => item.therapistId === visit.therapistId) : [];
               const conflict = detectVisitConflicts({
