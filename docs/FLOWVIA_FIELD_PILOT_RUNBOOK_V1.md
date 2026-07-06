@@ -43,7 +43,7 @@ Internal dashboard/admin/workspace routes:
 - `/dashboard`: Prisma-backed pilot operations overview.
 - `/admin/referrals`: admin referral operations queue.
 - `/admin/referrals/new`: manual fake-data referral intake for pilot testing.
-- `/admin/referrals/[id]`: referral detail, assignment, visit, and audit view.
+- `/admin/referrals/[id]`: admin referral decision workspace with assignment, safe visit history, audit view, readiness blockers, safety guarantees, and gated manual create-visit link.
 - `/admin/visits`: admin visit operations queue.
 - `/admin/visits/new`: manual fake-data visit scheduling.
 - `/admin/visits/[id]`: visit lifecycle detail and audit view.
@@ -291,11 +291,12 @@ Admins should run each pilot day from the internal dashboard shell:
 - Duplicate override reasons must be operational-only. Unsafe override text is blocked before write and audited with safe metadata only.
 - `/admin/referrals/new` previews missing intake fields and warns on possible duplicates before creating a referral.
 - `/admin/referrals` can filter ready-for-scheduling, needs-intake-review, possible-duplicate, missing-therapist, and opted-out queues. The ready-for-scheduling badge must use the same create-visit gate as `/admin/scheduling`.
-- `/admin/referrals/[id]` shows the intake checklist, duplicate warnings, safe intake history, and only links into visit creation when intake and scheduling readiness are both complete.
-- `/admin/scheduling` separates true create-ready referrals from review-only referrals. `/admin/visits/new` blocks selected referrals that fail the gate and writes safe audit metadata for blocked create attempts; no manual override is enabled.
+- `/admin/referrals/[id]` is the authoritative admin decision workspace for one referral. It shows one final decision state, exact deterministic blockers, safe duplicate summaries, missing-intake guidance, safety guarantees, safe intake/audit history, and only links into visit creation when the deterministic create-visit gate passes.
+- `/admin/scheduling` separates true create-ready referrals from review-only referrals. `/admin/visits/new` and referral-detail create attempts block selected referrals that fail the gate and write safe audit metadata for blocked create attempts; no manual override is enabled.
 - `/admin/audit` includes filters for referral intake events, duplicate guard events, unsafe intake notes, and referral readiness changes.
-- `/admin/health` must show referral intake quality enabled, scheduling ready gate enabled, create-visit gate source deterministic referral intake quality, duplicate/non-SMS/intake-review create-visit blocks enabled, manual override disabled, duplicate guard warning-only, deterministic/local duplicate source, auto-assignment disabled, auto visit creation disabled, intake PHI storage disabled, external duplicate APIs disabled, SMS sending from intake disabled, and full phone display disabled/masked.
+- `/admin/health` must show referral intake quality enabled, referral detail decision workspace enabled, referral detail create CTA gate enabled, referral detail review-only blocks enabled, referral detail safety guarantees enabled, scheduling ready gate enabled, create-visit gate source deterministic referral intake quality, duplicate/non-SMS/intake-review create-visit blocks enabled, manual override disabled, duplicate guard warning-only, deterministic/local duplicate source, auto-assignment disabled, auto visit creation disabled, intake PHI storage disabled, external duplicate APIs disabled, SMS sending from intake disabled, and full phone display disabled/masked.
 - Run `pnpm referral:intake-smoke` to verify checklist behavior, duplicate warnings, safe blocked-note metadata, no SMS, no external APIs, and Prisma wrapper use.
+- Run `pnpm referral:detail-smoke` to verify ready CTA eligibility, duplicate/non-SMS/missing/terminal/archived/smoke review-only blockers, health flags, audit-safe rendering, no SMS controls, no external AI/API/maps/geocoding/travel-time/duplicate API calls, and no raw SMS/full-phone/provider-payload/secret/framework-error exposure.
 
 ## Therapist Field Visit Workflow Policy
 
@@ -514,13 +515,13 @@ The workflow layer is dashboard-first. Admins use `/dashboard`, `/admin/referral
 
 ### Admin Schedules Visit
 
-1. Open `/admin/visits/new` or use the Visits section on a referral detail page.
-2. Select referral.
+1. Open `/admin/referrals/[id]` and review the Referral decision panel.
+2. If the panel shows `Ready to create visit`, open the gated `Create visit` link to `/admin/visits/new?referralId=<id>`.
 3. Select therapist.
 4. Set scheduled date/time.
 5. Set visit status: `unscheduled`, `scheduled`, `in_progress`, `completed`, `canceled`, or `no_show`.
 6. Add only non-clinical operational notes.
-7. Review referral intake quality before scheduling. Needs-intake-review warnings should be resolved before creating field work.
+7. Review referral decision blockers before scheduling. Needs-intake-review, duplicate, opted-out/non-SMS, missing therapist, terminal, archived, and smoke/test states are review-only.
 8. Confirm `/admin/visits` and the referral detail audit trail show the visit.
 
 ### Therapist Sees `/my-work`
@@ -641,7 +642,7 @@ Open a referral detail page from the list to:
 - Update referral status using the existing Prisma enum values.
 - Assign or change therapist.
 - Add or update operational notes.
-- Create or update related visits.
+- Open the gated manual create-visit flow only when the Referral decision panel allows it; existing visits can still be updated manually.
 - Review related audit events.
 
 Full address storage is acknowledged but still not broadly displayed. Keep real PHI blocked until PHI policy, retention, backup, incident response, and final access-control review are complete.

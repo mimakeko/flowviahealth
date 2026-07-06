@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarPlus, Save } from "lucide-react";
+import type { PrismaClient } from "@prisma/client";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
 import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getOperationsAssistantV2Status, getReferralAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
+import { activeWorkflowVisitWhere, activeWorkflowWhereClause } from "@/lib/pilot/data-stewardship";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
 import { requirePilotSession } from "@/lib/pilot/auth";
 import {
@@ -30,9 +32,12 @@ import {
   getTherapistFit,
 } from "@/lib/pilot/scheduling-intelligence";
 import {
+  canCreateVisitForReferral,
   evaluateReferralIntakeQuality,
   getReferralDuplicateCandidates,
+  type CreateVisitGateResult,
   type ReferralIntakeDuplicateSource,
+  type ReferralIntakeQualityResult,
 } from "@/lib/pilot/referral-intake-quality";
 import { normalizeE164Phone } from "@/lib/sms/compliance";
 import { getTelnyxConfigStatus } from "@/lib/sms/telnyx";
@@ -89,6 +94,19 @@ const INTAKE_AUDIT_ACTIONS = new Set([
   "operational_note_blocked",
 ]);
 
+type ReferralDecision = {
+  badgeClassName: string;
+  detail: string;
+  nextStep: string;
+  state:
+    | "Ready to create visit"
+    | "Needs intake review"
+    | "Duplicate review required"
+    | "Non-SMS follow-up only"
+    | "Missing therapist assignment"
+    | "Terminal / archived / not schedulable";
+};
+
 function referralNextSteps(status: string) {
   if (status === "new") return "Contact the patient, confirm SMS consent readiness, and assign a therapist.";
   if (status === "contacted") return "Assign a therapist and schedule the first visit.";
@@ -100,6 +118,72 @@ function referralNextSteps(status: string) {
 
 function isUpcomingVisit(visit: ReferralDetailVisit) {
   return Boolean(visit.scheduledAt && !["completed", "canceled", "no_show"].includes(visit.status));
+}
+
+function uniqueStrings(values: readonly string[]) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function getReferralDecision(input: {
+  createVisitGate: CreateVisitGateResult;
+  intakeQuality: ReferralIntakeQualityResult;
+  smsReadiness: string;
+}) {
+  const reasons = input.createVisitGate.reasons;
+  const hasNotSchedulableReason = reasons.some((reason) => (
+    reason.includes("Archived") ||
+    reason.includes("Smoke/test") ||
+    reason.includes("Terminal") ||
+    reason.includes("Existing open/future visit") ||
+    reason.includes("Not in active workflow queue")
+  ));
+  if (input.createVisitGate.allowed) {
+    return {
+      badgeClassName: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+      detail: "All deterministic readiness checks passed for manual visit creation.",
+      nextStep: "Open the Create visit form and submit only after admin review.",
+      state: "Ready to create visit",
+    } satisfies ReferralDecision;
+  }
+  if (hasNotSchedulableReason) {
+    return {
+      badgeClassName: "bg-rose-50 text-rose-800 ring-rose-200",
+      detail: "The referral is terminal, archived, smoke/test, already has an open/future visit, or is outside the active workflow queue.",
+      nextStep: "Review audit history and existing visits. Do not create a new visit from this record unless the workflow is manually corrected first.",
+      state: "Terminal / archived / not schedulable",
+    } satisfies ReferralDecision;
+  }
+  if (input.smsReadiness === "opted_out" || reasons.includes("Non-SMS only")) {
+    return {
+      badgeClassName: "bg-rose-50 text-rose-800 ring-rose-200",
+      detail: "This referral is marked for non-SMS operational follow-up only.",
+      nextStep: "Use non-SMS operational follow-up only. Do not add SMS controls or send messages from this workflow.",
+      state: "Non-SMS follow-up only",
+    } satisfies ReferralDecision;
+  }
+  if (input.intakeQuality.duplicateReviewRequired || input.intakeQuality.duplicateCandidates.length > 0 || reasons.includes("Duplicate review")) {
+    return {
+      badgeClassName: "bg-amber-50 text-amber-900 ring-amber-200",
+      detail: "Local deterministic signals found a possible duplicate. The duplicate guard is warning-only and requires manual review.",
+      nextStep: "Compare the safe duplicate summaries and audit history before deciding whether to continue.",
+      state: "Duplicate review required",
+    } satisfies ReferralDecision;
+  }
+  if (reasons.includes("Missing therapist") || !input.intakeQuality.checklist.hasAssignedTherapist) {
+    return {
+      badgeClassName: "bg-amber-50 text-amber-900 ring-amber-200",
+      detail: "No active therapist assignment is present for this referral.",
+      nextStep: "Choose an active therapist in the manual referral form below. No therapist is auto-assigned.",
+      state: "Missing therapist assignment",
+    } satisfies ReferralDecision;
+  }
+
+  return {
+    badgeClassName: "bg-amber-50 text-amber-900 ring-amber-200",
+    detail: "One or more required fake/pilot intake fields or scheduling readiness checks still need review.",
+    nextStep: "Update the safe operational intake fields and status manually, then re-check this panel.",
+    state: "Needs intake review",
+  } satisfies ReferralDecision;
 }
 
 function duplicateSources(rows: DuplicateReferralRow[]): ReferralIntakeDuplicateSource[] {
@@ -115,6 +199,92 @@ function duplicateSources(rows: DuplicateReferralRow[]): ReferralIntakeDuplicate
     status: row.status,
     zip: row.zip,
   }));
+}
+
+async function getCreateVisitGateForReferral(prisma: PrismaClient, referralId: string): Promise<CreateVisitGateResult | null> {
+  const referral = await prisma.patientReferral.findUnique({
+    include: {
+      assignedTherapist: { select: { name: true } },
+      visits: {
+        select: { id: true },
+        where: { status: { in: ["scheduled", "in_progress"] } },
+      },
+    },
+    where: { id: referralId },
+  });
+  if (!referral) return null;
+
+  const [activeWorkflowVisible, smsConsent, duplicateRows] = await Promise.all([
+    prisma.patientReferral.count({ where: activeWorkflowWhereClause({ id: referral.id }) }),
+    prisma.smsConsentEnrollment.findUnique({
+      select: { status: true },
+      where: { normalizedPhone: normalizeE164Phone(referral.phone) },
+    }),
+    prisma.patientReferral.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        assignedTherapist: { select: { name: true } },
+        assignedTherapistId: true,
+        city: true,
+        createdAt: true,
+        id: true,
+        patientName: true,
+        phone: true,
+        status: true,
+        visits: {
+          select: { id: true },
+          where: { status: { in: ["scheduled", "in_progress"] } },
+        },
+        zip: true,
+      },
+      take: 150,
+      where: activeWorkflowWhereClause({ status: { notIn: ["completed", "canceled"] } }),
+    }),
+  ]);
+  const duplicateCandidates = getReferralDuplicateCandidates({
+    draft: {
+      assignedTherapistId: referral.assignedTherapistId,
+      assignedTherapistName: referral.assignedTherapist?.name,
+      city: referral.city,
+      createdAt: referral.createdAt,
+      id: referral.id,
+      patientName: referral.patientName,
+      phone: referral.phone,
+      status: referral.status,
+      zip: referral.zip,
+    },
+    sources: duplicateSources(duplicateRows as DuplicateReferralRow[]),
+  });
+  const intakeQuality = evaluateReferralIntakeQuality({
+    assignedTherapistId: referral.assignedTherapistId,
+    assignedTherapistName: referral.assignedTherapist?.name,
+    careType: referral.careType,
+    city: referral.city,
+    duplicateCandidates,
+    patientName: referral.patientName,
+    phone: referral.phone,
+    smsConsentStatus: smsConsent?.status || "none",
+    status: referral.status,
+    zip: referral.zip,
+  });
+
+  return canCreateVisitForReferral({
+    activeWorkflowVisible: activeWorkflowVisible > 0,
+    assignedTherapistId: referral.assignedTherapistId,
+    assignedTherapistName: referral.assignedTherapist?.name,
+    careType: referral.careType,
+    city: referral.city,
+    duplicateCandidates,
+    futureVisitCount: referral.visits.length,
+    intakeQuality,
+    notes: referral.notes,
+    patientName: referral.patientName,
+    phone: referral.phone,
+    referralSource: referral.referralSource,
+    smsConsentStatus: smsConsent?.status || "none",
+    status: referral.status,
+    zip: referral.zip,
+  });
 }
 
 async function updateReferralAction(formData: FormData) {
@@ -239,6 +409,27 @@ async function saveVisitAction(formData: FormData) {
   });
   if (blockedNoteSearch) redirect(`/admin/referrals/${referralId}?${blockedNoteSearch}`);
 
+  if (!visitId) {
+    const createVisitGate = await getCreateVisitGateForReferral(prisma, referralId);
+    if (!createVisitGate) notFound();
+    if (!createVisitGate.allowed) {
+      await prisma.auditLog.create({
+        data: {
+          actorType: "pilot_admin",
+          action: "visit_create_blocked",
+          entityType: "PatientReferral",
+          entityId: referralId,
+          metadataJson: {
+            reason: createVisitGate.reasons.slice(0, 5).join(","),
+            route: `/admin/referrals/${referralId}`,
+            severity: createVisitGate.severity,
+          },
+        },
+      });
+      redirect(`/admin/referrals/${referralId}?error=visit_create_blocked`);
+    }
+  }
+
   const existingVisit = visitId ? await prisma.visit.findUnique({ select: { status: true }, where: { id: visitId } }) : null;
   const visit = visitId
     ? await prisma.visit.update({
@@ -342,7 +533,7 @@ export default async function ReferralDetailPage({
   const therapistOptions = therapists as TherapistOption[];
   const upcomingVisits = referralVisits.filter(isUpcomingVisit);
 
-  const [auditLogs, smsConsent, duplicateRows] = await Promise.all([
+  const [auditLogs, smsConsent, duplicateRows, activeWorkflowVisible] = await Promise.all([
     prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
       take: 30,
@@ -374,12 +565,14 @@ export default async function ReferralDetailPage({
         zip: true,
       },
       take: 150,
-      where: { status: { notIn: ["completed", "canceled"] } },
+      where: activeWorkflowWhereClause({ status: { notIn: ["completed", "canceled"] } }),
     }),
+    prisma.patientReferral.count({ where: activeWorkflowWhereClause({ id: referral.id }) }),
   ]);
   const referralAuditLogs = auditLogs as AuditLogListItem[];
   const intakeAuditLogs = referralAuditLogs.filter((log: AuditLogListItem) => INTAKE_AUDIT_ACTIONS.has(log.action));
   const smsReadiness = smsConsent?.status || "none";
+  const futureOpenVisitCount = referralVisits.filter((visit: ReferralDetailVisit) => ["scheduled", "in_progress"].includes(visit.status)).length;
   const duplicateCandidates = getReferralDuplicateCandidates({
     draft: {
       assignedTherapistId: referral.assignedTherapistId,
@@ -406,14 +599,44 @@ export default async function ReferralDetailPage({
     status: referral.status,
     zip: referral.zip,
   });
+  const createVisitGate = canCreateVisitForReferral({
+    activeWorkflowVisible: activeWorkflowVisible > 0,
+    assignedTherapistId: referral.assignedTherapistId,
+    assignedTherapistName: referral.assignedTherapist?.name,
+    careType: referral.careType,
+    city: referral.city,
+    duplicateCandidates,
+    futureVisitCount: futureOpenVisitCount,
+    intakeQuality,
+    notes: referral.notes,
+    patientName: referral.patientName,
+    phone: referral.phone,
+    referralSource: referral.referralSource,
+    smsConsentStatus: smsReadiness,
+    status: referral.status,
+    zip: referral.zip,
+  });
+  const referralDecision = getReferralDecision({ createVisitGate, intakeQuality, smsReadiness });
+  const decisionReasons = uniqueStrings([
+    ...createVisitGate.reasons,
+    ...intakeQuality.warnings.map((item) => item.label),
+  ]);
+  const missingItems = intakeQuality.warnings.filter((item) => [
+    "missing_phone",
+    "missing_city",
+    "missing_zip",
+    "missing_service_area",
+  ].includes(item.code));
   const telnyx = getTelnyxConfigStatus();
   const assignedTherapistOpenVisits = referral.assignedTherapistId
     ? await prisma.visit.findMany({
         orderBy: { scheduledAt: "asc" },
         select: { id: true, scheduledAt: true, status: true },
         where: {
-          therapistId: referral.assignedTherapistId,
-          status: { in: ["scheduled", "in_progress"] },
+          ...activeWorkflowVisitWhere({
+            therapistId: referral.assignedTherapistId,
+            status: { in: ["scheduled", "in_progress"] },
+          }),
         },
       })
     : [];
@@ -512,24 +735,59 @@ export default async function ReferralDetailPage({
 
           <BlockedNoteAlert className="mt-5" searchParams={query} />
 
+          {query?.error === "visit_create_blocked" ? (
+            <section className="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-950">
+              Visit creation was blocked by the deterministic scheduling ready gate. Review the referral decision panel before trying again.
+            </section>
+          ) : null}
+
           <section className="mt-5 rounded-lg border border-line bg-white p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="eyebrow">Intake quality</p>
-                <h2 className="mt-2 text-xl font-semibold tracking-[-.02em] text-ink">{intakeQuality.readinessLabel}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">Deterministic local checks only. Duplicate guard is warning-only and does not assign therapists, create visits, send SMS, or call external APIs.</p>
+                <p className="eyebrow">Referral decision</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">{referralDecision.state}</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{referralDecision.detail}</p>
               </div>
-              <span className={`inline-flex w-fit rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ${intakeQuality.readinessLevel === "ready" ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : intakeQuality.readinessLevel === "blocked" ? "bg-rose-50 text-rose-800 ring-rose-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>
-                {intakeQuality.readinessLevel.replaceAll("_", " ")}
+              <span className={`inline-flex w-fit rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ${referralDecision.badgeClassName}`}>
+                {createVisitGate.allowed ? "create allowed" : "review only"}
               </span>
             </div>
 
-            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.maskedPhone}</dd></div>
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Therapist</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.therapistLabel}</dd></div>
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Location</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.city} / {intakeQuality.safeDisplay.zip}</dd></div>
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">SMS consent</dt><dd className="mt-1 text-slate-600">{statusLabel(smsReadiness)} · SMS not required for scheduling</dd></div>
-            </dl>
+            <div className={`mt-4 rounded-lg border p-4 text-sm leading-6 ${createVisitGate.allowed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
+              <p className="font-semibold">Next manual admin step</p>
+              <p className="mt-1">{referralDecision.nextStep}</p>
+              {createVisitGate.allowed ? (
+                <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-primary mt-3">
+                  <CalendarPlus size={18} />
+                  Create visit
+                </Link>
+              ) : (
+                <p className="mt-3 rounded-md bg-white/70 p-2 font-semibold">Create visit is suppressed until review blockers are resolved.</p>
+              )}
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
+              <div className="rounded-lg border border-line bg-slate-50 p-4">
+                <p className="font-semibold text-ink">Deterministic blockers and reasons</p>
+                <div className="mt-3 grid gap-2">
+                  {decisionReasons.length > 0 ? decisionReasons.map((reason) => (
+                    <p key={reason} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-line">{reason}</p>
+                  )) : (
+                    <p className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200">No readiness blockers found.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-line bg-slate-50 p-4">
+                <p className="font-semibold text-ink">Safe referral signals</p>
+                <dl className="mt-3 grid gap-3 text-sm">
+                  <div><dt className="font-semibold text-ink">Masked phone</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.maskedPhone}</dd></div>
+                  <div><dt className="font-semibold text-ink">Therapist</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.therapistLabel}</dd></div>
+                  <div><dt className="font-semibold text-ink">City / ZIP</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.city} / {intakeQuality.safeDisplay.zip}</dd></div>
+                  <div><dt className="font-semibold text-ink">SMS consent</dt><dd className="mt-1 text-slate-600">{statusLabel(smsReadiness)}{smsReadiness === "opted_out" ? " · Use non-SMS operational follow-up only" : " · No SMS controls here"}</dd></div>
+                </dl>
+              </div>
+            </div>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {Object.entries(intakeQuality.checklist).map(([key, value]) => (
@@ -538,6 +796,17 @@ export default async function ReferralDetailPage({
                 </p>
               ))}
             </div>
+
+            {missingItems.length > 0 ? (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+                <p className="font-semibold">Missing intake checklist</p>
+                <div className="mt-3 grid gap-2">
+                  {missingItems.map((item) => (
+                    <p key={item.code} className="rounded-md bg-white/70 p-2"><span className="font-semibold">{item.label}:</span> {item.nextAction}</p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {intakeQuality.warnings.length > 0 ? (
               <div className="mt-4 grid gap-2">
@@ -565,14 +834,22 @@ export default async function ReferralDetailPage({
               </div>
             ) : null}
 
-            {intakeQuality.schedulingReady && schedulingReadiness.readiness === "ready_to_schedule" ? (
-              <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-secondary mt-4">
-                <CalendarPlus size={18} />
-                Ready for scheduling
-              </Link>
-            ) : (
-              <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">Needs review before scheduling. Complete the intake checklist before opening the visit creation flow.</p>
-            )}
+            <div className="mt-4 rounded-lg border border-line bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+              <p className="font-semibold text-ink">Safety guarantees</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {[
+                  "Deterministic/local data only",
+                  "No SMS sent",
+                  "No autonomous scheduling",
+                  "No external duplicate API",
+                  "No maps/geocoding/travel-time API",
+                  "No PHI storage in notes",
+                  "Manual admin review required",
+                ].map((item) => (
+                  <p key={item} className="rounded-md bg-white px-3 py-2 font-semibold ring-1 ring-line">{item}</p>
+                ))}
+              </div>
+            </div>
           </section>
 
           <div className="mt-5">
@@ -591,10 +868,10 @@ export default async function ReferralDetailPage({
               summary="Referral scheduling readiness uses fake pilot status, therapist assignment, SMS consent state, and existing future visits. Suggested windows require manual review."
               windows={suggestedWindows}
             />
-            {intakeQuality.schedulingReady && schedulingReadiness.readiness === "ready_to_schedule" ? (
+            {createVisitGate.allowed ? (
               <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-secondary mt-4">
                 <CalendarPlus size={18} />
-                Open New Visit flow
+                Open Create visit flow
               </Link>
             ) : null}
           </div>
@@ -661,14 +938,18 @@ export default async function ReferralDetailPage({
           {referralVisits.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No visits created yet.</p> : null}
         </div>
 
-        <form action={saveVisitAction} className="mt-6 grid gap-4 border-t border-line pt-6 md:grid-cols-4">
-          <input type="hidden" name="referralId" value={referral.id} />
-          <label className="text-sm font-semibold text-ink">Scheduled<input className="field" name="scheduledAt" type="datetime-local" /></label>
-          <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue="scheduled">{VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
-          <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue={referral.assignedTherapistId || ""}><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
-          <label className="text-sm font-semibold text-ink">Operational note<input className="field" name="notes" placeholder="No PHI" /></label>
-          <div className="md:col-span-4"><button className="btn-primary" type="submit"><CalendarPlus size={18} />Create visit</button></div>
-        </form>
+        <div className="mt-6 border-t border-line pt-6">
+          {createVisitGate.allowed ? (
+            <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-primary">
+              <CalendarPlus size={18} />
+              Create visit
+            </Link>
+          ) : (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-950">
+              Create visit is review-only from this referral. Resolve the decision panel blockers before opening the manual visit creation flow.
+            </p>
+          )}
+        </div>
       </section>
     </div>
   );
