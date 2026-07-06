@@ -224,6 +224,12 @@ export default async function AdminHealthPage() {
     { icon: ShieldCheck, metric: { label: "Webhook preservation", value: demoResetStatus.webhookPreservationEnforced ? "Enforced" : "Not enforced", tone: demoResetStatus.webhookPreservationEnforced ? "good" : "warn" } },
     { icon: ShieldCheck, metric: { label: "Consent preservation", value: demoResetStatus.consentPreservationEnforced ? "Enforced" : "Not enforced", tone: demoResetStatus.consentPreservationEnforced ? "good" : "warn" } },
     { icon: ShieldCheck, metric: { label: "Hard delete mode", value: demoResetStatus.hardDeleteMode, tone: demoResetStatus.hardDeleteMode === "disabled" ? "good" : "warn" } },
+    { icon: Archive, metric: { label: "Archived workflow rows hidden", value: demoResetStatus.archivedWorkflowRowsHidden ? "Enabled" : "Disabled", tone: demoResetStatus.archivedWorkflowRowsHidden ? "good" : "warn" } },
+    { icon: Archive, metric: { label: "Smoke/test active queue exclusion", value: demoResetStatus.smokeTestActiveQueueExclusionEnabled ? "Enabled" : "Disabled", tone: demoResetStatus.smokeTestActiveQueueExclusionEnabled ? "good" : "warn" } },
+    { icon: Archive, metric: { label: "Demo reset archive-first", value: demoResetStatus.demoResetArchiveFirst ? "Enabled" : "Disabled", tone: demoResetStatus.demoResetArchiveFirst ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Protected history preserved", value: demoResetStatus.hardDeleteProtectedHistoryDisabled ? "Enforced" : "Not enforced", tone: demoResetStatus.hardDeleteProtectedHistoryDisabled ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Audit/SMS/webhook/consent hard delete", value: demoResetStatus.hardDeleteProtectedHistoryDisabled ? "Disabled" : "Enabled", tone: demoResetStatus.hardDeleteProtectedHistoryDisabled ? "good" : "warn" } },
+    { icon: Database, metric: { label: "Active queue source", value: demoResetStatus.activeQueueSource, tone: "good" } },
     { icon: ShieldCheck, metric: { label: "Real data reset", value: demoResetStatus.realDataResetEnabled ? "Enabled" : "Disabled", tone: demoResetStatus.realDataResetEnabled ? "warn" : "good" } },
     { icon: ShieldCheck, metric: { label: "External reset APIs", value: demoResetStatus.externalResetApisEnabled ? "Enabled" : "Disabled", tone: demoResetStatus.externalResetApisEnabled ? "warn" : "good" } },
   ];

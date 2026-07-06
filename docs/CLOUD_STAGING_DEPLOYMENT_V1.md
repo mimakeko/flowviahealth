@@ -256,12 +256,12 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 - `/admin/data` provides admin-only pilot reset/demo controls inside the dashboard shell.
 - Archive smoke/test clutter requires exact confirmation `ARCHIVE SMOKE TEST DATA`.
 - Reset demo scenarios requires exact confirmation `RESET DEMO SCENARIOS`.
-- Smoke/test archive marks explicit fake/smoke/test operational referrals and visits with stewardship archive markers and deactivates smoke therapists; it does not delete audit logs, SMS messages, Telnyx webhook events, or consent enrollments.
-- Demo reset archives old fake/demo operational records, marks old open demo workflows terminal, then seeds selected fake/demo scenarios for referral intake, scheduling, visits, therapist field work, duplicate review, opt-out review, completed recent work, and no-show follow-up.
-- Archived operational rows are hidden from normal referral, visit, scheduling, and therapist queues by the archive marker, but audit and protected history remain queryable.
+- Smoke/test archive marks explicit fake/smoke/test operational referrals and visits with stewardship archive markers, moves open smoke/test operational records out of active statuses, and deactivates smoke therapists; it does not delete audit logs, SMS messages, Telnyx webhook events, or consent enrollments.
+- Demo reset archives old fake/demo and explicit smoke/test operational records, marks old open fake workflows terminal, then seeds selected fake/demo scenarios for referral intake, scheduling, visits, therapist field work, duplicate review, opt-out review, completed recent work, and no-show follow-up.
+- Normal workflow queues (`/dashboard`, `/admin/referrals`, `/admin/visits`, `/admin/scheduling`, and `/my-work`) exclude archived operational rows and explicit smoke/test operational rows by default, but audit and protected history remain queryable.
 - Hard delete mode is disabled. Real data reset is disabled. External reset APIs are disabled.
 - Data reset/demo tools must not send SMS, expose full phone numbers, expose raw SMS bodies, expose provider payloads, call external AI/APIs, call maps/geocoding/travel-time APIs, or reset real patient data.
-- Before/after deploy, confirm `/admin/health` reports pilot demo reset tools enabled, smoke/test archive enabled, demo scenario seeding enabled, audit/SMS/webhook/consent preservation enforced, hard delete mode disabled, real data reset disabled, and external reset APIs disabled.
+- Before/after deploy, confirm `/admin/health` reports pilot demo reset tools enabled, smoke/test archive enabled, demo scenario seeding enabled, archived workflow rows hidden, smoke/test active queue exclusion enabled, demo reset archive-first enabled, audit/SMS/webhook/consent preservation enforced, hard delete mode disabled, real data reset disabled, and external reset APIs disabled.
 - Run `pnpm data:demo-smoke` after changes to Data Stewardship reset, archive, demo scenario seeding, health flags, or audit filters.
 
 ## Therapist Field Visit Workflow Policy

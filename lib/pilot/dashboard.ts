@@ -1,4 +1,5 @@
 import { getPrismaClient } from "@/lib/db/prisma";
+import { activeWorkflowVisitWhere, activeWorkflowWhereClause, smokeOperationalReferralWhere } from "@/lib/pilot/data-stewardship";
 
 const recentAuditWindowDays = 7;
 
@@ -151,24 +152,25 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
     prisma.patientReferral.groupBy({
       by: ["status"],
       _count: { _all: true },
+      where: activeWorkflowWhereClause(),
     }),
-    prisma.patientReferral.count(),
-    prisma.visit.count({ where: { status: { in: ["scheduled", "in_progress"] } } }),
-    prisma.visit.count({ where: { status: "unscheduled" } }),
-    prisma.visit.count({ where: { status: "completed" } }),
+    prisma.patientReferral.count({ where: activeWorkflowWhereClause() }),
+    prisma.visit.count({ where: activeWorkflowVisitWhere({ status: { in: ["scheduled", "in_progress"] } }) }),
+    prisma.visit.count({ where: activeWorkflowVisitWhere({ status: "unscheduled" }) }),
+    prisma.visit.count({ where: activeWorkflowVisitWhere({ status: "completed" }) }),
     prisma.patientReferral.count({
-      where: {
+      where: activeWorkflowWhereClause({
         status: "contacted",
         visits: { none: { status: { in: ["scheduled", "in_progress"] } } },
-      },
+      }),
     }),
     prisma.smsConsentEnrollment.count({ where: { status: "pending_confirmation" } }),
     prisma.smsConsentEnrollment.count({ where: { status: "opted_out" } }),
     prisma.visit.count({
-      where: {
+      where: activeWorkflowVisitWhere({
         scheduledAt: { lt: new Date() },
         status: { in: ["scheduled", "in_progress"] },
-      },
+      }),
     }),
     prisma.smsMessage.groupBy({
       by: ["direction"],
@@ -178,28 +180,22 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
     prisma.auditLog.count({ where: { createdAt: { gte: recentAuditSince } } }),
     prisma.therapist.count({ where: { active: true } }),
     prisma.visit.count({
-      where: {
+      where: activeWorkflowVisitWhere({
         scheduledAt: {
           gte: new Date(),
           lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
         status: { in: ["scheduled", "in_progress"] },
-      },
+      }),
     }),
     prisma.patientReferral.count({
-      where: {
-        OR: [
-          { referralSource: { contains: "smoke" } },
-          { patientName: { startsWith: "Smoke" } },
-          { patientName: { startsWith: "Ops Guardrail Smoke" } },
-        ],
-      },
+      where: activeWorkflowWhereClause(smokeOperationalReferralWhere()),
     }),
     prisma.patientReferral.count({
-      where: {
+      where: activeWorkflowWhereClause({
         assignedTherapistId: null,
         status: { notIn: ["completed", "canceled"] },
-      },
+      }),
     }),
     prisma.visit.findMany({
       include: {
@@ -218,9 +214,9 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
       },
       orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
       take: 5,
-      where: {
+      where: activeWorkflowVisitWhere({
         status: { in: ["scheduled", "in_progress"] },
-      },
+      }),
     }),
     prisma.patientReferral.findMany({
       include: {
@@ -240,6 +236,7 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
       },
       orderBy: { updatedAt: "desc" },
       take: 5,
+      where: activeWorkflowWhereClause(),
     }),
     prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
@@ -332,47 +329,47 @@ export async function getTherapistDashboardSnapshot(email: string): Promise<Ther
 
   const assignedReferralIdsPromise = prisma.patientReferral.findMany({
     select: { id: true },
-    where: { assignedTherapistId: therapist.id },
+    where: activeWorkflowWhereClause({ assignedTherapistId: therapist.id }),
   });
 
   const [assignedReferralIds, assignedReferrals, readyToSchedule, upcomingVisits, needsContact, inProgressVisits, recentlyCompleted, recentReferrals] = await Promise.all([
     assignedReferralIdsPromise,
     prisma.patientReferral.count({
-      where: {
+      where: activeWorkflowWhereClause({
         assignedTherapistId: therapist.id,
         status: { notIn: ["completed", "canceled"] },
-      },
+      }),
     }),
     prisma.patientReferral.count({
-      where: {
+      where: activeWorkflowWhereClause({
         assignedTherapistId: therapist.id,
         status: "contacted",
-      },
+      }),
     }),
     prisma.visit.count({
-      where: {
+      where: activeWorkflowVisitWhere({
         therapistId: therapist.id,
         status: { in: ["scheduled", "in_progress"] },
-      },
+      }),
     }),
     prisma.patientReferral.count({
-      where: {
+      where: activeWorkflowWhereClause({
         assignedTherapistId: therapist.id,
         status: "new",
-      },
+      }),
     }),
     prisma.visit.count({
-      where: {
+      where: activeWorkflowVisitWhere({
         therapistId: therapist.id,
         status: "in_progress",
-      },
+      }),
     }),
     prisma.visit.count({
-      where: {
+      where: activeWorkflowVisitWhere({
         therapistId: therapist.id,
         status: "completed",
         updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-      },
+      }),
     }),
     prisma.patientReferral.findMany({
       include: {
@@ -387,9 +384,9 @@ export async function getTherapistDashboardSnapshot(email: string): Promise<Ther
       },
       orderBy: { updatedAt: "desc" },
       take: 5,
-      where: {
+      where: activeWorkflowWhereClause({
         assignedTherapistId: therapist.id,
-      },
+      }),
     }),
   ]);
   const assignedReferralIdRows = assignedReferralIds as AssignedReferralIdRow[];

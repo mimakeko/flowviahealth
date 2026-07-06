@@ -79,6 +79,8 @@ const DATA_STEWARDSHIP_ACTIONS = [
 
 const SAFE_METADATA_KEYS = new Set([
   "archivedReferralCount",
+  "archivedSmokeReferralCount",
+  "archivedSmokeVisitCount",
   "archivedVisitCount",
   "assignedTherapistId",
   "attemptedAction",

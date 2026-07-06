@@ -22,8 +22,15 @@ type StewardshipPrisma = PrismaClient | Prisma.TransactionClient;
 
 type ReferralLike = {
   careType?: string | null;
+  notes?: string | null;
   patientName?: string | null;
   referralSource?: string | null;
+  status?: string | null;
+};
+
+type VisitLike = {
+  notes?: string | null;
+  status?: string | null;
 };
 
 export type DemoScenarioKey =
@@ -104,6 +111,31 @@ const therapistSeeds = [
   },
 ] as const;
 
+function hasSmokeTestText(value: string | null | undefined) {
+  return /\b(smoke|test|browser confirmation|referral intake smoke|visits workflow smoke|therapist field smoke|therapist confirmation smoke|ops guardrail smoke)\b/i.test(value || "");
+}
+
+export function isArchivedOperationalRecord(record: { notes?: string | null }) {
+  return isArchivedNote(record.notes);
+}
+
+export function isSmokeTestOperationalRecord(record: ReferralLike | VisitLike) {
+  return (
+    hasSmokeTestText(record.notes) ||
+    ("referralSource" in record && hasSmokeTestText(record.referralSource)) ||
+    ("patientName" in record && hasSmokeTestText(record.patientName)) ||
+    ("careType" in record && hasSmokeTestText(record.careType))
+  );
+}
+
+export function isDemoOperationalRecord(record: ReferralLike) {
+  return record.referralSource === DEMO_SOURCE || record.referralSource === DEMO_SCENARIO_SOURCE || Boolean(record.patientName?.includes("Demo"));
+}
+
+export function isActiveWorkflowRecord(record: ReferralLike | VisitLike) {
+  return !isArchivedOperationalRecord(record) && !isSmokeTestOperationalRecord(record) && record.status !== "completed" && record.status !== "canceled";
+}
+
 function isArchivedNote(notes: string | null | undefined) {
   return Boolean(notes?.includes(STEWARDSHIP_ARCHIVE_MARKER));
 }
@@ -122,19 +154,7 @@ export function isExplicitFakePilotReferralLike(referral: ReferralLike) {
 }
 
 export function isExplicitSmokeTestReferralLike(referral: ReferralLike) {
-  return (
-    referral.referralSource === DB_SMOKE_SOURCE ||
-    referral.referralSource === OPS_GUARDRAIL_SMOKE_SOURCE ||
-    Boolean(referral.referralSource?.includes("smoke")) ||
-    Boolean(referral.patientName?.startsWith("Smoke")) ||
-    Boolean(referral.patientName?.startsWith("Ops Guardrail Smoke")) ||
-    Boolean(referral.patientName?.includes("Smoke")) ||
-    Boolean(referral.patientName?.includes("Browser Confirmation")) ||
-    Boolean(referral.patientName?.includes("Referral Intake Smoke")) ||
-    Boolean(referral.patientName?.includes("Visits Workflow Smoke")) ||
-    Boolean(referral.patientName?.includes("Therapist Field Smoke")) ||
-    Boolean(referral.careType?.startsWith("Smoke test"))
-  );
+  return referral.referralSource === DB_SMOKE_SOURCE || referral.referralSource === OPS_GUARDRAIL_SMOKE_SOURCE || isSmokeTestOperationalRecord(referral);
 }
 
 export function fakePilotReferralWhere(): Prisma.PatientReferralWhereInput {
@@ -171,14 +191,31 @@ export function smokeOperationalReferralWhere(): Prisma.PatientReferralWhereInpu
       { referralSource: DB_SMOKE_SOURCE },
       { referralSource: OPS_GUARDRAIL_SMOKE_SOURCE },
       { referralSource: { contains: "smoke" } },
+      { referralSource: { contains: "test" } },
       { patientName: { startsWith: "Smoke" } },
       { patientName: { startsWith: "Ops Guardrail Smoke" } },
       { patientName: { contains: "Smoke" } },
+      { patientName: { contains: "Test" } },
       { patientName: { contains: "Browser Confirmation" } },
       { patientName: { contains: "Referral Intake Smoke" } },
       { patientName: { contains: "Visits Workflow Smoke" } },
       { patientName: { contains: "Therapist Field Smoke" } },
+      { patientName: { contains: "Therapist Confirmation Smoke" } },
+      { notes: { contains: "Smoke" } },
+      { notes: { contains: "Test" } },
+      { notes: { contains: "Browser Confirmation" } },
       { careType: { startsWith: "Smoke test" } },
+      { careType: { contains: "Smoke" } },
+      { careType: { contains: "Test" } },
+    ],
+  };
+}
+
+export function excludeArchivedOperationalWhereClause(): Prisma.PatientReferralWhereInput {
+  return {
+    OR: [
+      { notes: null },
+      { NOT: { notes: { contains: STEWARDSHIP_ARCHIVE_MARKER } } },
     ],
   };
 }
@@ -187,12 +224,7 @@ export function activeOperationalReferralWhere(baseWhere: Prisma.PatientReferral
   return {
     AND: [
       baseWhere,
-      {
-        OR: [
-          { notes: null },
-          { NOT: { notes: { contains: STEWARDSHIP_ARCHIVE_MARKER } } },
-        ],
-      },
+      excludeArchivedOperationalWhereClause(),
     ],
   };
 }
@@ -200,10 +232,30 @@ export function activeOperationalReferralWhere(baseWhere: Prisma.PatientReferral
 const unarchivedWhere = activeOperationalReferralWhere;
 
 export function visibleOperationalReferralWhere(): Prisma.PatientReferralWhereInput {
+  return excludeArchivedOperationalWhereClause();
+}
+
+export function activeWorkflowWhereClause(baseWhere: Prisma.PatientReferralWhereInput = {}): Prisma.PatientReferralWhereInput {
+  return {
+    AND: [
+      baseWhere,
+      excludeArchivedOperationalWhereClause(),
+      { NOT: smokeOperationalReferralWhere() },
+    ],
+  };
+}
+
+export function smokeOperationalVisitWhere(): Prisma.VisitWhereInput {
   return {
     OR: [
-      { notes: null },
-      { NOT: { notes: { contains: STEWARDSHIP_ARCHIVE_MARKER } } },
+      { referral: smokeOperationalReferralWhere() },
+      { therapist: { name: { contains: "Smoke" } } },
+      { therapist: { name: { contains: "Test" } } },
+      { therapist: { email: { contains: ".smoke." } } },
+      { therapist: { email: { contains: ".test." } } },
+      { notes: { contains: "Smoke" } },
+      { notes: { contains: "Test" } },
+      { notes: { contains: "Browser Confirmation" } },
     ],
   };
 }
@@ -220,6 +272,16 @@ export function visibleOperationalVisitWhere(): Prisma.VisitWhereInput {
       {
         referral: visibleOperationalReferralWhere(),
       },
+    ],
+  };
+}
+
+export function activeWorkflowVisitWhere(baseWhere: Prisma.VisitWhereInput = {}): Prisma.VisitWhereInput {
+  return {
+    AND: [
+      baseWhere,
+      visibleOperationalVisitWhere(),
+      { NOT: smokeOperationalVisitWhere() },
     ],
   };
 }
@@ -587,6 +649,33 @@ async function archiveVisits(prisma: StewardshipPrisma, referralIds: string[], r
   return visits.length;
 }
 
+async function archiveVisitsByWhere(prisma: StewardshipPrisma, where: Prisma.VisitWhereInput, reason: string) {
+  const visits = await prisma.visit.findMany({
+    select: { id: true, notes: true },
+    where: {
+      AND: [
+        where,
+        visibleOperationalVisitWhere(),
+      ],
+    },
+    take: 500,
+  });
+
+  await Promise.all(
+    visits.map((visit) =>
+      prisma.visit.update({
+        where: { id: visit.id },
+        data: {
+          notes: appendStewardshipNote(visit.notes, `${reason} ${STEWARDSHIP_ARCHIVE_MARKER}`),
+          status: "canceled",
+        },
+      }),
+    ),
+  );
+
+  return visits.length;
+}
+
 export async function archiveCompletedCanceledFakeReferrals(prisma: PrismaClient, actorId: string) {
   return prisma.$transaction(async (tx) => {
     const referrals = await tx.patientReferral.findMany({
@@ -638,7 +727,27 @@ export async function archiveSmokeTestOperationalRecords(prisma: PrismaClient, a
     });
     const referralIds = referrals.map((referral) => referral.id);
     await archiveReferrals(tx, referrals, "Stewardship cleanup: smoke-test operational record archived.");
-    const archivedVisitCount = await archiveVisits(tx, referralIds, "Stewardship cleanup: smoke-test visit archived.");
+    const archivedReferralVisitCount = await archiveVisits(tx, referralIds, "Stewardship cleanup: smoke-test visit archived.");
+    const archivedDirectVisitCount = await archiveVisitsByWhere(tx, smokeOperationalVisitWhere(), "Stewardship cleanup: smoke-test visit archived.");
+    const archivedVisitCount = archivedReferralVisitCount + archivedDirectVisitCount;
+    if (referralIds.length > 0) {
+      await Promise.all([
+        tx.patientReferral.updateMany({
+          where: {
+            id: { in: referralIds },
+            status: { notIn: ["completed", "canceled"] },
+          },
+          data: { status: "canceled" },
+        }),
+        tx.visit.updateMany({
+          where: {
+            referralId: { in: referralIds },
+            status: { in: ["unscheduled", "scheduled", "in_progress"] },
+          },
+          data: { status: "canceled" },
+        }),
+      ]);
+    }
     const therapists = await tx.therapist.updateMany({
       where: {
         OR: [
@@ -697,6 +806,33 @@ export async function resetDemoScenarios(
       tx.smsConsentEnrollment.count(),
     ]);
     const archived = await archiveDemoOperationalRecords(tx);
+    const smokeReferrals = await tx.patientReferral.findMany({
+      select: { id: true, notes: true },
+      where: unarchivedWhere(smokeOperationalReferralWhere()),
+      take: 500,
+    });
+    const smokeReferralIds = smokeReferrals.map((referral) => referral.id);
+    await archiveReferrals(tx, smokeReferrals, "Stewardship reset: smoke-test operational record archived.");
+    const archivedSmokeReferralVisitCount = await archiveVisits(tx, smokeReferralIds, "Stewardship reset: smoke-test visit archived.");
+    const archivedSmokeDirectVisitCount = await archiveVisitsByWhere(tx, smokeOperationalVisitWhere(), "Stewardship reset: smoke-test visit archived.");
+    if (smokeReferralIds.length > 0) {
+      await Promise.all([
+        tx.patientReferral.updateMany({
+          where: {
+            id: { in: smokeReferralIds },
+            status: { notIn: ["completed", "canceled"] },
+          },
+          data: { status: "canceled" },
+        }),
+        tx.visit.updateMany({
+          where: {
+            referralId: { in: smokeReferralIds },
+            status: { in: ["unscheduled", "scheduled", "in_progress"] },
+          },
+          data: { status: "canceled" },
+        }),
+      ]);
+    }
     const seeded = await seedDemoScenariosInTransaction(tx, scenarioKeys);
     const after = await Promise.all([
       tx.auditLog.count(),
@@ -714,6 +850,8 @@ export async function resetDemoScenarios(
           entityType: "PilotData",
           metadataJson: {
             archivedReferralCount: archived.referralCount,
+            archivedSmokeReferralCount: smokeReferrals.length,
+            archivedSmokeVisitCount: archivedSmokeReferralVisitCount + archivedSmokeDirectVisitCount,
             archivedVisitCount: archived.visitCount,
             auditPreserved: after[0] >= before[0],
             cleanupMode: DATA_STEWARDSHIP_CLEANUP_MODE,
@@ -751,6 +889,8 @@ export async function resetDemoScenarios(
 
     return {
       archivedReferralCount: archived.referralCount,
+      archivedSmokeReferralCount: smokeReferrals.length,
+      archivedSmokeVisitCount: archivedSmokeReferralVisitCount + archivedSmokeDirectVisitCount,
       archivedVisitCount: archived.visitCount,
       auditPreserved: after[0] >= before[0],
       consentPreserved: after[3] >= before[3],
@@ -767,14 +907,19 @@ export async function resetDemoScenarios(
 
 export function getPilotDemoResetStatus() {
   return {
+    activeQueueSource: "filtered operational records",
+    archivedWorkflowRowsHidden: true,
     auditPreservationEnforced: true,
+    hardDeleteProtectedHistoryDisabled: true,
     consentPreservationEnforced: true,
+    demoResetArchiveFirst: true,
     demoScenarioSeedingEnabled: true,
     enabled: true,
     externalResetApisEnabled: false,
     hardDeleteMode: DATA_STEWARDSHIP_HARD_DELETE_MODE,
     realDataResetEnabled: false,
     smsLedgerPreservationEnforced: true,
+    smokeTestActiveQueueExclusionEnabled: true,
     smokeTestArchiveEnabled: true,
     webhookPreservationEnforced: true,
   };
@@ -868,17 +1013,18 @@ export async function getPilotDataStewardshipSummary(prisma: PrismaClient) {
     auditLogCount,
     recentAuditLogCount,
     archivedFakeReferralCount,
+    archivedFakeVisitCount,
     lastStewardshipAudit,
     personalTestEnrollment,
   ] = await Promise.all([
     prisma.patientReferral.count({ where: fakePilotReferralWhere() }),
     prisma.visit.count({ where: { referral: fakePilotReferralWhere() } }),
-    prisma.patientReferral.count({ where: { AND: [activeOperationalReferralWhere(demoOperationalReferralWhere()), { status: { notIn: ["completed", "canceled"] } }] } }),
-    prisma.patientReferral.count({ where: { AND: [activeOperationalReferralWhere(smokeOperationalReferralWhere()), { status: { notIn: ["completed", "canceled"] } }] } }),
-    prisma.visit.count({ where: { AND: [visibleOperationalVisitWhere(), { referral: demoOperationalReferralWhere(), status: { in: ["unscheduled", "scheduled", "in_progress"] } }] } }),
-    prisma.visit.count({ where: { AND: [visibleOperationalVisitWhere(), { referral: smokeOperationalReferralWhere(), status: { in: ["unscheduled", "scheduled", "in_progress"] } }] } }),
-    prisma.patientReferral.count({ where: { AND: [activeOperationalReferralWhere(demoOperationalReferralWhere()), { status: { in: ["completed", "canceled"] } }] } }),
-    prisma.visit.count({ where: { AND: [visibleOperationalVisitWhere(), { referral: demoOperationalReferralWhere(), status: { in: ["completed", "canceled", "no_show"] } }] } }),
+    prisma.patientReferral.count({ where: { AND: [activeWorkflowWhereClause(demoOperationalReferralWhere()), { status: { notIn: ["completed", "canceled"] } }] } }),
+    prisma.patientReferral.count({ where: { AND: [activeWorkflowWhereClause(smokeOperationalReferralWhere()), { status: { notIn: ["completed", "canceled"] } }] } }),
+    prisma.visit.count({ where: { AND: [activeWorkflowVisitWhere({ referral: demoOperationalReferralWhere() }), { status: { in: ["unscheduled", "scheduled", "in_progress"] } }] } }),
+    prisma.visit.count({ where: { AND: [activeWorkflowVisitWhere({ referral: smokeOperationalReferralWhere() }), { status: { in: ["unscheduled", "scheduled", "in_progress"] } }] } }),
+    prisma.patientReferral.count({ where: { AND: [activeWorkflowWhereClause(demoOperationalReferralWhere()), { status: { in: ["completed", "canceled"] } }] } }),
+    prisma.visit.count({ where: { AND: [activeWorkflowVisitWhere({ referral: demoOperationalReferralWhere() }), { status: { in: ["completed", "canceled", "no_show"] } }] } }),
     prisma.therapist.count(),
     prisma.smsConsentEnrollment.count(),
     prisma.smsMessage.count(),
@@ -886,6 +1032,19 @@ export async function getPilotDataStewardshipSummary(prisma: PrismaClient) {
     prisma.auditLog.count(),
     prisma.auditLog.count({ where: { createdAt: { gte: since } } }),
     prisma.patientReferral.count({ where: { AND: [fakePilotReferralWhere(), { notes: { contains: STEWARDSHIP_ARCHIVE_MARKER } }] } }),
+    prisma.visit.count({
+      where: {
+        AND: [
+          { referral: fakePilotReferralWhere() },
+          {
+            OR: [
+              { notes: { contains: STEWARDSHIP_ARCHIVE_MARKER } },
+              { referral: { notes: { contains: STEWARDSHIP_ARCHIVE_MARKER } } },
+            ],
+          },
+        ],
+      },
+    }),
     prisma.auditLog.findFirst({
       orderBy: { createdAt: "desc" },
       select: { action: true, actorType: true, createdAt: true },
@@ -915,6 +1074,7 @@ export async function getPilotDataStewardshipSummary(prisma: PrismaClient) {
     activeSmokeReferralCount,
     activeSmokeVisitCount,
     archivedFakeReferralCount,
+    archivedFakeVisitCount,
     auditLogCount,
     auditPreservingCleanupEnabled: true,
     consentPreservationEnforced: true,

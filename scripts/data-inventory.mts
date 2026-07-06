@@ -20,6 +20,8 @@ async function main() {
   console.log(`active_smoke_test_referrals=${summary.activeSmokeReferralCount}`);
   console.log(`active_demo_visits=${summary.activeDemoVisitCount}`);
   console.log(`active_smoke_test_visits=${summary.activeSmokeVisitCount}`);
+  console.log(`archived_fake_referrals=${summary.archivedFakeReferralCount}`);
+  console.log(`archived_fake_visits=${summary.archivedFakeVisitCount}`);
   console.log(`terminal_demo_records=${summary.terminalDemoRecordCount}`);
   console.log(`latest_data_stewardship_action=${summary.lastStewardshipAudit?.action || "not_recorded"}`);
   console.log(`audit_preserved=${summary.auditPreservingCleanupEnabled}`);

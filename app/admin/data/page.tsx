@@ -238,6 +238,7 @@ export default async function AdminDataStewardshipPage({
     { label: "Active smoke/test visits", value: `${summary.activeSmokeVisitCount}`, tone: summary.activeSmokeVisitCount > 0 ? "warn" : "good" },
     { label: "Terminal demo records", value: `${summary.terminalDemoRecordCount}` },
     { label: "Archived fake referrals", value: `${summary.archivedFakeReferralCount}` },
+    { label: "Archived fake visits", value: `${summary.archivedFakeVisitCount}` },
     { label: "Audit activity, last 24h", value: `${summary.recentAuditLogCount}` },
     { label: "SMS consent enrollments", value: `${summary.smsConsentEnrollmentCount}` },
     { label: "SMS messages", value: `${summary.smsMessageCount}` },

@@ -26,7 +26,7 @@ import {
   hasBlockedNoteClassification,
 } from "@/lib/compliance/note-classification";
 import { getPrismaClient } from "@/lib/db/prisma";
-import { visibleOperationalReferralWhere, visibleOperationalVisitWhere } from "@/lib/pilot/data-stewardship";
+import { activeWorkflowVisitWhere, activeWorkflowWhereClause } from "@/lib/pilot/data-stewardship";
 import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import { requirePilotSession } from "@/lib/pilot/auth";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
@@ -705,7 +705,7 @@ export default async function MyWorkPage({
   const [referrals, visits] = selectedTherapistId
     ? await Promise.all([
         prisma.patientReferral.findMany({
-          where: { AND: [visibleOperationalReferralWhere(), { assignedTherapistId: selectedTherapistId }] },
+          where: activeWorkflowWhereClause({ assignedTherapistId: selectedTherapistId }),
           select: THERAPIST_WORKSPACE_REFERRAL_SELECT,
           orderBy: { updatedAt: "desc" },
         }),
@@ -713,7 +713,7 @@ export default async function MyWorkPage({
           select: THERAPIST_WORKSPACE_VISIT_SELECT,
           orderBy: [{ scheduledAt: "asc" }, { updatedAt: "desc" }],
           take: 100,
-          where: { AND: [visibleOperationalVisitWhere(), { therapistId: selectedTherapistId }] },
+          where: activeWorkflowVisitWhere({ therapistId: selectedTherapistId }),
         }),
       ])
     : [[], []];

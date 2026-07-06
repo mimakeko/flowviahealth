@@ -28,8 +28,8 @@ Flowvia is not approved for real patients or PHI yet. This list blocks productio
 - Field pilot referral/visit workflows are fake-data-only until production auth, audit review, retention, backup, incident response, and vendor controls are complete.
 - Operational notes must not include diagnosis, treatment details, clinical notes, emergency notes, medication, symptoms, therapy plans, wound details, or pain scores.
 - Cloud pilot health checks must remain green: `/admin/health`, `/admin/messages`, `/admin/audit`, `/admin/data`, no Vercel 500s, no `EMAXCONNSESSION`, no TLS/certificate errors, Real SMS gate Off except controlled personal-phone tests, and data mode `personal_test` or `phi_blocked`.
-- Data stewardship is fake-data-only: no audit deletion, no SMS history deletion, archive over delete, and personal-number tests end `opted_out` unless active testing is underway.
-- Pilot data reset/demo scenario tools are fake-data-only and admin-only: exact confirmation phrases required, no hard delete of audit/SMS/webhook/consent history, no real data reset, no SMS sending, no external reset APIs, and no maps/geocoding/travel-time APIs.
+- Data stewardship is fake-data-only: no audit deletion, no SMS history deletion, archive over delete, archived/smoke operational rows hidden from active workflow queues, and personal-number tests end `opted_out` unless active testing is underway.
+- Pilot data reset/demo scenario tools are fake-data-only and admin-only: exact confirmation phrases required, archive-first cleanup for fake/demo and smoke/test operational records, no hard delete of audit/SMS/webhook/consent history, no real data reset, no SMS sending, no external reset APIs, and no maps/geocoding/travel-time APIs.
 
 ## Required Auth Improvements
 
@@ -79,8 +79,8 @@ Before any serious pilot use, an admin should:
 - Therapist field notes must be operational-only and blocked before write when note classification detects PHI-like, SMS-forbidden, diagnosis, treatment, medication, symptoms, measurements, or clinical-note content.
 - SMS send actions are blocked from referral/visit workflow pages.
 - Audit trail metadata must remain summarized and safe; do not expose raw SMS payloads, provider payloads, secrets, or PHI.
-- Data stewardship tools must not hard-delete audit logs or SMS history and must require exact confirmation for archive/cleanup actions.
-- Demo reset tools must not reset real-looking records, hard-delete protected history, send SMS, create external API calls, or bypass RBAC. `ARCHIVE SMOKE TEST DATA` and `RESET DEMO SCENARIOS` remain exact confirmation gates.
+- Data stewardship tools must not hard-delete audit logs or SMS history and must require exact confirmation for archive/cleanup actions. Archived records remain queryable through database/audit history while active workflow queues hide them.
+- Demo reset tools must not reset real-looking records, hard-delete protected history, send SMS, create external API calls, or bypass RBAC. `ARCHIVE SMOKE TEST DATA` and `RESET DEMO SCENARIOS` remain exact confirmation gates, and normal workflow queues must exclude explicit smoke/test operational records by default.
 - Assistant suggestions must remain operational-only and human-reviewed; do not enable real provider mode or autonomous actions before production controls are approved.
 - Scheduling suggestions must remain operational-only and human-reviewed. `Use this window` may fill a datetime field only; do not enable route optimization, maps/geocoding APIs, travel-time calculation, autonomous visit creation, SMS sending, or submit bypass before production controls are approved.
 - Referral intake duplicate warnings must remain operational-only and human-reviewed. Do not enable external duplicate search, automatic merging, therapist auto-assignment, automatic visit creation, SMS sending, full-phone display, or PHI storage before production controls are approved.

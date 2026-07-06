@@ -4,7 +4,7 @@ import { CalendarClock, ArrowRight } from "lucide-react";
 import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { formatDateTime, requirePilotOperationsAccess, statusClassName, statusLabel } from "@/lib/pilot/ops";
-import { visibleOperationalReferralWhere, visibleOperationalVisitWhere } from "@/lib/pilot/data-stewardship";
+import { activeWorkflowVisitWhere, activeWorkflowWhereClause } from "@/lib/pilot/data-stewardship";
 import {
   evaluateReferralIntakeQuality,
   getReferralDuplicateCandidates,
@@ -111,7 +111,7 @@ export default async function AdminSchedulingPage() {
       take: 10,
       where: {
         AND: [
-          visibleOperationalReferralWhere(),
+          activeWorkflowWhereClause(),
           {
             assignedTherapistId: { not: null },
             status: { in: ["contacted", "active"] },
@@ -131,21 +131,21 @@ export default async function AdminSchedulingPage() {
       },
       orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
       take: 20,
-      where: { AND: [visibleOperationalVisitWhere(), { status: { in: ["scheduled", "in_progress"] } }] },
+      where: activeWorkflowVisitWhere({ status: { in: ["scheduled", "in_progress"] } }),
     }),
     prisma.patientReferral.count({
-      where: {
+      where: activeWorkflowWhereClause({
         status: "contacted",
         visits: { none: { status: { in: ["scheduled", "in_progress"] } } },
-      },
+      }),
     }),
-    prisma.patientReferral.count({ where: { assignedTherapistId: null, status: { notIn: ["completed", "canceled"] } } }),
+    prisma.patientReferral.count({ where: activeWorkflowWhereClause({ assignedTherapistId: null, status: { notIn: ["completed", "canceled"] } }) }),
     prisma.smsConsentEnrollment.count({ where: { status: "opted_out" } }),
-    prisma.patientReferral.count({ where: { status: { in: ["completed", "canceled"] } } }),
-    prisma.therapist.count({ where: { active: true, visits: { some: { status: { in: ["scheduled", "in_progress"] } } } } }),
+    prisma.patientReferral.count({ where: activeWorkflowWhereClause({ status: { in: ["completed", "canceled"] } }) }),
+    prisma.therapist.count({ where: { active: true, visits: { some: activeWorkflowVisitWhere({ status: { in: ["scheduled", "in_progress"] } }) } } }),
     prisma.visit.findMany({
       select: { id: true, scheduledAt: true, status: true, therapistId: true },
-      where: { AND: [visibleOperationalVisitWhere(), { status: { in: ["scheduled", "in_progress"] } }] },
+      where: activeWorkflowVisitWhere({ status: { in: ["scheduled", "in_progress"] } }),
     }),
   ]);
 

@@ -6,7 +6,7 @@ import { OperationsAssistantPanel } from "@/components/operations-assistant-pane
 import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { getOperationsAssistantV2Status, getQueueAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
-import { visibleOperationalVisitWhere } from "@/lib/pilot/data-stewardship";
+import { activeWorkflowVisitWhere, activeWorkflowWhereClause, smokeOperationalReferralWhere } from "@/lib/pilot/data-stewardship";
 import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import {
   formatDateTime,
@@ -54,7 +54,7 @@ export default async function AdminVisitsPage({
   const selectedGroup = params?.group === "upcoming" || params?.group === "unscheduled" ? params.group : "";
   const now = new Date();
   const upcomingStatuses: VisitStatusValue[] = ["scheduled", "in_progress"];
-  const visitFilters: Prisma.VisitWhereInput[] = [visibleOperationalVisitWhere()];
+  const visitFilters: Prisma.VisitWhereInput[] = [activeWorkflowVisitWhere()];
 
   if (selectedStatus) visitFilters.push({ status: selectedStatus });
   if (selectedTherapistId === "unassigned") visitFilters.push({ therapistId: null });
@@ -89,44 +89,36 @@ export default async function AdminVisitsPage({
       orderBy: { name: "asc" },
       where: { active: true },
     }),
-    prisma.patientReferral.count({ where: { status: "new" } }),
+    prisma.patientReferral.count({ where: activeWorkflowWhereClause({ status: "new" }) }),
     prisma.patientReferral.count({
-      where: {
+      where: activeWorkflowWhereClause({
         status: "contacted",
         visits: { none: { status: { in: ["scheduled", "in_progress"] } } },
-      },
+      }),
     }),
     prisma.visit.count({
-      where: {
+      where: activeWorkflowVisitWhere({
         scheduledAt: {
           gte: now,
           lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
         },
         status: { in: ["scheduled", "in_progress"] },
-      },
+      }),
     }),
     prisma.visit.count({
-      where: {
+      where: activeWorkflowVisitWhere({
         scheduledAt: { lt: now },
         status: { in: ["scheduled", "in_progress"] },
-      },
+      }),
     }),
     prisma.smsConsentEnrollment.count({ where: { status: "opted_out" } }),
-    prisma.patientReferral.count({ where: { assignedTherapistId: null, status: { notIn: ["completed", "canceled"] } } }),
-    prisma.patientReferral.count({
-      where: {
-        OR: [
-          { referralSource: { contains: "smoke" } },
-          { patientName: { startsWith: "Smoke" } },
-          { patientName: { startsWith: "Ops Guardrail Smoke" } },
-        ],
-      },
-    }),
-    prisma.patientReferral.count({ where: { status: { in: ["completed", "canceled"] } } }),
+    prisma.patientReferral.count({ where: activeWorkflowWhereClause({ assignedTherapistId: null, status: { notIn: ["completed", "canceled"] } }) }),
+    prisma.patientReferral.count({ where: activeWorkflowWhereClause(smokeOperationalReferralWhere()) }),
+    prisma.patientReferral.count({ where: activeWorkflowWhereClause({ status: { in: ["completed", "canceled"] } }) }),
     prisma.therapist.count({
       where: {
         active: true,
-        visits: { some: { status: { in: ["scheduled", "in_progress"] } } },
+        visits: { some: activeWorkflowVisitWhere({ status: { in: ["scheduled", "in_progress"] } }) },
       },
     }),
   ]);
