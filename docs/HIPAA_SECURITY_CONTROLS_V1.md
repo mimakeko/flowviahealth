@@ -22,7 +22,7 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - AI controls: Operations Assistant V2 is deterministic/mock-only, no external API calls, no autonomous actions, no clinical guidance, and human review required.
 - Scheduling controls: Scheduling Intelligence V1 is deterministic only, with next-5-business-day suggestions, external maps/geocoding, route optimization, real travel-time calculation, external AI, SMS sending, and autonomous scheduling disabled.
 - Therapist field workflow controls: `/my-work` is assigned-scope only, manual-only, confirmation-gated before visit status writes, fake/test-data-only, no-PHI, no SMS sending, no external AI/APIs, no maps/geocoding/travel-time APIs, and no autonomous status changes.
-- Therapist phone/iPad workspace controls: responsive field usability must preserve masking, no-PHI note blocking, terminal visit locks, manual submit requirements, RBAC, deterministic assistant/scheduling context, and no external API/SMS/map/travel surfaces.
+- Therapist phone/iPad workspace controls: responsive field usability, calm empty states, safe loading/error states, query minimization, and transient action banners must preserve masking, no-PHI note blocking, terminal visit locks, manual submit requirements, RBAC, deterministic assistant/scheduling context, and no external API/SMS/map/travel surfaces.
 - Session management: signed httpOnly cookies are acceptable for pilot only; final timeout, revocation, and recovery controls remain blockers.
 
 ## Physical Safeguards
@@ -46,4 +46,6 @@ This is a readiness/control framework for Flowvia Health. It is not a legal cert
 - Therapist field blocked-note feedback must show only safe reason, destination, optional safe rewrite, and operational examples; raw blocked note text must not be stored or displayed.
 - Therapist field visit audit events must store safe metadata only: visit/referral identifiers, old/new status, attempted action, blocked reason/category counts, warning flags, and no raw unsafe note body, full phone, full address, secrets, SMS provider payload, diagnosis, or treatment details.
 - `/my-work` phone/iPad layouts must keep the Next field action, no-PHI guidance, masked phone values, inline confirmation, safe success/error banners, and terminal visit warning close to the manual action controls.
+- `/my-work` empty/loading/error states must be operational-only and must not expose stack traces, database URLs, internal ids, full phone numbers, raw SMS bodies, secrets, provider payloads, clinical detail, or PHI.
+- `/my-work` data loading must keep using the existing Prisma wrapper and explicit selected fields; workspace rendering must not select or expose raw SMS bodies.
 - `/admin/visits/[id]`, `/admin/audit`, and `/admin/health` must expose therapist field state and controls through safe metadata/flags only, with autonomous field actions, external AI/API for field notes, PHI note storage, and SMS sending disabled.

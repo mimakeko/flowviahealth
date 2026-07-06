@@ -31,7 +31,7 @@ export const THERAPIST_FIELD_VISIT_ACTIONS: readonly TherapistFieldVisitActionCo
     confirmLabel: "Confirm start",
     helper: "Move this fake/test visit from scheduled to in progress.",
     nextStatus: "in_progress",
-    successMessage: "Visit marked in progress",
+    successMessage: "Visit moved to in progress and remains in Today.",
     terminalResult: false,
   },
   {
@@ -42,7 +42,7 @@ export const THERAPIST_FIELD_VISIT_ACTIONS: readonly TherapistFieldVisitActionCo
     confirmLabel: "Confirm complete",
     helper: "Complete the fake/test operational visit after manual review.",
     nextStatus: "completed",
-    successMessage: "Visit marked completed",
+    successMessage: "Visit moved to completed and appears under Completed recently.",
     terminalResult: true,
   },
   {
@@ -53,7 +53,7 @@ export const THERAPIST_FIELD_VISIT_ACTIONS: readonly TherapistFieldVisitActionCo
     confirmLabel: "Confirm no-show",
     helper: "Record that the fake/test visit did not occur.",
     nextStatus: "no_show",
-    successMessage: "Visit marked no-show",
+    successMessage: "Visit moved to no-show and appears under Completed recently.",
     terminalResult: true,
   },
   {
@@ -64,7 +64,7 @@ export const THERAPIST_FIELD_VISIT_ACTIONS: readonly TherapistFieldVisitActionCo
     confirmLabel: "Confirm cancel",
     helper: "Cancel this fake/test visit workflow.",
     nextStatus: "canceled",
-    successMessage: "Visit marked canceled",
+    successMessage: "Visit moved to canceled and appears under Completed recently.",
     terminalResult: true,
   },
 ] as const;
@@ -123,17 +123,22 @@ export function resolveTherapistFieldVisitAction(input: {
 export function getTherapistFieldWorkflowStatus() {
   return {
     autonomousStatusChangesEnabled: false,
+    confirmationUxEnabled: true,
     enabled: true,
+    emptyStatesEnabled: true,
     externalAiEnabled: false,
     externalApisEnabled: false,
+    fieldWorkspaceOptimized: true,
     geocodingEnabled: false,
     ipadLayoutEnabled: true,
     manualOnly: true,
+    mobileOverflowGuardEnabled: true,
     mobileActionUxEnabled: true,
     noPhiMode: true,
     noPhiNotesEnforced: true,
     phiNoteStorageEnabled: false,
     phoneLayoutEnabled: true,
+    queryMinimizationEnabled: true,
     safeBlockedNoteFeedbackEnabled: true,
     smsSendingEnabled: false,
     source: "deterministic",

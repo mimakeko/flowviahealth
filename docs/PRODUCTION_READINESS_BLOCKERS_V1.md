@@ -17,7 +17,7 @@ Flowvia is not approved for real patients or PHI yet. This list blocks productio
 - Operations Assistant V2 must remain deterministic/mock-only: no external AI/API calls, no autonomous actions, no clinical advice, no diagnosis/treatment guidance, and no PHI in inputs or outputs.
 - Scheduling Intelligence V1 must remain deterministic: next-5-business-day windows only, no external maps/geocoding APIs, no real travel-time calculation, no autonomous scheduling, no PHI, and human review required.
 - Therapist Field Visit Workflow must remain fake/test-data-only and manual-only: assigned visit start/complete/no-show/cancel actions only, no autonomous status changes, no SMS sending, no full-address exposure, no PHI, and no clinical documentation.
-- Therapist phone/iPad workspace readiness is pilot-only: responsive layout may improve usability, but it does not approve PHI, clinical documentation, autonomous actions, SMS sending, maps/geocoding, or external API use.
+- Therapist phone/iPad workspace readiness is pilot-only: responsive layout, empty states, query minimization, and safe banners may improve usability, but they do not approve PHI, clinical documentation, autonomous actions, SMS sending, maps/geocoding, or external API use.
 - Backup/restore policy and tested restore process are needed.
 - Retention/deletion policy is needed.
 - Incident response policy is needed.
@@ -52,12 +52,13 @@ Before any serious pilot use, an admin should:
 - Open `/admin/referrals` and `/admin/visits` to confirm fake-data workflow queues are moving through assignment, scheduling, active, completed, canceled, no-show states as expected.
 - Have therapists review `/my-work`; therapist actions must remain scoped to their assigned referrals/visits and limited to operational status/note updates.
 - Confirm `/my-work` shows the Next field action near the top on phone/iPad, assigned field visits before referrals in Today, Upcoming, and Completed recently sections, no horizontal overflow, inline confirmation before every therapist visit status write, safe success/error banners, and terminal visits warn and block further therapist field updates.
+- Confirm `/my-work` shows calm empty states for no visits today, no upcoming visits assigned, no recent field completions, and no assigned referrals needing action; loading/error states must not expose stack traces, database internals, raw SMS bodies, full phones, provider payloads, or PHI.
 - Open `/admin/visits/[id]` and confirm Current field state and Therapist field activity show safe metadata only, including blocked-note/future-completion warnings without raw note bodies.
 - Open `/admin/audit` and review recent audit events and filters for therapist field actions, blocked notes, visit status changes, and future completion warnings; no secrets, raw SMS bodies, provider payloads, full phones, note bodies, or PHI should appear.
 - Open `/admin/data` and confirm stewardship status is audit-preserving, no SMS history deletion is offered, and real SMS gate remains Off.
 - Confirm `/admin/health` shows Operations Assistant V2 as mock/deterministic, external API calls disabled, no-PHI mode on, and autonomous actions disabled.
 - Confirm `/admin/health` shows Scheduling Intelligence enabled, source deterministic, business-day-only windows, external APIs/maps/geocoding/travel-time/external AI disabled, autonomous scheduling disabled, and no-PHI mode on.
-- Confirm `/admin/health` shows therapist field confirmations, mobile action UX, blocked note safe feedback, and field activity audit enabled; autonomous field actions, external AI/API for field notes, PHI note storage, and SMS sending disabled.
+- Confirm `/admin/health` shows field workspace optimized, empty states, mobile overflow guard, query minimization, confirmation UX, therapist field confirmations, mobile action UX, blocked note safe feedback, and field activity audit enabled; no SMS controls, no external APIs, no autonomous actions, PHI note storage disabled, and SMS sending disabled.
 - Confirm `/admin/health` shows Therapist Field Visit Workflow enabled, phone/iPad layout enabled, manual-only, no-PHI mode on, no-PHI notes enforced, terminal visit lock enabled, SMS sending disabled, external APIs disabled, and autonomous status changes disabled.
 - Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
 - Confirm Vercel logs show no 500s and no `EMAXCONNSESSION`.
@@ -71,6 +72,7 @@ Before any serious pilot use, an admin should:
 - Therapist workflow actions are pilot-only and not final clinical documentation.
 - Therapist field visit actions must remain assigned-only and deterministic: scheduled to in-progress, scheduled/in-progress to completed, scheduled/in-progress to no-show, or scheduled/in-progress to canceled.
 - Therapist phone/iPad workspace improvements must remain UI-only: no new standalone app, no push notifications, no PWA install flow, no autonomous scheduling, no autonomous status changes, no SMS send controls, and no external maps/geocoding/travel-time APIs.
+- Therapist field workspace performance improvements must keep using the existing Prisma wrapper, explicit selected fields, safe redacted rendering, and no raw SMS body selection for workspace rendering.
 - Therapist field notes must be operational-only and blocked before write when note classification detects PHI-like, SMS-forbidden, diagnosis, treatment, medication, symptoms, measurements, or clinical-note content.
 - SMS send actions are blocked from referral/visit workflow pages.
 - Audit trail metadata must remain summarized and safe; do not expose raw SMS payloads, provider payloads, secrets, or PHI.

@@ -15,7 +15,9 @@ import {
 } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
+import { TransientActionBanner } from "@/components/transient-action-banner";
 import { getOperationsAssistantV2Status, getTherapistAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import {
   buildBlockedNoteSearchParams,
@@ -37,9 +39,20 @@ import {
   type TherapistFieldVisitActionConfig,
 } from "@/lib/pilot/therapist-field-workflow";
 import {
+  getFieldVisitQueueCopy,
+  getFieldWorkspaceEmptyState,
+  getTherapistWorkspacePhoneDisplay,
+  isReferralNeedingTherapistAction,
+  THERAPIST_WORKSPACE_REFERRAL_SELECT,
+  THERAPIST_WORKSPACE_THERAPIST_SELECT,
+  THERAPIST_WORKSPACE_VISIT_ACTION_SELECT,
+  THERAPIST_WORKSPACE_VISIT_SELECT,
+  type FieldVisitQueue,
+  type FieldWorkspaceEmptyStateKey,
+} from "@/lib/pilot/therapist-workspace";
+import {
   appendOperationalNote,
   formatDateTime,
-  redactPhone,
   requirePilotOperationsAccess,
   statusClassName,
   statusLabel,
@@ -105,7 +118,6 @@ type TherapistFieldVisit = {
 };
 
 type SmsConsentLookup = Record<string, string | undefined>;
-type FieldVisitQueue = "today" | "upcoming" | "completed";
 
 function isSameOperationsDay(value: Date | string | null | undefined) {
   if (!value) return false;
@@ -165,12 +177,6 @@ function nextFieldVisit(visits: TherapistFieldVisit[]) {
   return [...visits].sort((left, right) => visitPriority(left) - visitPriority(right) || visitTimestamp(left.scheduledAt) - visitTimestamp(right.scheduledAt))[0] || null;
 }
 
-function fieldVisitQueueCopy(queue: FieldVisitQueue) {
-  if (queue === "today") return "Manual actions for visits due today or already in progress.";
-  if (queue === "upcoming") return "Future assigned visits stay visible without crowding the next action.";
-  return "Terminal visits are locked and kept for safe operational review.";
-}
-
 function shortId(value: string | null | undefined) {
   if (!value) return "not recorded";
   return value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
@@ -214,7 +220,6 @@ function VisitWarnings({ smsConsentStatus, visit }: { smsConsentStatus?: string;
       {isFuture ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-950">This visit is scheduled in the future. Completing early will be audited as an operational warning.</p>
       ) : null}
-      <p className="rounded-lg border border-line bg-slate-50 p-3 text-slate-600">No PHI in notes. Use scheduling/access/status wording only; no diagnosis, treatment, symptoms, medications, or clinical details.</p>
     </div>
   );
 }
@@ -239,6 +244,9 @@ function VisitActionForm({
         Operational note <span className="font-normal text-slate-400">(optional, no PHI)</span>
         <textarea className="field min-h-24 resize-y" name="note" placeholder="Example: Arrived at site, access issue, or scheduling follow-up needed." />
       </label>
+      <p className="rounded-lg border border-line bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+        No PHI in notes. Use scheduling, access, or status wording only.
+      </p>
       <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
         {allowedActions.map((action: TherapistFieldVisitActionConfig) => (
           <details key={action.action} className="group rounded-lg border border-line bg-white">
@@ -253,7 +261,7 @@ function VisitActionForm({
               </div>
               <dl className="grid gap-2">
                 <div className="flex justify-between gap-3"><dt className="font-semibold text-ink">Visit</dt><dd className="text-right">Referral {shortId(visit.referral.id)}</dd></div>
-                <div className="flex justify-between gap-3"><dt className="font-semibold text-ink">Phone</dt><dd className="text-right">{redactPhone(visit.referral.phone)}</dd></div>
+                <div className="flex justify-between gap-3"><dt className="font-semibold text-ink">Phone</dt><dd className="text-right">{getTherapistWorkspacePhoneDisplay(visit.referral.phone)}</dd></div>
                 <div className="flex justify-between gap-3"><dt className="font-semibold text-ink">Scheduled</dt><dd className="text-right">{formatDateTime(visit.scheduledAt)}</dd></div>
               </dl>
               {action.terminalResult ? (
@@ -262,10 +270,9 @@ function VisitActionForm({
               {action.action === "mark_completed" && isFutureVisit(visit.scheduledAt) ? (
                 <p className="rounded-md border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-950">This visit is scheduled in the future. Confirming completion will be audited as an operational warning.</p>
               ) : null}
-              <p className="rounded-md border border-line bg-slate-50 p-3 font-semibold text-slate-700">No PHI in notes. Do not enter diagnosis, treatment, symptoms, medications, addresses, or clinical details.</p>
-              <button className="btn-primary min-h-14 w-full" type="submit" name="action" value={action.action}>
+              <PendingSubmitButton className="btn-primary min-h-14 w-full" name="action" pendingLabel="Submitting..." value={action.action}>
                 {action.confirmLabel}
-              </button>
+              </PendingSubmitButton>
             </div>
           </details>
         ))}
@@ -298,7 +305,7 @@ function FieldVisitCard({
       </div>
 
       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-        <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{redactPhone(visit.referral.phone)}</dd></div>
+        <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{getTherapistWorkspacePhoneDisplay(visit.referral.phone)}</dd></div>
         <div><dt className="font-semibold text-ink">Referral status</dt><dd className="mt-1 text-slate-600">{statusLabel(visit.referral.status)}</dd></div>
         <div><dt className="font-semibold text-ink">Visit id</dt><dd className="mt-1 font-mono text-xs text-slate-500">{visit.id.slice(0, 8)}...{visit.id.slice(-4)}</dd></div>
       </dl>
@@ -321,10 +328,8 @@ function NextFieldActionPanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="eyebrow">Next field action</p>
-          <h2 className="mt-2 break-words text-2xl font-semibold tracking-[-.03em] text-ink">{visit ? visit.referral.patientName : "No assigned visit action"}</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            {visit ? "Start here in the field. Actions remain manual, audited, and no-PHI." : "No actionable assigned visit is waiting. Continue safe worklist review."}
-          </p>
+          <h2 className="mt-2 break-words text-xl font-semibold tracking-[-.02em] text-ink">{visit ? visit.referral.patientName : "No assigned visit action"}</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{visit ? "Manual, audited, no-PHI." : "No actionable assigned visit is waiting."}</p>
         </div>
         <span className="inline-flex w-fit items-center gap-1.5 rounded-md bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">
           <ShieldAlert size={14} />
@@ -334,18 +339,15 @@ function NextFieldActionPanel({
 
       {visit ? (
         <>
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">When</dt><dd className="mt-1 text-slate-600">{formatDateTime(visit.scheduledAt)}</dd></div>
-            <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Area</dt><dd className="mt-1 text-slate-600">{[visit.referral.city, visit.referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</dd></div>
-            <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{redactPhone(visit.referral.phone)}</dd></div>
-            <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Status</dt><dd className="mt-1 text-slate-600">{statusLabel(visit.status)}</dd></div>
+          <dl className="mt-4 grid gap-2 text-sm">
+            <div className="flex justify-between gap-3 rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">When</dt><dd className="text-right text-slate-600">{formatDateTime(visit.scheduledAt)}</dd></div>
+            <div className="flex justify-between gap-3 rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Area</dt><dd className="break-words text-right text-slate-600">{[visit.referral.city, visit.referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</dd></div>
+            <div className="flex justify-between gap-3 rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Phone</dt><dd className="text-right text-slate-600">{getTherapistWorkspacePhoneDisplay(visit.referral.phone)}</dd></div>
+            <div className="flex justify-between gap-3 rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Status</dt><dd className="text-right text-slate-600">{statusLabel(visit.status)}</dd></div>
           </dl>
           <a href={`#${visitDomId(visit.id)}`} className="btn-primary mt-4 min-h-14 w-full justify-center">
             Review visit action
           </a>
-          <p className="mt-3 rounded-lg border border-line bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-600">
-            Manual status writes are confirmed on the visit card below. No autonomous updates are performed from this summary.
-          </p>
         </>
       ) : null}
     </section>
@@ -361,8 +363,19 @@ function FieldMetricCard({ label, value }: { label: string; value: number | stri
   );
 }
 
+function FieldWorkspaceEmptyState({ stateKey }: { stateKey: FieldWorkspaceEmptyStateKey }) {
+  const emptyState = getFieldWorkspaceEmptyState(stateKey);
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-5 text-sm leading-6 text-slate-600">
+      <p className="font-semibold text-ink">{emptyState.title}</p>
+      <p className="mt-1">{emptyState.detail}</p>
+      <p className="mt-3 font-semibold text-blue">{emptyState.action}</p>
+    </div>
+  );
+}
+
 function FieldVisitSection({
-  emptyText,
   icon: Icon,
   queue,
   selectedTherapistId,
@@ -370,7 +383,6 @@ function FieldVisitSection({
   title,
   visits,
 }: {
-  emptyText: string;
   icon: LucideIcon;
   queue: FieldVisitQueue;
   selectedTherapistId: string;
@@ -385,7 +397,7 @@ function FieldVisitSection({
           <Icon size={18} className="text-blue" />
           <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">{title}</h2>
         </div>
-        <p className="text-sm leading-6 text-slate-500">{fieldVisitQueueCopy(queue)}</p>
+        <p className="hidden text-sm leading-6 text-slate-500 sm:block">{getFieldVisitQueueCopy(queue)}</p>
       </div>
       {visits.map((visit: TherapistFieldVisit) => (
         <FieldVisitCard
@@ -395,7 +407,7 @@ function FieldVisitSection({
           visit={visit}
         />
       ))}
-      {visits.length === 0 ? <p className="rounded-lg border border-line bg-white p-5 text-sm text-slate-500">{emptyText}</p> : null}
+      {visits.length === 0 ? <FieldWorkspaceEmptyState stateKey={queue} /> : null}
     </section>
   );
 }
@@ -537,7 +549,7 @@ async function therapistVisitAction(formData: FormData) {
   }
 
   const visit = await prisma.visit.findFirst({
-    include: { referral: true },
+    select: THERAPIST_WORKSPACE_VISIT_ACTION_SELECT,
     where: {
       id: visitId,
       therapistId,
@@ -668,6 +680,7 @@ export default async function MyWorkPage({
   const prisma = getPrismaClient();
   const therapists = session.role === "admin"
     ? await prisma.therapist.findMany({
+        select: THERAPIST_WORKSPACE_THERAPIST_SELECT,
         where: {
           active: true,
           name: { startsWith: "Demo Therapist" },
@@ -675,6 +688,7 @@ export default async function MyWorkPage({
         orderBy: { name: "asc" },
       })
     : await prisma.therapist.findMany({
+        select: THERAPIST_WORKSPACE_THERAPIST_SELECT,
         where: {
           active: true,
           email: session.email,
@@ -691,27 +705,11 @@ export default async function MyWorkPage({
     ? await Promise.all([
         prisma.patientReferral.findMany({
           where: { assignedTherapistId: selectedTherapistId },
-          include: {
-            visits: {
-              orderBy: { scheduledAt: "asc" },
-              take: 3,
-            },
-          },
+          select: THERAPIST_WORKSPACE_REFERRAL_SELECT,
           orderBy: { updatedAt: "desc" },
         }),
         prisma.visit.findMany({
-          include: {
-            referral: {
-              select: {
-                city: true,
-                id: true,
-                patientName: true,
-                phone: true,
-                status: true,
-                zip: true,
-              },
-            },
-          },
+          select: THERAPIST_WORKSPACE_VISIT_SELECT,
           orderBy: [{ scheduledAt: "asc" }, { updatedAt: "desc" }],
           take: 100,
           where: { therapistId: selectedTherapistId },
@@ -728,6 +726,7 @@ export default async function MyWorkPage({
       })
     : [];
   const smsConsentByPhone: SmsConsentLookup = Object.fromEntries(smsConsentRows.map((row) => [row.normalizedPhone, row.status]));
+  const actionReferrals = assignedReferrals.filter(isReferralNeedingTherapistAction);
   const todayVisits = assignedVisits.filter((visit: TherapistFieldVisit) => fieldVisitSection(visit) === "today");
   const upcomingVisits = assignedVisits.filter((visit: TherapistFieldVisit) => fieldVisitSection(visit) === "upcoming");
   const completedVisits = assignedVisits.filter((visit: TherapistFieldVisit) => fieldVisitSection(visit) === "completed");
@@ -754,9 +753,9 @@ export default async function MyWorkPage({
     archiveCandidates: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "completed" || referral.status === "canceled").length,
     capacityCautions: assignedVisitCount >= 6 ? 1 : 0,
     conflicts: inProgressVisitCount,
-    contactedWithoutFutureVisit: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted" && referral.visits.length === 0).length,
+    contactedWithoutFutureVisit: actionReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted" && referral.visits.length === 0).length,
     optedOutContacts: optedOutContactCount,
-    readyToSchedule: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted" && referral.visits.length === 0).length,
+    readyToSchedule: actionReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted" && referral.visits.length === 0).length,
     unassignedReferrals: 0,
     upcomingNextSevenDays: assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "scheduled" || visit.status === "in_progress").length,
   });
@@ -777,15 +776,11 @@ export default async function MyWorkPage({
         <BlockedNoteAlert searchParams={params} />
 
         {successMessage ? (
-          <p role="status" className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-950">
-            {successMessage}
-          </p>
+          <TransientActionBanner message={successMessage} tone="success" />
         ) : null}
 
         {errorMessage ? (
-          <p role="alert" className="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
-            {errorMessage}
-          </p>
+          <TransientActionBanner message={errorMessage} tone="error" />
         ) : null}
 
         {session.role === "admin" ? (
@@ -836,7 +831,6 @@ export default async function MyWorkPage({
                 </div>
 
                 <FieldVisitSection
-                  emptyText="No assigned visits need action today."
                   icon={CalendarClock}
                   queue="today"
                   selectedTherapistId={selectedTherapistId}
@@ -846,7 +840,6 @@ export default async function MyWorkPage({
                 />
 
                 <FieldVisitSection
-                  emptyText="No upcoming assigned visits."
                   icon={Clock3}
                   queue="upcoming"
                   selectedTherapistId={selectedTherapistId}
@@ -873,7 +866,6 @@ export default async function MyWorkPage({
                 </section>
 
                 <FieldVisitSection
-                  emptyText="No recently completed assigned visits."
                   icon={CheckCircle2}
                   queue="completed"
                   selectedTherapistId={selectedTherapistId}
@@ -882,13 +874,13 @@ export default async function MyWorkPage({
                   visits={completedVisits}
                 />
 
-                {assignedReferrals.length > 0 ? (
+                {actionReferrals.length > 0 ? (
                   <section className="grid min-w-0 gap-4">
                     <div className="flex items-center gap-2">
                       <BriefcaseMedical size={18} className="text-blue" />
                       <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Assigned referrals</h2>
                     </div>
-                    {assignedReferrals.map((referral: TherapistWorkReferral) => (
+                    {actionReferrals.map((referral: TherapistWorkReferral) => (
                       <article key={referral.id} className="min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div className="min-w-0">
@@ -907,7 +899,7 @@ export default async function MyWorkPage({
                         </div>
 
                         <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
-                          <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{redactPhone(referral.phone)}</dd></div>
+                          <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{getTherapistWorkspacePhoneDisplay(referral.phone)}</dd></div>
                           <div><dt className="font-semibold text-ink">Service area</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
                           <div><dt className="font-semibold text-ink">Next visit</dt><dd className="mt-1 text-slate-600">{formatDateTime(referral.visits[0]?.scheduledAt)}</dd></div>
                         </dl>
@@ -921,17 +913,17 @@ export default async function MyWorkPage({
                           <input type="hidden" name="referralId" value={referral.id} />
                           <label className="text-sm font-semibold text-ink">Action<select className="field" name="action" defaultValue="contacted">{THERAPIST_ACTIONS.map((action: TherapistAction) => <option key={action.value} value={action.value}>{action.label}</option>)}</select></label>
                           <label className="text-sm font-semibold text-ink">Note <span className="font-normal text-slate-400">(optional, no PHI)</span><input className="field" name="note" placeholder="No PHI in pilot notes" /></label>
-                          <div className="flex items-end"><button className="btn-primary min-h-14 w-full" type="submit"><Save size={18} />Save</button></div>
+                          <div className="flex items-end">
+                            <PendingSubmitButton className="btn-primary min-h-14 w-full" pendingLabel="Saving...">
+                              <Save size={18} />Save
+                            </PendingSubmitButton>
+                          </div>
                         </form>
                       </article>
                     ))}
                   </section>
                 ) : (
-                  <div className="rounded-lg border border-line bg-white p-8 text-center">
-                    <BriefcaseMedical className="mx-auto mb-3 text-slate-400" size={28} />
-                    <p className="font-semibold text-ink">No assigned referrals</p>
-                    <p className="mt-1 text-sm text-slate-500">Assign a referral to this demo therapist from the admin referral detail page.</p>
-                  </div>
+                  <FieldWorkspaceEmptyState stateKey="referrals" />
                 )}
               </div>
 

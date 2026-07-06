@@ -124,6 +124,7 @@ try {
   assert.equal(reloadedVisit?.status, "scheduled", "Blocked note path must not change visit status.");
 
   const myWorkPage = await readFile(new URL("../app/my-work/page.tsx", import.meta.url), "utf8");
+  const transientActionBanner = await readFile(new URL("../components/transient-action-banner.tsx", import.meta.url), "utf8");
   const fieldWorkflowSource = await readFile(new URL("../lib/pilot/therapist-field-workflow.ts", import.meta.url), "utf8");
   const adminVisitPage = await readFile(new URL("../app/admin/visits/[id]/page.tsx", import.meta.url), "utf8");
   const adminAuditPage = await readFile(new URL("../app/admin/audit/page.tsx", import.meta.url), "utf8");
@@ -135,9 +136,9 @@ try {
   assert.match(fieldWorkflowSource, /Confirm complete/, "Completion writes must use a confirmation submit label.");
   assert.match(myWorkPage, /<details/, "Visit actions must open an inline confirmation disclosure.");
   assert.match(myWorkPage, /Review visit action/, "Next field action panel must jump to the visit card.");
-  assert.match(myWorkPage, /role="status"/, "Successful visit actions must show a safe success banner.");
-  assert.match(myWorkPage, /role="alert"/, "Validation failures must show a safe error banner.");
-  assert.match(myWorkPage, /redactPhone\(visit\.referral\.phone\)/, "Visit phone display must stay masked.");
+  assert.match(transientActionBanner, /role="status"/, "Successful visit actions must show a safe success banner.");
+  assert.match(transientActionBanner, /role="alert"/, "Validation failures must show a safe error banner.");
+  assert.match(myWorkPage, /getTherapistWorkspacePhoneDisplay\(visit\.referral\.phone\)/, "Visit phone display must stay masked.");
   assert.doesNotMatch(myWorkPage, /\b(confirm\(|alert\(|sendSms|telnyx\.messages|fetch\(|axios|mapbox|geocode|directionsService)\b/i);
 
   assert.match(adminVisitPage, /Current field state/);

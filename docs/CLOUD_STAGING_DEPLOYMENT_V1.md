@@ -21,6 +21,7 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
    FLOWVIA_ALLOW_REAL_SMS_TEST=false FLOWVIA_SMS_STORE_MODE=test pnpm test:telnyx
    pnpm cloud:readiness
    pnpm hipaa:readiness
+   pnpm therapist:performance-smoke
    pnpm lint
    pnpm typecheck
    pnpm build
@@ -199,7 +200,7 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 2. Open `/admin/messages` and confirm Cloud webhook last seen, latest inbound keyword, consent state, and Message Ledger rows are current.
 3. Open `/admin/referrals`, filter for `New`, `Contacted`, or `Needs scheduling`, then update assignment and visit scheduling only with fake pilot data.
 4. Open `/admin/visits`, filter for `Upcoming`, `Needs scheduling`, or in-progress visits, then update lifecycle status and no-PHI operational notes.
-5. Have therapists review `/my-work`; therapist actions stay limited to operational status and note updates, with no assignment, SMS send, or bulk controls.
+5. Have therapists review `/my-work`; therapist actions stay limited to operational status and note updates, with no assignment, SMS send, or bulk controls. Confirm calm empty states, compact next action, no horizontal overflow on phone/iPad, safe one-time banners, and terminal-state locks.
 6. Open `/admin/audit` and confirm recent status, assignment, visit, SMS consent, and permission events look expected with safe metadata only.
 7. Open `/admin/data` only for fake-data stewardship; verify it shows audit-preserving cleanup and does not expose full phone numbers, raw SMS bodies, secrets, or provider payloads.
 8. Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
@@ -242,13 +243,17 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 
 - `/my-work` remains inside the authenticated dashboard shell and is scoped by therapist/admin RBAC.
 - `/my-work` should load as a phone/iPad-ready field workspace with the Next field action summary before lower-priority referral work.
+- `/my-work` should use minimized query payloads, masked phone display, safe loading/error states, and useful empty states for no visits today, no upcoming visits, no recent completions, and no referrals needing action.
+- The field workspace must not expose raw SMS bodies, full phone numbers, provider payloads, stack traces, database internals, or PHI.
 - Therapist field visit actions are manual-only: start, complete, no-show, or cancel assigned fake/test visits.
 - Therapist field visit status writes must require the inline action disclosure and final confirmation button before mutation.
+- Success/error banners should be safe, actionable, and not repeat after refresh once the transient query params are cleared.
+- Terminal visit states should update visually after manual action and remain locked from further therapist field changes.
 - The workflow does not send SMS, does not expose SMS internals, does not call external AI/APIs, and does not use maps, geocoding, or travel-time APIs.
 - Notes are blocked if they contain PHI-like or clinical content; blocked note feedback and audits must not include the raw note body.
 - `/admin/visits/[id]` should show Current field state and Therapist field activity with safe metadata only.
 - `/admin/audit` should filter therapist field actions, blocked notes, visit status changes, and future completion warnings.
-- `/admin/health` should report therapist field workflow enabled, phone layout enabled, iPad layout enabled, therapist field confirmations enabled, mobile action UX enabled, blocked note safe feedback enabled, field activity audit enabled, manual-only, no-PHI, no-PHI notes enforced, terminal visit lock enabled, SMS sending disabled, external AI/API for field notes disabled, PHI note storage disabled, and autonomous field actions disabled.
+- `/admin/health` should report field workspace optimized, empty states, mobile overflow guard, query minimization, confirmation UX, therapist field confirmations, mobile action UX, blocked note safe feedback, and field activity audit enabled; no SMS controls, no external APIs, no autonomous actions, no-PHI notes, and terminal visit lock enforced.
 - Before smoke testing field work, confirm only fake/test referrals and personal-number test records are present.
 
 Optional terminal checks:
@@ -256,6 +261,7 @@ Optional terminal checks:
 ```bash
 pnpm cloud:readiness
 pnpm therapist:confirmation-smoke
+pnpm therapist:performance-smoke
 pnpm db:pool-smoke
 pnpm telnyx:cloud-readiness
 pnpm therapist:field-smoke

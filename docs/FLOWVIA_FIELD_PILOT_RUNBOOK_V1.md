@@ -56,6 +56,8 @@ Internal dashboard/admin/workspace routes:
 
 Internal routes use the shared dashboard shell and sidebar after pilot login. Public pages use the public website header/footer.
 
+`/my-work` is also the dashboard-first field workspace for phone, iPad, and desktop. Keep it fast and calm with minimized Prisma selects, masked phone display, compact next-action cards, useful empty states, safe loading/error states, and no disconnected standalone field pages.
+
 ## Setup
 
 1. Provision a managed Postgres database.
@@ -267,12 +269,18 @@ Admins should run each pilot day from the internal dashboard shell:
 
 - `/my-work` is the therapist-facing field workflow inside the dashboard shell.
 - `/my-work` is optimized as a phone and iPad field workspace: next field action near the top, one-column phone layout, tablet-readable queues, and desktop/tablet context rail where space allows.
+- `/my-work` shows calm empty states for no visits today, no upcoming visits assigned, no recent field completions, and no assigned referrals needing action.
+- `/my-work` loading/error states must stay operational and safe: no stack traces, database URLs, internal ids, raw SMS bodies, full phone numbers, secrets, or provider payloads.
+- `/my-work` query payloads should remain small: use the existing Prisma wrapper, explicit selected fields, masked phone rendering, and no raw SMS body selection for workspace rendering.
+- Phone and iPad layouts must avoid horizontal overflow, keep 44px+ touch targets, and avoid repeating no-PHI helper text away from note inputs.
 - Assigned visits are shown before referrals in Today, Upcoming, and Completed recently sections.
 - The top Next field action panel is a compact summary that jumps to the full assigned visit card; all status writes happen from the visit card.
 - Manual visit actions are limited to: Start visit, Mark completed, Mark no-show, and Mark canceled.
 - Each therapist visit status write must use the inline confirmation disclosure and final `Confirm ...` button before the server action mutates status.
 - Allowed transitions are deterministic: `scheduled -> in_progress`, `scheduled/in_progress -> completed`, `scheduled/in_progress -> no_show`, and `scheduled/in_progress -> canceled`.
 - Terminal visits (`completed`, `no_show`, `canceled`) show an operational warning and cannot be changed from the therapist field workflow.
+- Success/error banners should be safe and actionable; transient action query params should not keep duplicating banners after refresh.
+- Terminal visit states should update visually after manual action and remain locked from further therapist field changes.
 - Notes are operational-only and are blocked by note classification if they include diagnosis, treatment, medication, symptoms, measurements, clinical notes, PHI-like content, or SMS-forbidden content.
 - Blocked note feedback must show only the safe reason category, destination, optional safe rewrite, and operational examples; raw blocked note text must not be stored or displayed.
 - If SMS consent is opted out, `/my-work` warns to use non-SMS operational follow-up only; it does not block field work and does not send SMS.
@@ -280,10 +288,11 @@ Admins should run each pilot day from the internal dashboard shell:
 - Therapist field actions write safe audit events: `therapist_visit_started`, `therapist_visit_completed`, `therapist_visit_no_show`, `therapist_visit_canceled`, and `therapist_visit_note_blocked`.
 - `/admin/visits/[id]` shows Current field state and Therapist field activity with safe metadata only.
 - `/admin/audit` includes quick filters for therapist field actions, blocked notes, visit status changes, and future completion warnings.
-- `/admin/health` must show therapist field confirmations, mobile action UX, blocked note safe feedback, and field activity audit enabled; autonomous field actions, external AI/API for field notes, PHI note storage, and SMS sending must remain disabled.
+- `/admin/health` must show field workspace optimized, empty states, mobile overflow guard, query minimization, confirmation UX, therapist field confirmations, mobile action UX, blocked note safe feedback, and field activity audit enabled; no SMS controls, no external APIs, and no autonomous actions must remain enforced.
 - Run `pnpm therapist:field-smoke` to verify assigned-only updates, blocked unsafe notes, audit writes, no SMS, no external APIs, and admin-route RBAC.
 - Run `pnpm therapist:workspace-smoke` to verify phone/iPad layout markers, touch-sized manual actions, terminal locks, future-completion warning logic, no SMS controls, and no external API/map/travel surfaces.
 - Run `pnpm therapist:confirmation-smoke` to verify inline confirmation, safe success/error banners, blocked-note safe metadata, field activity surfaces, health flags, no SMS, and no external API surfaces.
+- Run `pnpm therapist:performance-smoke` to verify minimized workspace selects, safe empty/loading copy, masked phone display, confirmation/terminal guards, blocked-note safety, no SMS send path, no external APIs, and Prisma wrapper usage.
 
 ## Supabase staging checks
 

@@ -176,6 +176,16 @@ export default async function AdminAuditPage({
   const [logs, actionRows, entityTypeRows] = await Promise.all([
     prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
+      select: {
+        action: true,
+        actorId: true,
+        actorType: true,
+        createdAt: true,
+        entityId: true,
+        entityType: true,
+        id: true,
+        metadataJson: true,
+      },
       take: 100,
       where: auditFilters.length > 0 ? { AND: auditFilters } : undefined,
     }),
