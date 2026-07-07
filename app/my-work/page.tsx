@@ -8,17 +8,12 @@ import {
   Clock3,
   Save,
   ShieldAlert,
-  Smartphone,
-  Tablet,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
-import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
-import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import { TransientActionBanner } from "@/components/transient-action-banner";
-import { getOperationsAssistantV2Status, getTherapistAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import {
   buildBlockedNoteSearchParams,
   classifyOperationalNote,
@@ -36,7 +31,6 @@ import {
   opportunityStateLabel,
   type OpportunityStateResult,
 } from "@/lib/pilot/opportunity";
-import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import { requirePilotSession } from "@/lib/pilot/auth";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
 import {
@@ -134,6 +128,17 @@ type TherapistFieldVisit = {
 
 type SmsConsentLookup = Record<string, string | undefined>;
 
+type NeedsAttentionItem = {
+  detail: string;
+  label: string;
+};
+
+type NextFieldAction =
+  | { kind: "visit"; visit: TherapistFieldVisit }
+  | { kind: "opportunity"; referral: TherapistOpportunityReferral }
+  | { kind: "referral"; referral: TherapistWorkReferral }
+  | { kind: "none" };
+
 function isSameOperationsDay(value: Date | string | null | undefined) {
   if (!value) return false;
   const itemDate = new Date(value);
@@ -190,6 +195,103 @@ function visitPriority(visit: TherapistFieldVisit) {
 
 function nextFieldVisit(visits: TherapistFieldVisit[]) {
   return [...visits].sort((left, right) => visitPriority(left) - visitPriority(right) || visitTimestamp(left.scheduledAt) - visitTimestamp(right.scheduledAt))[0] || null;
+}
+
+function nextActionVisit(visits: TherapistFieldVisit[]) {
+  return nextFieldVisit(visits.filter((visit: TherapistFieldVisit) => !isTerminalFieldVisitStatus(visit.status)));
+}
+
+function locationLabel(city: string | null | undefined, zip: string | null | undefined) {
+  return [city, zip].filter(Boolean).join(" / ") || "Location not provided";
+}
+
+function getNextFieldAction({
+  referrals,
+  opportunities,
+  visits,
+}: {
+  referrals: TherapistWorkReferral[];
+  opportunities: TherapistOpportunityReferral[];
+  visits: TherapistFieldVisit[];
+}): NextFieldAction {
+  const visit = nextActionVisit(visits);
+  if (visit) return { kind: "visit", visit };
+
+  const opportunity = opportunities[0];
+  if (opportunity) return { kind: "opportunity", referral: opportunity };
+
+  const referral = referrals[0];
+  if (referral) return { kind: "referral", referral };
+
+  return { kind: "none" };
+}
+
+function getWorkdaySummary({
+  attentionCount,
+  nextAction,
+  opportunityCount,
+  visitCount,
+}: {
+  attentionCount: number;
+  nextAction: NextFieldAction;
+  opportunityCount: number;
+  visitCount: number;
+}) {
+  if (nextAction.kind === "visit") return "Start with the next visit, then check any new opportunities.";
+  if (nextAction.kind === "opportunity") return "A new opportunity is waiting for a manual decision.";
+  if (nextAction.kind === "referral") return "Assigned work is waiting for a quick status update.";
+  if (attentionCount > 0) return "A few items need review before the day is fully clear.";
+  if (visitCount > 0 || opportunityCount > 0) return "Your field work is organized below.";
+  return "No urgent field action is waiting right now.";
+}
+
+function getNeedsAttentionItems({
+  actionReferrals,
+  opportunityCount,
+  optedOutContactCount,
+  noShowVisitCount,
+}: {
+  actionReferrals: TherapistWorkReferral[];
+  opportunityCount: number;
+  optedOutContactCount: number;
+  noShowVisitCount: number;
+}) {
+  const items: NeedsAttentionItem[] = [];
+  const needsContactCount = actionReferrals.filter((referral: TherapistWorkReferral) => referral.status === "new").length;
+  const intakeReadyCount = actionReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted" && referral.visits.length === 0).length;
+
+  if (opportunityCount > 0) {
+    items.push({
+      detail: `${opportunityCount} offered referral${opportunityCount === 1 ? "" : "s"} need accept or decline.`,
+      label: "Pending opportunity decision",
+    });
+  }
+  if (noShowVisitCount > 0) {
+    items.push({
+      detail: `${noShowVisitCount} no-show visit${noShowVisitCount === 1 ? "" : "s"} may need follow-up.`,
+      label: "No-show follow-up",
+    });
+  }
+  if (needsContactCount > 0) {
+    items.push({
+      detail: `${needsContactCount} assigned referral${needsContactCount === 1 ? "" : "s"} still need contact readiness.`,
+      label: "Needs contact",
+    });
+  }
+  if (intakeReadyCount > 0) {
+    items.push({
+      detail: `${intakeReadyCount} referral${intakeReadyCount === 1 ? "" : "s"} look intake ready but have no visit yet.`,
+      label: "Intake ready",
+    });
+  }
+  if (optedOutContactCount > 0) {
+    items.push({
+      detail: `${optedOutContactCount} assigned visit${optedOutContactCount === 1 ? "" : "s"} should use non-SMS follow-up only.`,
+      label: "Contact preference",
+    });
+  }
+
+  return items;
 }
 
 function shortId(value: string | null | undefined) {
@@ -353,9 +455,9 @@ function FieldVisitCard({
     <article id={visitDomId(visit.id)} className="scroll-mt-6 min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5" data-field-visit-card="true">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned visit</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Visit</p>
           <h3 className="break-words text-lg font-semibold tracking-[-.02em] text-ink">{visit.referral.patientName}</h3>
-          <p className="mt-1 break-words text-sm leading-6 text-slate-600">{formatDateTime(visit.scheduledAt)} · {[visit.referral.city, visit.referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
+          <p className="mt-1 break-words text-sm leading-6 text-slate-600">{formatDateTime(visit.scheduledAt)} · {locationLabel(visit.referral.city, visit.referral.zip)}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <span className="inline-flex w-fit rounded-md bg-ice px-2 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">{visitWorkLabel(visit)}</span>
@@ -363,10 +465,9 @@ function FieldVisitCard({
         </div>
       </div>
 
-      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
         <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{getTherapistWorkspacePhoneDisplay(visit.referral.phone)}</dd></div>
-        <div><dt className="font-semibold text-ink">Referral status</dt><dd className="mt-1 text-slate-600">{statusLabel(visit.referral.status)}</dd></div>
-        <div><dt className="font-semibold text-ink">Visit id</dt><dd className="mt-1 font-mono text-xs text-slate-500">{visit.id.slice(0, 8)}...{visit.id.slice(-4)}</dd></div>
+        <div><dt className="font-semibold text-ink">Status</dt><dd className="mt-1 text-slate-600">{statusLabel(visit.status)}</dd></div>
       </dl>
 
       <VisitWarnings smsConsentStatus={smsConsentStatus} visit={visit} />
@@ -377,48 +478,49 @@ function FieldVisitCard({
   );
 }
 
-function NextFieldActionPanel({
-  visit,
-}: {
-  visit: TherapistFieldVisit | null;
-}) {
+function NextFieldActionPanel({ action }: { action: NextFieldAction }) {
+  const title = action.kind === "visit"
+    ? action.visit.referral.patientName
+    : action.kind === "opportunity" || action.kind === "referral"
+      ? action.referral.patientName
+      : "No urgent field action";
+  const detail = action.kind === "visit"
+    ? `${formatDateTime(action.visit.scheduledAt)} · ${locationLabel(action.visit.referral.city, action.visit.referral.zip)}`
+    : action.kind === "opportunity"
+      ? `${locationLabel(action.referral.city, action.referral.zip)} · ${action.referral.careType || "Service not provided"}`
+      : action.kind === "referral"
+        ? `${locationLabel(action.referral.city, action.referral.zip)} · ${referralWorkLabel(action.referral)}`
+        : "You can review upcoming visits and lower-priority details below.";
+  const status = action.kind === "visit"
+    ? visitWorkLabel(action.visit)
+    : action.kind === "opportunity"
+      ? "Awaiting acceptance"
+      : action.kind === "referral"
+        ? referralWorkLabel(action.referral)
+        : "Clear";
+  const href = action.kind === "visit"
+    ? `#${visitDomId(action.visit.id)}`
+    : action.kind === "opportunity"
+      ? `#opportunity-${action.referral.id}`
+      : action.kind === "referral"
+        ? `#referral-${action.referral.id}`
+        : "#lower-priority-details";
+
   return (
     <section className="min-w-0 rounded-lg border border-blue/20 bg-white p-4 shadow-[0_14px_34px_rgba(10,37,64,0.08)] sm:p-5" data-field-next-action="true">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="eyebrow">Next field action</p>
-          <h2 className="mt-2 break-words text-xl font-semibold tracking-[-.02em] text-ink">{visit ? visit.referral.patientName : "No assigned visit action"}</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{visit ? "Manual, audited, no-PHI." : "No actionable assigned visit is waiting."}</p>
+          <h2 className="mt-2 break-words text-xl font-semibold tracking-[-.02em] text-ink">{title}</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{detail}</p>
         </div>
-        <span className="inline-flex w-fit items-center gap-1.5 rounded-md bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">
-          <ShieldAlert size={14} />
-          Manual submit
-        </span>
+        <span className="inline-flex w-fit rounded-md bg-ice px-2.5 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">{status}</span>
       </div>
 
-      {visit ? (
-        <>
-          <dl className="mt-4 grid gap-2 text-sm">
-            <div className="flex justify-between gap-3 rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">When</dt><dd className="text-right text-slate-600">{formatDateTime(visit.scheduledAt)}</dd></div>
-            <div className="flex justify-between gap-3 rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Area</dt><dd className="break-words text-right text-slate-600">{[visit.referral.city, visit.referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</dd></div>
-            <div className="flex justify-between gap-3 rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Phone</dt><dd className="text-right text-slate-600">{getTherapistWorkspacePhoneDisplay(visit.referral.phone)}</dd></div>
-            <div className="flex justify-between gap-3 rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Status</dt><dd className="text-right text-slate-600">{statusLabel(visit.status)}</dd></div>
-          </dl>
-          <a href={`#${visitDomId(visit.id)}`} className="btn-primary mt-4 min-h-14 w-full justify-center">
-            Review visit action
-          </a>
-        </>
-      ) : null}
+      <a href={href} className={action.kind === "none" ? "btn-secondary mt-4 min-h-12 w-full justify-center" : "btn-primary mt-4 min-h-12 w-full justify-center"}>
+        {action.kind === "visit" ? "Open visit" : action.kind === "opportunity" ? "Open opportunity" : action.kind === "referral" ? "Open details" : "Review later"}
+      </a>
     </section>
-  );
-}
-
-function FieldMetricCard({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="min-w-0 rounded-lg border border-line bg-white p-4">
-      <p className="text-sm font-semibold text-slate-600">{label}</p>
-      <p className="mt-2 break-words text-3xl font-semibold text-ink">{value}</p>
-    </div>
   );
 }
 
@@ -920,36 +1022,36 @@ export default async function MyWorkPage({
   const todayVisits = assignedVisits.filter((visit: TherapistFieldVisit) => fieldVisitSection(visit) === "today");
   const upcomingVisits = assignedVisits.filter((visit: TherapistFieldVisit) => fieldVisitSection(visit) === "upcoming");
   const completedVisits = assignedVisits.filter((visit: TherapistFieldVisit) => fieldVisitSection(visit) === "completed");
-  const nextVisit = nextFieldVisit(assignedVisits);
+  const opportunityReferralIds = new Set(availableOpportunities.map((referral: TherapistOpportunityReferral) => referral.id));
+  const assignedWorkReferrals = actionReferrals.filter((referral: TherapistWorkReferral) => !opportunityReferralIds.has(referral.id));
   const assignedVisitCount = assignedVisits.length;
   const inProgressVisitCount = assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "in_progress").length;
   const completedRecentlyVisitCount = assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "completed").length;
   const noShowVisitCount = assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "no_show").length;
   const optedOutContactCount = assignedVisits.filter((visit: TherapistFieldVisit) => smsConsentByPhone[normalizeE164Phone(visit.referral.phone)] === "opted_out").length;
-  const readyToStartVisitCount = assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "scheduled" && isPastOrToday(visit.scheduledAt)).length;
-  const recentlyCompletedCount = assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "completed").length + completedRecentlyVisitCount;
-  const assistantCards = getTherapistAssistantCards({
-    completedRecentlyVisits: completedRecentlyVisitCount,
-    inProgressVisits: inProgressVisitCount,
-    needsContact: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "new").length,
-    noShowVisits: noShowVisitCount,
-    optedOutContacts: optedOutContactCount,
-    readyToSchedule: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted").length,
-    recentlyCompleted: recentlyCompletedCount,
-    readyToStartVisits: readyToStartVisitCount,
-    upcomingVisits: assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "scheduled").length,
+  const selectedTherapistName = therapistOptions.find((therapist: TherapistOption) => therapist.id === selectedTherapistId)?.name;
+  const needsAttentionItems = getNeedsAttentionItems({
+    actionReferrals: assignedWorkReferrals,
+    noShowVisitCount,
+    opportunityCount: availableOpportunities.length,
+    optedOutContactCount,
   });
-  const schedulingCards = getSchedulingQueueCards({
-    archiveCandidates: assignedReferrals.filter((referral: TherapistWorkReferral) => referral.status === "completed" || referral.status === "canceled").length,
-    capacityCautions: assignedVisitCount >= 6 ? 1 : 0,
-    conflicts: inProgressVisitCount,
-    contactedWithoutFutureVisit: actionReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted" && referral.visits.length === 0).length,
-    optedOutContacts: optedOutContactCount,
-    readyToSchedule: actionReferrals.filter((referral: TherapistWorkReferral) => referral.status === "contacted" && referral.visits.length === 0).length,
-    unassignedReferrals: 0,
-    upcomingNextSevenDays: assignedVisits.filter((visit: TherapistFieldVisit) => visit.status === "scheduled" || visit.status === "in_progress").length,
+  const nextAction = getNextFieldAction({
+    opportunities: availableOpportunities,
+    referrals: assignedWorkReferrals,
+    visits: assignedVisits,
   });
-  const assistantStatus = getOperationsAssistantV2Status();
+  const todayLabel = new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "long",
+    weekday: "long",
+  }).format(new Date());
+  const workdaySummary = getWorkdaySummary({
+    attentionCount: needsAttentionItems.length,
+    nextAction,
+    opportunityCount: availableOpportunities.length,
+    visitCount: assignedVisitCount,
+  });
   const successMessage = visitSuccessMessage(params?.success);
   const errorMessage = visitErrorMessage(params?.error);
   const opportunitySuccess = opportunitySuccessMessage(params?.success);
@@ -957,114 +1059,241 @@ export default async function MyWorkPage({
 
   return (
     <div>
-        <div className="border-b border-line pb-8">
-          <p className="eyebrow">Pilot therapist</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-[-.03em] text-ink sm:text-4xl">My work</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-            Demo therapist worklist for the 1-2 therapist pilot. No SMS internals or send controls are exposed here.
-          </p>
+      <div className="border-b border-line pb-6">
+        <p className="eyebrow">Therapist field workspace</p>
+        <h1 className="mt-3 text-3xl font-semibold tracking-[-.03em] text-ink sm:text-4xl">My work</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+          A calm workday view for visits, new opportunities, and assigned referrals. Phones stay masked; notes stay no PHI.
+        </p>
+      </div>
+
+      <BlockedNoteAlert searchParams={params} />
+
+      {successMessage ? (
+        <TransientActionBanner message={successMessage} tone="success" />
+      ) : null}
+
+      {opportunitySuccess ? (
+        <TransientActionBanner message={opportunitySuccess} tone="success" />
+      ) : null}
+
+      {errorMessage ? (
+        <TransientActionBanner message={errorMessage} tone="error" />
+      ) : null}
+
+      {opportunityError ? (
+        <TransientActionBanner message={opportunityError} tone="error" />
+      ) : null}
+
+      {therapistOptions.length === 0 ? (
+        <div className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-950">
+          <CircleAlert className="mb-3" size={24} />
+          <h2 className="text-lg font-semibold">{session.role === "admin" ? "No demo therapists found" : "Therapist record not linked"}</h2>
+          <p className="mt-2 text-sm leading-6">{session.role === "admin" ? "Run `pnpm db:seed` to create demo pilot therapists before using this page." : "Ask a pilot admin to create or activate a Therapist row with this login email."}</p>
         </div>
+      ) : null}
 
-        <BlockedNoteAlert searchParams={params} />
-
-        {successMessage ? (
-          <TransientActionBanner message={successMessage} tone="success" />
-        ) : null}
-
-        {opportunitySuccess ? (
-          <TransientActionBanner message={opportunitySuccess} tone="success" />
-        ) : null}
-
-        {errorMessage ? (
-          <TransientActionBanner message={errorMessage} tone="error" />
-        ) : null}
-
-        {opportunityError ? (
-          <TransientActionBanner message={opportunityError} tone="error" />
-        ) : null}
-
-        {session.role === "admin" ? (
-          <form className="mt-8 rounded-lg border border-line bg-white p-5">
-            <label className="text-sm font-semibold text-ink">
-              Demo therapist selector
-              <select className="field" name="therapistId" defaultValue={selectedTherapistId || ""}>
-                {therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
-              </select>
-            </label>
-            <button className="btn-secondary mt-4" type="submit"><BriefcaseMedical size={18} />Load work</button>
-          </form>
-        ) : (
-          <div className="mt-8 rounded-lg border border-line bg-white p-5">
-            <p className="text-sm font-semibold text-ink">{therapistOptions[0]?.name || "Therapist record not linked"}</p>
-            <p className="mt-2 text-sm text-slate-600">Signed in as {session.email}. This view is limited to the matching active therapist record.</p>
-          </div>
-        )}
-
-        {therapistOptions.length === 0 ? (
-          <div className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-950">
-            <CircleAlert className="mb-3" size={24} />
-            <h2 className="text-lg font-semibold">{session.role === "admin" ? "No demo therapists found" : "Therapist record not linked"}</h2>
-            <p className="mt-2 text-sm leading-6">{session.role === "admin" ? "Run `pnpm db:seed` to create demo pilot therapists before using this page." : "Ask a pilot admin to create or activate a Therapist row with this login email."}</p>
-          </div>
-        ) : null}
-
-        {selectedTherapistId ? (
-          <div className="mt-8 grid min-w-0 gap-5" data-therapist-field-workspace="phone-ipad">
-            <section className="grid min-w-0 gap-4 rounded-lg border border-line bg-white p-4 sm:grid-cols-3 sm:p-5">
-              <div className="flex min-w-0 items-start gap-3 sm:col-span-2">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-ice text-blue"><Smartphone size={19} /></span>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-semibold tracking-[-.02em] text-ink">Phone and iPad field workspace</h2>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">One-column on phone, tablet-readable on iPad, and manual-only everywhere.</p>
-                </div>
+      {selectedTherapistId ? (
+        <div className="mt-8 grid min-w-0 gap-5" data-therapist-field-workspace="phone-ipad">
+          <section className="grid min-w-0 gap-4 rounded-lg border border-line bg-white p-4 sm:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0">
+                <p className="eyebrow">Today&apos;s field focus</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-.03em] text-ink">{todayLabel}</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Start with the next visit or any new opportunity that needs a decision.</p>
               </div>
-              <div className="grid gap-2 text-xs font-semibold text-slate-600 sm:justify-end">
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2.5 py-2 ring-1 ring-line"><Tablet size={14} /> iPad ready</span>
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-50 px-2.5 py-2 ring-1 ring-line"><ShieldAlert size={14} /> No-PHI notes</span>
+
+              {session.role === "admin" ? (
+                <form className="grid gap-2 sm:min-w-72">
+                  <label className="text-sm font-semibold text-ink">
+                    Demo therapist
+                    <select className="field" name="therapistId" defaultValue={selectedTherapistId || ""}>
+                      {therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
+                    </select>
+                  </label>
+                  <button className="btn-secondary min-h-11 justify-center" type="submit"><BriefcaseMedical size={17} />Load work</button>
+                </form>
+              ) : (
+                <div className="rounded-lg border border-line bg-slate-50 p-3 text-sm">
+                  <p className="font-semibold text-ink">{selectedTherapistName || "Therapist record not linked"}</p>
+                  <p className="mt-1 text-slate-600">Signed in as {session.email}.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-3 border-t border-line pt-4 text-sm sm:grid-cols-3">
+              <div><p className="font-semibold text-ink">{assignedVisitCount} visit{assignedVisitCount === 1 ? "" : "s"}</p><p className="mt-1 text-slate-600">Today and upcoming</p></div>
+              <div><p className="font-semibold text-ink">{availableOpportunities.length} new opportunit{availableOpportunities.length === 1 ? "y" : "ies"}</p><p className="mt-1 text-slate-600">Awaiting decision</p></div>
+              <div><p className="font-semibold text-ink">{needsAttentionItems.length} attention item{needsAttentionItems.length === 1 ? "" : "s"}</p><p className="mt-1 text-slate-600">{workdaySummary}</p></div>
+            </div>
+          </section>
+
+          <NextFieldActionPanel action={nextAction} />
+
+          <section data-testid="therapist-referral-opportunities" className="grid min-w-0 gap-4">
+            <div className="flex items-center gap-2">
+              <BriefcaseMedical size={18} className="text-blue" />
+              <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">New referral opportunities</h2>
+            </div>
+            {availableOpportunities.map((referral: TherapistOpportunityReferral) => (
+              <article id={`opportunity-${referral.id}`} key={referral.id} className="min-w-0 scroll-mt-6 rounded-lg border border-blue/20 bg-white p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">New opportunity</p>
+                    <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
+                    <p className="mt-1 break-words text-sm text-slate-600">{locationLabel(referral.city, referral.zip)} · {referral.careType || "Service not provided"}</p>
+                  </div>
+                  <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
+                    {opportunityStateLabel(referral.opportunityState.state)}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-sm font-semibold text-ink">Why this fits</p>
+                    <ul className="mt-2 grid gap-1 text-sm leading-6 text-slate-600">
+                      {opportunityWhyFits(referral, selectedTherapistName).slice(0, 2).map((item) => <li key={item}>- {item}</li>)}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-ink">What is missing</p>
+                    <ul className="mt-2 grid gap-1 text-sm leading-6 text-slate-600">
+                      {opportunityMissingItems(referral).slice(0, 2).map((item) => <li key={item}>- {item}</li>)}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-start">
+                  <form action={therapistOpportunityAction}>
+                    <input type="hidden" name="therapistId" value={selectedTherapistId} />
+                    <input type="hidden" name="referralId" value={referral.id} />
+                    <input type="hidden" name="action" value="accept" />
+                    <PendingSubmitButton className="btn-primary min-h-12 w-full sm:w-auto" pendingLabel="Accepting...">Accept</PendingSubmitButton>
+                  </form>
+                  <details className="group rounded-lg border border-line bg-white sm:min-w-80">
+                    <summary className="btn-secondary min-h-12 cursor-pointer list-none justify-center px-4 [&::-webkit-details-marker]:hidden">Decline</summary>
+                    <form action={therapistOpportunityAction} className="grid gap-3 border-t border-line p-4">
+                      <input type="hidden" name="therapistId" value={selectedTherapistId} />
+                      <input type="hidden" name="referralId" value={referral.id} />
+                      <input type="hidden" name="action" value="decline" />
+                      <label className="text-sm font-semibold text-ink">Reason<select className="field" name="declineReason" defaultValue="outside_territory">{OPPORTUNITY_DECLINE_REASONS.map((reason) => <option key={reason} value={reason}>{opportunityDeclineReasonLabel(reason)}</option>)}</select></label>
+                      <label className="text-sm font-semibold text-ink">Note <span className="font-normal text-slate-400">(optional, no PHI)</span><input className="field" name="note" placeholder="Operational reason only" /></label>
+                      <PendingSubmitButton className="btn-secondary min-h-12 w-full" pendingLabel="Declining...">Confirm decline</PendingSubmitButton>
+                    </form>
+                  </details>
+                  <details className="rounded-lg border border-line bg-white sm:min-w-64">
+                    <summary className="flex min-h-12 cursor-pointer list-none items-center px-4 text-sm font-semibold text-blue [&::-webkit-details-marker]:hidden">Open details</summary>
+                    <dl className="grid gap-2 border-t border-line p-4 text-sm">
+                      <div><dt className="font-semibold text-ink">Age</dt><dd className="mt-1 text-slate-600">{referralAgeLabel(referral.createdAt)}</dd></div>
+                      <div><dt className="font-semibold text-ink">Readiness</dt><dd className="mt-1 text-slate-600">{opportunityPriorityLabel(referral).replace("Priority: ", "")}</dd></div>
+                    </dl>
+                  </details>
+                </div>
+              </article>
+            ))}
+            {availableOpportunities.length === 0 ? (
+              <p className="rounded-lg border border-line bg-white p-5 text-sm leading-6 text-slate-600">No new referral opportunities need a decision.</p>
+            ) : null}
+          </section>
+
+          <FieldVisitSection
+            icon={CalendarClock}
+            queue="today"
+            selectedTherapistId={selectedTherapistId}
+            smsConsentByPhone={smsConsentByPhone}
+            title="Today"
+            visits={todayVisits}
+          />
+
+          <FieldVisitSection
+            icon={Clock3}
+            queue="upcoming"
+            selectedTherapistId={selectedTherapistId}
+            smsConsentByPhone={smsConsentByPhone}
+            title="Upcoming"
+            visits={upcomingVisits}
+          />
+
+          {needsAttentionItems.length > 0 ? (
+            <section className="grid min-w-0 gap-4">
+              <div className="flex items-center gap-2">
+                <CircleAlert size={18} className="text-blue" />
+                <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Needs attention</h2>
+              </div>
+              <div className="grid gap-3">
+                {needsAttentionItems.map((item: NeedsAttentionItem) => (
+                  <div key={item.label} className="rounded-lg border border-line bg-white p-4 text-sm">
+                    <p className="font-semibold text-ink">{item.label}</p>
+                    <p className="mt-1 leading-6 text-slate-600">{item.detail}</p>
+                  </div>
+                ))}
               </div>
             </section>
+          ) : null}
 
-            <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_390px] xl:items-start">
-              <div className="grid min-w-0 gap-5">
-                <div className="xl:hidden">
-                  <NextFieldActionPanel visit={nextVisit} />
-                </div>
-
-                <FieldVisitSection
-                  icon={CalendarClock}
-                  queue="today"
-                  selectedTherapistId={selectedTherapistId}
-                  smsConsentByPhone={smsConsentByPhone}
-                  title="Today"
-                  visits={todayVisits}
-                />
-
-                <FieldVisitSection
-                  icon={Clock3}
-                  queue="upcoming"
-                  selectedTherapistId={selectedTherapistId}
-                  smsConsentByPhone={smsConsentByPhone}
-                  title="Upcoming"
-                  visits={upcomingVisits}
-                />
-
-                <section className="grid min-w-0 gap-5 xl:hidden">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <FieldMetricCard label="Assigned referrals" value={assignedReferrals.length} />
-                    <FieldMetricCard label="Assigned visits" value={assignedVisitCount} />
+          {assignedWorkReferrals.length > 0 ? (
+            <section className="grid min-w-0 gap-4">
+              <div className="flex items-center gap-2">
+                <BriefcaseMedical size={18} className="text-blue" />
+                <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Assigned work</h2>
+              </div>
+              {assignedWorkReferrals.map((referral: TherapistWorkReferral) => (
+                <article id={`referral-${referral.id}`} key={referral.id} className="min-w-0 scroll-mt-6 rounded-lg border border-line bg-white p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned referral</p>
+                      <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
+                      <p className="mt-1 break-words text-sm text-slate-600">{locationLabel(referral.city, referral.zip)}</p>
+                    </div>
+                    <span className="inline-flex w-fit rounded-md bg-ice px-2 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">
+                      {referralWorkLabel(referral)}
+                    </span>
                   </div>
-                  <OperationsAssistantPanel
-                    cards={assistantCards}
-                    status={assistantStatus}
-                    summary="Deterministic, therapist-scoped guidance for safe field work. Human review is required."
-                    title="Operations Assistant"
-                  />
-                  <SchedulingIntelligencePanel
-                    cards={schedulingCards}
-                    summary="Read-only scheduling context for assigned fake pilot work. No visits are created here."
-                  />
-                </section>
 
+                  <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+                    <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{getTherapistWorkspacePhoneDisplay(referral.phone)}</dd></div>
+                    <div><dt className="font-semibold text-ink">Service</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
+                    <div><dt className="font-semibold text-ink">Next visit</dt><dd className="mt-1 text-slate-600">{formatDateTime(referral.visits[0]?.scheduledAt)}</dd></div>
+                  </dl>
+
+                  {referral.notes ? (
+                    <details className="mt-4 rounded-lg border border-line bg-slate-50">
+                      <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">Open details</summary>
+                      <p className="whitespace-pre-wrap break-words border-t border-line p-4 text-sm leading-6 text-slate-600">{referral.notes}</p>
+                    </details>
+                  ) : null}
+
+                  <form action={therapistReferralAction} className="mt-5 grid gap-4 border-t border-line pt-5 lg:grid-cols-[1fr_1fr_auto]">
+                    <input type="hidden" name="therapistId" value={selectedTherapistId} />
+                    <input type="hidden" name="referralId" value={referral.id} />
+                    <label className="text-sm font-semibold text-ink">Action<select className="field" name="action" defaultValue="contacted">{THERAPIST_ACTIONS.map((action: TherapistAction) => <option key={action.value} value={action.value}>{action.label}</option>)}</select></label>
+                    <label className="text-sm font-semibold text-ink">Note <span className="font-normal text-slate-400">(optional, no PHI)</span><input className="field" name="note" placeholder="No PHI in pilot notes" /></label>
+                    <div className="flex items-end">
+                      <PendingSubmitButton className="btn-primary min-h-14 w-full" pendingLabel="Saving...">
+                        <Save size={18} />Save note
+                      </PendingSubmitButton>
+                    </div>
+                  </form>
+                </article>
+              ))}
+            </section>
+          ) : (
+            <FieldWorkspaceEmptyState stateKey="referrals" />
+          )}
+
+          <section id="lower-priority-details" className="grid min-w-0 gap-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={18} className="text-blue" />
+              <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Lower-priority details</h2>
+            </div>
+            <details className="rounded-lg border border-line bg-white">
+              <summary className="cursor-pointer list-none p-4 font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                Done and recent work
+              </summary>
+              <div className="grid gap-4 border-t border-line p-4">
+                <p className="text-sm leading-6 text-slate-600">
+                  {completedRecentlyVisitCount} completed visit{completedRecentlyVisitCount === 1 ? "" : "s"} recently, {inProgressVisitCount} in progress.
+                </p>
                 <FieldVisitSection
                   icon={CheckCircle2}
                   queue="completed"
@@ -1073,160 +1302,11 @@ export default async function MyWorkPage({
                   title="Completed recently"
                   visits={completedVisits}
                 />
-
-                <section data-testid="therapist-referral-opportunities" className="grid min-w-0 gap-4">
-                  <div className="flex items-center gap-2">
-                    <BriefcaseMedical size={18} className="text-blue" />
-                    <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Referral opportunities</h2>
-                  </div>
-                  {availableOpportunities.map((referral: TherapistOpportunityReferral) => {
-                    const selectedTherapistName = therapistOptions.find((therapist: TherapistOption) => therapist.id === selectedTherapistId)?.name;
-                    return (
-                    <article id={`opportunity-${referral.id}`} key={referral.id} className="min-w-0 scroll-mt-6 rounded-lg border border-blue/20 bg-white p-4 sm:p-5">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Offered opportunity</p>
-                          <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
-                          <p className="mt-1 break-words text-sm text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
-                            {opportunityStateLabel(referral.opportunityState.state)}
-                          </span>
-                          <span className="inline-flex w-fit rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
-                            {opportunityPriorityLabel(referral)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
-                        <div><dt className="font-semibold text-ink">Discipline / service</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
-                        <div><dt className="font-semibold text-ink">Assigned therapist</dt><dd className="mt-1 text-slate-600">{selectedTherapistName || "Selected therapist"}</dd></div>
-                        <div><dt className="font-semibold text-ink">Referral age</dt><dd className="mt-1 text-slate-600">{referralAgeLabel(referral.createdAt)}</dd></div>
-                        <div><dt className="font-semibold text-ink">Intake readiness</dt><dd className="mt-1 text-slate-600">{opportunityMissingItems(referral)[0] === "No missing operational card fields" ? "Core operational fields present" : "Needs intake cleanup"}</dd></div>
-                        <div><dt className="font-semibold text-ink">Opportunity status</dt><dd className="mt-1 text-slate-600">{opportunityStateLabel(referral.opportunityState.state)}</dd></div>
-                        <div><dt className="font-semibold text-ink">Referral status</dt><dd className="mt-1 text-slate-600">{statusLabel(referral.status)}</dd></div>
-                      </dl>
-
-                      <div className="mt-5 grid gap-3 md:grid-cols-2">
-                        <div className="rounded-lg border border-line bg-slate-50 p-4">
-                          <p className="text-sm font-semibold text-ink">Why this fits</p>
-                          <div className="mt-3 grid gap-2">
-                            {opportunityWhyFits(referral, selectedTherapistName).map((item) => (
-                              <p key={item} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-line">{item}</p>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="rounded-lg border border-line bg-slate-50 p-4">
-                          <p className="text-sm font-semibold text-ink">What is missing</p>
-                          <div className="mt-3 grid gap-2">
-                            {opportunityMissingItems(referral).map((item) => (
-                              <p key={item} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-line">{item}</p>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-5 grid gap-3 border-t border-line pt-5 lg:grid-cols-[auto_1fr]">
-                        <form action={therapistOpportunityAction}>
-                          <input type="hidden" name="therapistId" value={selectedTherapistId} />
-                          <input type="hidden" name="referralId" value={referral.id} />
-                          <input type="hidden" name="action" value="accept" />
-                          <PendingSubmitButton className="btn-primary min-h-12" pendingLabel="Accepting...">Accept opportunity</PendingSubmitButton>
-                        </form>
-                        <form action={therapistOpportunityAction} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-                          <input type="hidden" name="therapistId" value={selectedTherapistId} />
-                          <input type="hidden" name="referralId" value={referral.id} />
-                          <input type="hidden" name="action" value="decline" />
-                          <label className="text-sm font-semibold text-ink">Decline reason<select className="field" name="declineReason" defaultValue="outside_territory">{OPPORTUNITY_DECLINE_REASONS.map((reason) => <option key={reason} value={reason}>{opportunityDeclineReasonLabel(reason)}</option>)}</select></label>
-                          <label className="text-sm font-semibold text-ink">Note <span className="font-normal text-slate-400">(optional, no PHI)</span><input className="field" name="note" placeholder="Operational reason only" /></label>
-                          <div className="flex items-end"><PendingSubmitButton className="btn-secondary min-h-12 w-full" pendingLabel="Declining...">Decline opportunity</PendingSubmitButton></div>
-                        </form>
-                      </div>
-                      <a href={`#opportunity-${referral.id}`} className="mt-4 inline-flex font-semibold text-blue underline">Open details</a>
-                    </article>
-                    );
-                  })}
-                  {availableOpportunities.length === 0 ? (
-                    <p className="rounded-lg border border-line bg-white p-5 text-sm leading-6 text-slate-600">No referral opportunities are waiting for manual review.</p>
-                  ) : null}
-                </section>
-
-                {actionReferrals.length > 0 ? (
-                  <section className="grid min-w-0 gap-4">
-                    <div className="flex items-center gap-2">
-                      <BriefcaseMedical size={18} className="text-blue" />
-                      <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Assigned referrals</h2>
-                    </div>
-                    {actionReferrals.map((referral: TherapistWorkReferral) => (
-                      <article key={referral.id} className="min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned referral</p>
-                            <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
-                            <p className="mt-1 break-words text-sm text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <span className="inline-flex w-fit rounded-md bg-ice px-2 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">
-                              {referralWorkLabel(referral)}
-                            </span>
-                            <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>
-                              {statusLabel(referral.status)}
-                            </span>
-                          </div>
-                        </div>
-
-                        <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
-                          <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{getTherapistWorkspacePhoneDisplay(referral.phone)}</dd></div>
-                          <div><dt className="font-semibold text-ink">Service area</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
-                          <div><dt className="font-semibold text-ink">Next visit</dt><dd className="mt-1 text-slate-600">{formatDateTime(referral.visits[0]?.scheduledAt)}</dd></div>
-                        </dl>
-
-                        {referral.notes ? (
-                          <p className="mt-4 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-600">{referral.notes}</p>
-                        ) : null}
-
-                        <form action={therapistReferralAction} className="mt-5 grid gap-4 border-t border-line pt-5 lg:grid-cols-[1fr_1fr_auto]">
-                          <input type="hidden" name="therapistId" value={selectedTherapistId} />
-                          <input type="hidden" name="referralId" value={referral.id} />
-                          <label className="text-sm font-semibold text-ink">Action<select className="field" name="action" defaultValue="contacted">{THERAPIST_ACTIONS.map((action: TherapistAction) => <option key={action.value} value={action.value}>{action.label}</option>)}</select></label>
-                          <label className="text-sm font-semibold text-ink">Note <span className="font-normal text-slate-400">(optional, no PHI)</span><input className="field" name="note" placeholder="No PHI in pilot notes" /></label>
-                          <div className="flex items-end">
-                            <PendingSubmitButton className="btn-primary min-h-14 w-full" pendingLabel="Saving...">
-                              <Save size={18} />Save
-                            </PendingSubmitButton>
-                          </div>
-                        </form>
-                      </article>
-                    ))}
-                  </section>
-                ) : (
-                  <FieldWorkspaceEmptyState stateKey="referrals" />
-                )}
               </div>
-
-              <aside className="hidden min-w-0 gap-5 xl:grid">
-                <div className="sticky top-6 grid gap-5">
-                  <NextFieldActionPanel visit={nextVisit} />
-                  <div className="grid gap-4">
-                    <FieldMetricCard label="Assigned referrals" value={assignedReferrals.length} />
-                    <FieldMetricCard label="Assigned visits" value={assignedVisitCount} />
-                  </div>
-                  <OperationsAssistantPanel
-                    cards={assistantCards}
-                    status={assistantStatus}
-                    summary="Deterministic, therapist-scoped guidance for safe field work. Human review is required."
-                    title="Operations Assistant"
-                  />
-                  <SchedulingIntelligencePanel
-                    cards={schedulingCards}
-                    summary="Read-only scheduling context for assigned fake pilot work. No visits are created here."
-                  />
-                </div>
-              </aside>
-            </div>
-          </div>
-        ) : null}
+            </details>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

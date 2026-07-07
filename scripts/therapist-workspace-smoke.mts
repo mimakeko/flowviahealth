@@ -19,13 +19,16 @@ const myWorkLayout = await readFile(new URL("../app/my-work/layout.tsx", import.
 
 assert.match(myWorkPage, /data-therapist-field-workspace="phone-ipad"/, "My Work must expose the phone/iPad workspace marker.");
 assert.match(myWorkPage, /Next field action/, "My Work must show a near-top next field action panel.");
-assert.match(myWorkPage, /Phone and iPad field workspace/, "My Work must identify the responsive field workspace.");
-assert.match(myWorkPage, /xl:grid-cols-\[minmax\(0,1fr\)_390px\]/, "My Work should use a larger-screen field rail without forcing phones into columns.");
-assert.match(myWorkPage, /xl:hidden/, "My Work should keep phone/tablet ordering distinct from the desktop rail.");
-assert.match(myWorkPage, /sticky top-6/, "Desktop/tablet field rail should keep the next action visible.");
+assert.match(myWorkPage, /Therapist field workspace/, "My Work must identify the therapist field workspace.");
+assert.match(myWorkPage, /Today&apos;s field focus/, "My Work should lead with today's field focus.");
+assert.match(myWorkPage, /getNextFieldAction/, "My Work should derive one prioritized next field action.");
+assert.match(myWorkPage, /New referral opportunities/, "My Work should separate new opportunities from assigned work.");
+assert.match(myWorkPage, /Needs attention/, "My Work should include a compact attention section.");
+assert.match(myWorkPage, /Lower-priority details/, "My Work should demote completed and lower-priority details.");
+assert.doesNotMatch(myWorkPage, /xl:grid-cols-\[minmax\(0,1fr\)_390px\]/, "My Work should not keep the old dashboard rail layout.");
 assert.match(myWorkPage, /min-h-14/, "Field action buttons should be thumb-friendly.");
 assert.match(myWorkPage, /sm:grid-cols-2 2xl:grid-cols-4/, "Field action buttons should adapt from phone to tablet/desktop.");
-assert.match(myWorkPage, /Review visit action/, "The top next-action panel should jump to the full visit action card.");
+assert.match(myWorkPage, /Open visit/, "The top next-action panel should jump to the full visit action card.");
 assert.match(myWorkPage, /id=\{visitDomId\(visit\.id\)\}/, "Visit cards should expose stable anchors for the next-action jump.");
 assert.match(myWorkPage, /FieldWorkspaceEmptyState/, "My Work must render centralized calm empty states.");
 assert.match(myWorkPage, /TransientActionBanner/, "Action banners should clear transient query params after rendering.");
@@ -41,11 +44,10 @@ assert.match(transientActionBanner, /role="alert"/, "Validation failures should 
 assert.match(myWorkPage, /getTherapistWorkspacePhoneDisplay\(visit\.referral\.phone\)/, "Visit phone display must stay masked.");
 assert.match(myWorkPage, /getTherapistWorkspacePhoneDisplay\(referral\.phone\)/, "Referral phone display must stay masked.");
 assert.match(myWorkPage, /No PHI in notes/, "No-PHI guidance must remain close to visit note inputs.");
-assert.match(myWorkPage, /No-PHI notes/, "Workspace readiness copy must remind users notes are no-PHI.");
-assert.match(myWorkPage, /SchedulingIntelligencePanel/, "Scheduling intelligence must remain visible on My Work.");
-assert.match(myWorkPage, /OperationsAssistantPanel/, "Operations Assistant must remain visible on My Work.");
-assert.match(myWorkPage, /Read-only scheduling context/, "Scheduling context must be read-only.");
-assert.match(myWorkPage, /No visits are created here/, "Scheduling context must not create visits from My Work.");
+assert.match(myWorkPage, /notes stay no PHI/, "Workspace copy must remind users notes are no-PHI.");
+assert.doesNotMatch(myWorkPage, /SchedulingIntelligencePanel/, "Scheduling intelligence panel should not dominate My Work.");
+assert.doesNotMatch(myWorkPage, /OperationsAssistantPanel/, "Operations Assistant panel should not dominate My Work.");
+assert.doesNotMatch(myWorkPage, /deterministic, therapist-scoped guidance/i, "My Work should not lead with system-style assistant copy.");
 assert.match(myWorkPage, /requirePilotSession\(\["admin", "therapist"\]/, "My Work must stay admin/therapist scoped.");
 assert.match(myWorkLayout, /requirePilotSession\(\["admin", "therapist"\]/, "My Work layout must stay admin/therapist scoped.");
 assert.match(adminLayout, /requirePilotSession\(\["admin"\]/, "Admin layout must remain admin-only.");
@@ -127,4 +129,4 @@ assert.match(adminHealthPage, /External AI\/API for field notes/);
 assert.match(adminHealthPage, /PHI note storage/);
 assert.match(adminHealthPage, /Terminal visit lock/);
 
-console.log("Therapist workspace smoke passed: phone/iPad layout markers, touch actions, no-PHI notes, terminal locks, future warning, RBAC, no SMS, and no external API surfaces verified.");
+console.log("Therapist workspace smoke passed: field focus hierarchy, next action, opportunities, no-PHI notes, terminal locks, RBAC, no SMS, and no external API surfaces verified.");
