@@ -16,6 +16,7 @@ out
 dist
 qa-screenshots/
 artifacts/browser-smoke/
+artifacts/cloud-smoke/
 playwright-report/
 test-results/
 .flowvia-sms-store*.json

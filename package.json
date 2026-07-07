@@ -32,6 +32,7 @@
     "auth:smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/pilot-auth-smoke.mts",
     "auth:route-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/pilot-auth-route-smoke.mts",
     "browser:auth-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/authenticated-browser-smoke.mts",
+    "cloud:therapist-workspace-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/cloud-therapist-workspace-smoke.mts",
     "ai:ops-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/ai-ops-smoke.mts",
     "scheduling:intelligence-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/scheduling-intelligence-smoke.mts",
     "scheduling:ready-gate-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/scheduling-ready-gate-smoke.mts",
