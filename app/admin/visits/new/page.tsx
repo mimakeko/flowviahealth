@@ -523,21 +523,21 @@ export default async function NewVisitPage({
       {selectedReferral && createVisitGate ? (
         <section
           data-testid={effectiveCreateVisitAllowed ? "ready-referral-selected-panel" : "blocked-referral-selected-panel"}
-          className={`mt-6 rounded-lg border p-5 ${gateToneClassName(effectiveCreateVisitAllowed)}`}
+          className={`mt-4 rounded-lg border p-4 sm:mt-6 sm:p-5 ${gateToneClassName(effectiveCreateVisitAllowed)}`}
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="eyebrow">{effectiveCreateVisitAllowed ? "Ready referral selected" : "Referral is not ready for visit creation"}</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">{selectedReferral.patientName}</h2>
-              <p className="mt-2 text-sm leading-6">
-                Safe operational summary only. No full address, phone number, raw SMS, provider payload, clinical details, or PHI is shown.
+              <h2 className="mt-2 text-xl font-semibold tracking-[-.02em] text-ink sm:text-2xl">{selectedReferral.patientName}</h2>
+              <p className="mt-2 text-sm font-semibold leading-6">
+                {effectiveCreateVisitAllowed ? "Manual visit creation is available." : `Manual create blocked: ${!opportunityAllowsCreateVisit ? "Therapist opportunity acceptance required" : createVisitGate.reasons.join(" · ") || "Review required"}`}
               </p>
             </div>
             <span className="inline-flex w-fit rounded-md bg-white/70 px-2.5 py-1 text-xs font-semibold ring-1 ring-current">
-              Source: deterministic
+              Manual review required
             </span>
           </div>
-          <dl className="mt-5 grid gap-3 text-sm md:grid-cols-3">
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
             <div className="rounded-lg bg-white/70 p-3">
               <dt className="font-semibold text-ink">Referral status</dt>
               <dd className="mt-1">
@@ -568,46 +568,11 @@ export default async function NewVisitPage({
         </section>
       ) : null}
 
-      <div className="mt-8">
-        {selectedReferral && schedulingReadiness ? (
-          <SchedulingIntelligencePanel
-            enableUseWindowAction
-            fit={therapistFit}
-            readiness={schedulingReadiness}
-            summary="This read-only scheduling guidance uses the selected referral, assigned therapist, consent state, and known open visits. Use this window only fills the scheduled field; create still requires manual form submission."
-            windows={suggestedWindows}
-          />
-        ) : (
-          <SchedulingIntelligencePanel
-            cards={getNeutralSchedulingGuidanceCards()}
-            summary="Select a referral to see readiness, therapist fit, and suggested business-day windows. The manual visit form remains available."
-          />
-        )}
-      </div>
-
-      {intakeQuality ? (
-        <section className={`mt-6 rounded-lg border p-5 text-sm leading-6 ${createVisitGate?.allowed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="font-semibold text-ink">Referral intake quality: {intakeQuality.readinessLabel}</p>
-              <p className="mt-1">Deterministic local checks only. This panel does not auto-create visits, assign therapists, send SMS, or call external duplicate APIs.</p>
-            </div>
-            <span className="inline-flex w-fit rounded-md bg-white/70 px-2.5 py-1 text-xs font-semibold ring-1 ring-current">{effectiveCreateVisitAllowed ? "create-ready" : "review-only"}</span>
-          </div>
-          {createVisitGate && !effectiveCreateVisitAllowed ? (
-            <p className="mt-3 rounded-md bg-white/70 p-2 font-semibold">Create visit blocked: <span className="font-normal">{!opportunityAllowsCreateVisit ? "Therapist opportunity acceptance required" : createVisitGate.reasons.join(" · ")}</span></p>
-          ) : null}
-          {intakeQuality.warnings.length > 0 ? (
-            <div className="mt-3 grid gap-2">
-              {intakeQuality.warnings.slice(0, 4).map((item) => (
-                <p key={item.code} className="rounded-md bg-white/70 p-2 font-semibold">{item.label}: <span className="font-normal">{item.nextAction}</span></p>
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      <form data-testid="guided-visit-create-form" action={createVisitAction} className="mt-8 grid gap-6 rounded-lg border border-line bg-white p-6 md:grid-cols-2">
+      <form data-testid="guided-visit-create-form" action={createVisitAction} className="mt-6 grid gap-5 rounded-lg border border-line bg-white p-4 sm:p-6 md:grid-cols-2">
+        <div className="md:col-span-2">
+          <h2 className="text-lg font-semibold tracking-[-.02em] text-ink">Visit form</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-600">Manual review required. No auto-scheduling or auto-assignment.</p>
+        </div>
         <label className="text-sm font-semibold text-ink md:col-span-2">Referral<select data-testid="visit-referral-select" className="field" name="referralId" defaultValue={params?.referralId || ""} required><option value="">Select referral</option>{referralOptions.map((referral: ReferralOption) => <option key={referral.id} value={referral.id}>{referral.patientName} · {statusLabel(referral.status)} · {[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</option>)}</select></label>
         <label className="text-sm font-semibold text-ink">Therapist<select data-testid="visit-therapist-select" className="field" name="therapistId" defaultValue={selectedReferral?.assignedTherapistId || ""} required><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
         <label className="text-sm font-semibold text-ink">Scheduled<input data-testid="visit-scheduled-at-input" className="field" name="scheduledAt" type="datetime-local" required /></label>
@@ -616,12 +581,52 @@ export default async function NewVisitPage({
         <label className="text-sm font-semibold text-ink md:col-span-2">Operational note <span className="font-normal text-slate-400">(optional, no PHI or clinical detail)</span><textarea className="field min-h-28" name="notes" /></label>
         <div className="md:col-span-2">
           {createVisitGate && !effectiveCreateVisitAllowed ? (
-            <button data-testid="visit-create-submit" className="btn-secondary cursor-not-allowed opacity-70" type="submit" disabled><Save size={18} />Review referral first</button>
+            <button data-testid="visit-create-submit" className="btn-secondary w-full cursor-not-allowed justify-center opacity-70 sm:w-auto" type="submit" disabled><Save size={18} />Review referral first</button>
           ) : (
-            <button data-testid="visit-create-submit" className="btn-primary" type="submit"><Save size={18} />Create visit</button>
+            <button data-testid="visit-create-submit" className="btn-primary w-full justify-center sm:w-auto" type="submit"><Save size={18} />Create visit</button>
           )}
         </div>
       </form>
+
+      <details className="mt-4 rounded-lg border border-line bg-white p-4 sm:mt-6 sm:p-5">
+        <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">Scheduling checks</summary>
+        <div className="mt-4">
+          {selectedReferral && schedulingReadiness ? (
+            <SchedulingIntelligencePanel
+              enableUseWindowAction
+              fit={therapistFit}
+              readiness={schedulingReadiness}
+              summary="Read-only guidance. Use this window only fills the scheduled field; create still requires manual form submission."
+              windows={suggestedWindows}
+            />
+          ) : (
+            <SchedulingIntelligencePanel
+              cards={getNeutralSchedulingGuidanceCards()}
+              summary="Select a referral to see readiness, therapist fit, and suggested business-day windows. The manual visit form remains available."
+            />
+          )}
+        </div>
+      </details>
+
+      {intakeQuality ? (
+        <details className={`mt-4 rounded-lg border p-4 text-sm leading-6 sm:mt-6 sm:p-5 ${createVisitGate?.allowed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
+          <summary className="cursor-pointer list-none font-semibold text-ink [&::-webkit-details-marker]:hidden">Intake checks: {intakeQuality.readinessLabel}</summary>
+          <div className="mt-3">
+            <p>Deterministic local checks only. This panel does not auto-create visits, assign therapists, send SMS, or call external duplicate APIs.</p>
+            <span className="mt-3 inline-flex w-fit rounded-md bg-white/70 px-2.5 py-1 text-xs font-semibold ring-1 ring-current">{effectiveCreateVisitAllowed ? "create-ready" : "review-only"}</span>
+            {createVisitGate && !effectiveCreateVisitAllowed ? (
+              <p className="mt-3 rounded-md bg-white/70 p-2 font-semibold">Create visit blocked: <span className="font-normal">{!opportunityAllowsCreateVisit ? "Therapist opportunity acceptance required" : createVisitGate.reasons.join(" · ")}</span></p>
+            ) : null}
+            {intakeQuality.warnings.length > 0 ? (
+              <div className="mt-3 grid gap-2">
+                {intakeQuality.warnings.slice(0, 4).map((item) => (
+                  <p key={item.code} className="rounded-md bg-white/70 p-2 font-semibold">{item.label}: <span className="font-normal">{item.nextAction}</span></p>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
