@@ -21,6 +21,7 @@
     "data:demo-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/data-demo-smoke.mts",
     "data:queue-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/scheduling-ready-gate-smoke.mts",
     "visits:workflow-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/visits-workflow-smoke.mts",
+    "visits:ready-create-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/visits-ready-create-smoke.mts",
     "therapist:field-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/therapist-field-smoke.mts",
     "therapist:workspace-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/therapist-workspace-smoke.mts",
     "therapist:confirmation-smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/therapist-confirmation-smoke.mts",

@@ -189,7 +189,7 @@ export default async function VisitDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ error?: string; noteCategory?: string; noteClassification?: string; noteDestination?: string; noteSuggestion?: string }>;
+  searchParams?: Promise<{ created?: string; error?: string; noteCategory?: string; noteClassification?: string; noteDestination?: string; noteSuggestion?: string }>;
 }) {
   requirePilotOperationsAccess();
 
@@ -275,6 +275,19 @@ export default async function VisitDetailPage({
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_.8fr]">
         <div className="rounded-lg border border-line bg-white p-6">
+          {query?.created === "1" ? (
+            <section data-testid="visit-created-success-panel" className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-sm leading-6 text-emerald-950">
+              <p className="text-lg font-semibold tracking-[-.02em] text-ink">Visit created from ready referral.</p>
+              <p className="mt-2">
+                Manual visit creation completed after deterministic ready-gate review. No SMS was sent, no external scheduling APIs were called, and no clinical documentation was created.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Link href={`/admin/referrals/${visit.referral.id}`} className="btn-secondary">Open referral</Link>
+                <Link href="/admin/visits" className="btn-secondary">Visit operations</Link>
+              </div>
+            </section>
+          ) : null}
+
           <p className="eyebrow">Visit detail</p>
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>

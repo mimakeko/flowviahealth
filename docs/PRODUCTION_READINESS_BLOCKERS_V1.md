@@ -34,6 +34,7 @@ Flowvia's production direction is a therapist-first operational intelligence lay
 - Pilot data reset/demo scenario tools are fake-data-only and admin-only: exact confirmation phrases required, archive-first cleanup for fake/demo and smoke/test operational records, no hard delete of audit/SMS/webhook/consent history, no real data reset, no SMS sending, no external reset APIs, and no maps/geocoding/travel-time APIs.
 - Authenticated browser smoke is local-only in this pass: it must refuse production/staging domains, skip safely without local credentials, remain read-only except login/logout cookies, and never click destructive Data Stewardship actions, SMS controls, referral/visit submit buttons, or therapist status-change submits.
 - Browser smoke screenshots and traces are local artifacts only and must not be committed or used as proof of PHI readiness.
+- Guided visit creation remains pilot-only and manual-only: ready-gate enforcement, required referral/therapist/datetime fields, blocked-create audit, no SMS, no external AI/API, no maps/geocoding/travel-time, no auto-assignment, and no auto visit creation must all remain in force.
 
 ## Required Auth Improvements
 
@@ -89,4 +90,5 @@ Before any serious pilot use, an admin should:
 - Assistant suggestions must remain operational-only and human-reviewed; do not enable real provider mode or autonomous actions before production controls are approved.
 - Scheduling suggestions must remain operational-only and human-reviewed. `Use this window` may fill a datetime field only; do not enable route optimization, maps/geocoding APIs, travel-time calculation, autonomous visit creation, SMS sending, ready-gate override, or submit bypass before production controls are approved.
 - Referral detail decisions and duplicate warnings must remain operational-only and human-reviewed. Do not enable external duplicate search, automatic merging, therapist auto-assignment, automatic visit creation, SMS sending, full-phone display, full-address display, raw SMS/body/provider-payload exposure, or PHI storage before production controls are approved.
+- Visit creation from ready referrals must remain operational-only and human-reviewed. `Use this window` may fill `scheduledAt` only; do not enable submit bypass, ready-gate override, autonomous scheduling, SMS sending, external map/travel APIs, clinical documentation, billing, claims, OASIS, or Medicare workflows.
 - Full phone number exposure must remain limited and masked by default.

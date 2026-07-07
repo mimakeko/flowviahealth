@@ -108,6 +108,21 @@ async function expectBlockedSchedulingRowHasNoCreateVisit(page: Page, label: str
   await expect(row.first().getByRole("link", { name: /Create visit/i }), `${label} should stay review-only`).toHaveCount(0);
 }
 
+async function firstPresentBlockedSchedulingReferralId(page: Page, labels: string[]) {
+  const reviewReferrals = page.getByTestId("scheduling-review-referrals");
+
+  for (const label of labels) {
+    const row = reviewReferrals.locator("> div").filter({ hasText: new RegExp(label, "i") }).first();
+    if ((await row.count()) === 0) continue;
+
+    const href = await row.getByRole("link", { name: /^Open$/i }).first().getAttribute("href");
+    const referralId = href?.match(/\/admin\/referrals\/([^/?#]+)/)?.[1];
+    if (referralId) return referralId;
+  }
+
+  return null;
+}
+
 test("authenticated Flowvia dashboard smoke is read-only and local", async ({ page }) => {
   test.skip(!adminEmail || !adminPassword, "missing local browser smoke credentials");
 
@@ -169,10 +184,13 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
 
     const readyCreateVisitLinks = readyReferrals.getByRole("link", { name: /Create visit/i });
     const readyEmptyStateCount = await readyReferrals.getByText(/No create-ready referrals found/i).count();
+    let readyCreateVisitHref: string | null = null;
     if (readyEmptyStateCount > 0) {
       await expect(readyCreateVisitLinks).toHaveCount(0);
     } else {
       expect(await readyCreateVisitLinks.count(), "ready scheduling rows should expose manual Create visit links").toBeGreaterThan(0);
+      readyCreateVisitHref = await readyCreateVisitLinks.first().getAttribute("href");
+      expect(readyCreateVisitHref || "", "ready Create visit link should open the guided visit creation form").toMatch(/^\/admin\/visits\/new\?referralId=/);
     }
     await expect(reviewReferrals.getByRole("link", { name: /Create visit/i })).toHaveCount(0);
     await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Duplicate A");
@@ -181,6 +199,51 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Intake Review");
     await screenshot(page, "admin-scheduling.png");
 
+    if (readyCreateVisitHref) {
+      await page.goto(readyCreateVisitHref);
+      await page.waitForLoadState("networkidle");
+      visitedRoutes.add(new URL(page.url()).pathname);
+      await expectNoDangerousVisibleText(page, "guided ready visit creation");
+      await expectRawPageIsClean(page, "guided ready visit creation");
+      await expect(page.getByTestId("ready-referral-selected-panel")).toBeVisible();
+      await expect(page.getByTestId("visit-referral-select")).not.toHaveValue("");
+      await expect(page.getByTestId("visit-therapist-select")).not.toHaveValue("");
+
+      const scheduledAtInput = page.getByTestId("visit-scheduled-at-input");
+      await expect(scheduledAtInput).toHaveValue("");
+      const useWindowButton = page.getByRole("button", { name: /Use this window/i }).first();
+      if (await useWindowButton.count()) {
+        await useWindowButton.click();
+        await expect(scheduledAtInput).not.toHaveValue("");
+        await expect(page).toHaveURL(/\/admin\/visits\/new\?referralId=/);
+        await expect(page.getByTestId("visit-created-success-panel")).toHaveCount(0);
+      } else {
+        console.log("Browser auth smoke note: no suggested window available for ready referral; fill-only click skipped.");
+      }
+      await screenshot(page, "guided-ready-visit-create.png");
+    }
+
+    await gotoProtected(page, "/admin/scheduling");
+    const blockedReferralId = await firstPresentBlockedSchedulingReferralId(page, [
+      "Demo Scenario Duplicate A",
+      "Demo Scenario Duplicate B",
+      "Demo Scenario Non SMS Follow Up",
+      "Demo Scenario Intake Review",
+    ]);
+    if (blockedReferralId) {
+      await page.goto(`/admin/visits/new?referralId=${encodeURIComponent(blockedReferralId)}`);
+      await page.waitForLoadState("networkidle");
+      visitedRoutes.add(new URL(page.url()).pathname);
+      await expectNoDangerousVisibleText(page, "guided blocked visit creation");
+      await expectRawPageIsClean(page, "guided blocked visit creation");
+      await expect(page.getByTestId("blocked-referral-selected-panel")).toBeVisible();
+      await expect(page.getByTestId("visit-create-submit")).toBeDisabled();
+      await expect(page.getByTestId("visit-created-success-panel")).toHaveCount(0);
+      await screenshot(page, "guided-blocked-visit-create.png");
+    } else {
+      console.log("Browser auth smoke note: no blocked scheduling referral found; blocked new-visit path check skipped.");
+    }
+
     await gotoProtected(page, "/admin/data");
     await expect(page.getByRole("heading", { name: /Data Stewardship/i })).toBeVisible();
     await expectAnyText(page, [/Type exactly: REFRESH FAKE DATA/i, /Type exactly: ARCHIVE FAKE DATA/i, /Type exactly: ARCHIVE SMOKE TEST DATA/i, /Type exactly: RESET DEMO SCENARIOS/i], "/admin/data");
@@ -188,7 +251,7 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
 
     await gotoProtected(page, "/admin/health");
     await expect(page.getByRole("heading", { name: /Health Center/i })).toBeVisible();
-    await expectAnyText(page, [/Real SMS gate/i, /External API calls/i, /Autonomous/i, /Maps\/geocoding APIs/i], "/admin/health");
+    await expectAnyText(page, [/Real SMS gate/i, /Guided visit creation/i, /Manual submit required/i, /Blocked create audit/i, /Maps\/geocoding APIs/i], "/admin/health");
     await screenshot(page, "admin-health.png");
 
     await gotoProtected(page, "/admin/audit");

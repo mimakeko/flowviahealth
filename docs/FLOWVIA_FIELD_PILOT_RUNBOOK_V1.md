@@ -51,8 +51,8 @@ Internal dashboard/admin/workspace routes:
 - `/admin/referrals/new`: manual fake-data referral intake for pilot testing.
 - `/admin/referrals/[id]`: admin referral decision workspace with assignment, safe visit history, audit view, readiness blockers, safety guarantees, and gated manual create-visit link.
 - `/admin/visits`: admin visit operations queue.
-- `/admin/visits/new`: manual fake-data visit scheduling.
-- `/admin/visits/[id]`: visit lifecycle detail and audit view.
+- `/admin/visits/new`: guided manual fake-data visit creation. When opened from a ready referral, it preselects the referral and assigned therapist, shows deterministic business-day windows, and still requires explicit manual submit.
+- `/admin/visits/[id]`: visit lifecycle detail, safe created-success banner, referral/visit operations links, and audit view.
 - `/admin/scheduling`: admin-only deterministic scheduling intelligence.
 - `/admin/messages`: read-only SMS consent/message ledger.
 - `/admin/health`: admin-only cloud pilot health center.
@@ -180,6 +180,12 @@ Browser smoke env vars:
 
 If admin browser smoke credentials are missing, `pnpm browser:auth-smoke` exits successfully with `SKIP_BROWSER_AUTH_SMOKE: missing local browser smoke credentials` and prints a compact skip summary without secret values. If Chromium browser binaries are missing for a credentialed run, install them locally with `pnpm exec playwright install chromium`.
 
+Guided visit creation smoke:
+
+- `pnpm visits:ready-create-smoke` verifies the deterministic server-side ready-create path with isolated fake rows.
+- It confirms a ready referral can reach the guided flow, blocked referrals remain blocked, an existing open/future visit prevents duplicate creation, `visit_create_blocked` audit metadata exists, and no SMS/maps/geocoding/travel-time/external AI/API path is introduced.
+- The browser auth smoke covers the read-only UI path: ready `Create visit` links open `/admin/visits/new?referralId=...`, the ready selected panel appears, referral and therapist fields are preselected, `Use this window` only fills `scheduledAt`, blocked referrals show the blocked panel, and no submit is clicked.
+
 Protected routes:
 
 - `/dashboard`
@@ -215,6 +221,7 @@ Run:
 ```bash
 pnpm db:generate
 pnpm auth:smoke
+pnpm visits:ready-create-smoke
 pnpm test:telnyx
 pnpm ops:guardrail-smoke
 pnpm lint

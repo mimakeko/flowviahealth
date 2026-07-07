@@ -6,6 +6,8 @@ Boundary: fake data only, personal phone only, no PHI, no real patients, no clin
 
 Product boundary: Flowvia is a therapist-first operational intelligence workspace around existing EMRs. It must not become an EMR, billing, claims, Medicare/OASIS, regulatory documentation, or official charting system.
 
+Guided visit creation boundary: ready referrals may open `/admin/visits/new?referralId=...`, but visit creation remains manual-only. The ready gate is enforced server-side, blocked attempts are audited, suggested windows only fill a datetime field, and no SMS, maps/geocoding/travel-time, external AI/API, auto-assignment, or auto-visit creation is enabled.
+
 ## Tomorrow Checklist
 
 1. Review git status.
@@ -20,6 +22,7 @@ Product boundary: Flowvia is a therapist-first operational intelligence workspac
    pnpm db:smoke
    pnpm notes:classification-smoke
    pnpm ops:guardrail-smoke
+   pnpm visits:ready-create-smoke
    pnpm browser:auth-smoke
    FLOWVIA_ALLOW_REAL_SMS_TEST=false FLOWVIA_SMS_STORE_MODE=test pnpm test:telnyx
    pnpm cloud:readiness
@@ -199,6 +202,7 @@ Product boundary: Flowvia is a therapist-first operational intelligence workspac
 - Do not use ngrok for cloud staging cutover.
 - Do not enter PHI, real patient data, diagnosis, medication, treatment details, symptoms, clinical notes, wound details, therapy plans, pain scores, or emergency details.
 - Do not add EMR, billing, claims, Medicare/OASIS, regulatory documentation, or official charting workflows.
+- Do not bypass the guided visit creation ready gate, manual submit requirement, blocked-create audit path, or no-SMS/no-map/no-AI boundary.
 - Do not leave `FLOWVIA_ALLOW_UNSIGNED_TELNYX_WEBHOOK_TEST=true` in any Vercel environment.
 - Do not leave `FLOWVIA_ALLOW_REAL_SMS_TEST=true` after controlled testing.
 

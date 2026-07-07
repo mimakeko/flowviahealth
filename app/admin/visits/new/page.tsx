@@ -11,6 +11,7 @@ import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardr
 import { requirePilotSession } from "@/lib/pilot/auth";
 import {
   FLOWVIA_OPERATIONS_TIME_ZONE,
+  statusClassName,
   optionalDateField,
   optionalTextField,
   requirePilotOperationsAccess,
@@ -87,6 +88,16 @@ type DuplicateReferralRow = {
   visits: { id: string }[];
   zip: string | null;
 };
+
+function visitCreateErrorMessage(error: string | undefined) {
+  if (error === "visit_create_blocked") return "Visit creation was blocked by the deterministic scheduling ready gate. Review the referral before trying again.";
+  if (error === "missing_required") return "Referral, therapist, and scheduled datetime are required before a visit can be created.";
+  return null;
+}
+
+function gateToneClassName(allowed: boolean) {
+  return allowed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-rose-200 bg-rose-50 text-rose-950";
+}
 
 async function getCreateVisitGateForReferral(prisma: PrismaClient, referralId: string): Promise<CreateVisitGateResult | null> {
   const referral = await prisma.patientReferral.findUnique({
@@ -203,6 +214,9 @@ async function createVisitAction(formData: FormData) {
   const notes = optionalTextField(formData.get("notes"), 2000);
 
   if (!referralId) notFound();
+  if (!therapistId || !scheduledAt) {
+    redirect(`/admin/visits/new?referralId=${encodeURIComponent(referralId)}&error=missing_required`);
+  }
 
   const blockedNoteSearch = await getBlockedOperationalNoteRedirectSearch({
     actorType: "pilot_admin",
@@ -228,6 +242,7 @@ async function createVisitAction(formData: FormData) {
           reason: createVisitGate.reasons.slice(0, 5).join(","),
           route: "/admin/visits/new",
           severity: createVisitGate.severity,
+          source: "guided_visit_creation",
         },
       },
     });
@@ -253,6 +268,8 @@ async function createVisitAction(formData: FormData) {
         entityId: visit.id,
         metadataJson: {
           referralId,
+          readyGateEnforced: true,
+          source: "guided_visit_creation",
           status: visit.status,
           therapistId: visit.therapistId,
         },
@@ -265,6 +282,8 @@ async function createVisitAction(formData: FormData) {
         entityType: "PatientReferral",
         entityId: referralId,
         metadataJson: {
+          readyGateEnforced: true,
+          source: "guided_visit_creation",
           status: visit.status,
           visitId: visit.id,
         },
@@ -272,7 +291,7 @@ async function createVisitAction(formData: FormData) {
     }),
   ]);
 
-  redirect(`/admin/visits/${visit.id}`);
+  redirect(`/admin/visits/${visit.id}?created=1`);
 }
 
 export default async function NewVisitPage({
@@ -425,6 +444,7 @@ export default async function NewVisitPage({
       })
     : null;
   const suggestedWindows = selectedReferral ? getSuggestedSchedulingWindows({ scheduledVisits: therapistOpenVisits }) : [];
+  const visitCreateError = visitCreateErrorMessage(params?.error);
 
   return (
     <div className="max-w-4xl">
@@ -440,9 +460,57 @@ export default async function NewVisitPage({
 
       <BlockedNoteAlert searchParams={params} />
 
-      {params?.error === "visit_create_blocked" ? (
+      {visitCreateError ? (
         <section className="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-950">
-          Visit creation was blocked by the deterministic scheduling ready gate. Review the referral before trying again.
+          {visitCreateError}
+        </section>
+      ) : null}
+
+      {selectedReferral && createVisitGate ? (
+        <section
+          data-testid={createVisitGate.allowed ? "ready-referral-selected-panel" : "blocked-referral-selected-panel"}
+          className={`mt-6 rounded-lg border p-5 ${gateToneClassName(createVisitGate.allowed)}`}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="eyebrow">{createVisitGate.allowed ? "Ready referral selected" : "Referral is not ready for visit creation"}</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">{selectedReferral.patientName}</h2>
+              <p className="mt-2 text-sm leading-6">
+                Safe operational summary only. No full address, phone number, raw SMS, provider payload, clinical details, or PHI is shown.
+              </p>
+            </div>
+            <span className="inline-flex w-fit rounded-md bg-white/70 px-2.5 py-1 text-xs font-semibold ring-1 ring-current">
+              Source: deterministic
+            </span>
+          </div>
+          <dl className="mt-5 grid gap-3 text-sm md:grid-cols-3">
+            <div className="rounded-lg bg-white/70 p-3">
+              <dt className="font-semibold text-ink">Referral status</dt>
+              <dd className="mt-1">
+                <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(selectedReferral.status)}`}>{statusLabel(selectedReferral.status)}</span>
+              </dd>
+            </div>
+            <div className="rounded-lg bg-white/70 p-3">
+              <dt className="font-semibold text-ink">City / ZIP</dt>
+              <dd className="mt-1">{[selectedReferral.city, selectedReferral.zip].filter(Boolean).join(" / ") || "Location not provided"}</dd>
+            </div>
+            <div className="rounded-lg bg-white/70 p-3">
+              <dt className="font-semibold text-ink">Assigned therapist</dt>
+              <dd className="mt-1">{selectedReferral.assignedTherapist?.name || "Unassigned"}</dd>
+            </div>
+            <div className="rounded-lg bg-white/70 p-3 md:col-span-3">
+              <dt className="font-semibold text-ink">Readiness state</dt>
+              <dd className="mt-1">{createVisitGate.allowed ? "Ready for guided manual visit creation" : `Blocked: ${createVisitGate.reasons.join(" · ") || "Review required"}`}</dd>
+            </div>
+          </dl>
+          {!createVisitGate.allowed ? (
+            <div className="mt-4 rounded-lg bg-white/70 p-4 text-sm leading-6">
+              <p className="font-semibold text-ink">Deterministic blockers</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {createVisitGate.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+              </ul>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -485,18 +553,18 @@ export default async function NewVisitPage({
         </section>
       ) : null}
 
-      <form action={createVisitAction} className="mt-8 grid gap-6 rounded-lg border border-line bg-white p-6 md:grid-cols-2">
-        <label className="text-sm font-semibold text-ink md:col-span-2">Referral<select className="field" name="referralId" defaultValue={params?.referralId || ""} required><option value="">Select referral</option>{referralOptions.map((referral: ReferralOption) => <option key={referral.id} value={referral.id}>{referral.patientName} · {statusLabel(referral.status)} · {[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</option>)}</select></label>
-        <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue={selectedReferral?.assignedTherapistId || ""}><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
-        <label className="text-sm font-semibold text-ink">Scheduled<input className="field" name="scheduledAt" type="datetime-local" /></label>
+      <form data-testid="guided-visit-create-form" action={createVisitAction} className="mt-8 grid gap-6 rounded-lg border border-line bg-white p-6 md:grid-cols-2">
+        <label className="text-sm font-semibold text-ink md:col-span-2">Referral<select data-testid="visit-referral-select" className="field" name="referralId" defaultValue={params?.referralId || ""} required><option value="">Select referral</option>{referralOptions.map((referral: ReferralOption) => <option key={referral.id} value={referral.id}>{referral.patientName} · {statusLabel(referral.status)} · {[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</option>)}</select></label>
+        <label className="text-sm font-semibold text-ink">Therapist<select data-testid="visit-therapist-select" className="field" name="therapistId" defaultValue={selectedReferral?.assignedTherapistId || ""} required><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+        <label className="text-sm font-semibold text-ink">Scheduled<input data-testid="visit-scheduled-at-input" className="field" name="scheduledAt" type="datetime-local" required /></label>
         <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue="scheduled">{VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
         <label className="text-sm font-semibold text-ink">Scheduling timezone<span className="field flex items-center text-slate-500">{FLOWVIA_OPERATIONS_TIME_ZONE}</span></label>
         <label className="text-sm font-semibold text-ink md:col-span-2">Operational note <span className="font-normal text-slate-400">(optional, no PHI or clinical detail)</span><textarea className="field min-h-28" name="notes" /></label>
         <div className="md:col-span-2">
           {createVisitGate && !createVisitGate.allowed ? (
-            <button className="btn-secondary cursor-not-allowed opacity-70" type="button"><Save size={18} />Review referral first</button>
+            <button data-testid="visit-create-submit" className="btn-secondary cursor-not-allowed opacity-70" type="submit" disabled><Save size={18} />Review referral first</button>
           ) : (
-            <button className="btn-primary" type="submit"><Save size={18} />Create visit</button>
+            <button data-testid="visit-create-submit" className="btn-primary" type="submit"><Save size={18} />Create visit</button>
           )}
         </div>
       </form>
