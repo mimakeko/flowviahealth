@@ -244,39 +244,67 @@ export default async function NewReferralPage({
 
   return (
     <div className="max-w-4xl">
-        <Link href="/admin/referrals" className="inline-flex items-center gap-2 text-sm font-semibold text-blue underline">
-          <ArrowLeft size={16} />
-          Back to referrals
-        </Link>
-        <div className="mt-6 border-b border-line pb-6">
-          <p className="eyebrow">Pilot admin</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-[-.03em] text-ink">Create referral</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-600">Manual intake for field-pilot testing. Keep notes operational only; do not enter diagnosis, symptoms, medications, treatment details, clinical notes, or PHI.</p>
+      <Link href="/admin/referrals" className="inline-flex items-center gap-2 text-sm font-semibold text-blue underline">
+        <ArrowLeft size={16} />
+        Back to referrals
+      </Link>
+      <div className="mt-4 border-b border-line pb-4 sm:mt-6 sm:pb-6">
+        <p className="eyebrow">Pilot admin</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-[-.03em] text-ink sm:mt-3 sm:text-3xl">Create referral</h1>
+        <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">Manual review required. Keep notes operational and no-PHI.</p>
+      </div>
+
+      <BlockedNoteAlert searchParams={params} />
+
+      {params?.error === "missing_required" ? (
+        <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-900 sm:mt-6">
+          Patient name and phone are required.
+        </p>
+      ) : null}
+
+      {params?.error === "duplicate_review_required" ? (
+        <div role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 sm:mt-6">
+          <div className="flex items-center gap-2 font-semibold"><CircleAlert size={18} />Duplicate checks require review.</div>
+          <details className="mt-2">
+            <summary className="cursor-pointer list-none text-sm font-semibold text-amber-950 underline [&::-webkit-details-marker]:hidden">Duplicate checks</summary>
+            <p className="mt-2">The local duplicate guard found {params.duplicateCount || "one or more"} possible match{params.duplicateCount === "1" ? "" : "es"} with {params.duplicateScore || "review"} confidence. Review existing referrals, then enter an operational duplicate override reason if this fake referral should still be created.</p>
+          </details>
         </div>
+      ) : null}
 
-        <BlockedNoteAlert searchParams={params} />
+      <form action={createReferralAction} className="mt-6 grid gap-5 rounded-lg border border-line bg-white p-4 sm:p-6 md:grid-cols-2">
+        <div className="md:col-span-2">
+          <h2 className="text-lg font-semibold tracking-[-.02em] text-ink">Referral form</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-600">Manual review required.</p>
+        </div>
+        <label className="text-sm font-semibold text-ink">Patient name<input className="field" name="patientName" required /></label>
+        <label className="text-sm font-semibold text-ink">Phone<input className="field" name="phone" required inputMode="tel" /></label>
+        <label className="text-sm font-semibold text-ink">Email <span className="font-normal text-slate-400">(optional)</span><input className="field" name="email" type="email" /></label>
+        <label className="text-sm font-semibold text-ink">Target city <span className="font-normal text-slate-400">(optional)</span><input className="field" name="city" /></label>
+        <label className="text-sm font-semibold text-ink">Target ZIP <span className="font-normal text-slate-400">(optional)</span><input className="field" name="zip" inputMode="numeric" /></label>
+        <label className="text-sm font-semibold text-ink">Service area / workflow type <span className="font-normal text-slate-400">(optional)</span><input className="field" name="careType" placeholder="Example: demo mobility visit" /></label>
+        <label className="text-sm font-semibold text-ink md:col-span-2">Address <span className="font-normal text-slate-400">(optional, restricted)</span><input className="field" name="address" /></label>
+        <label className="text-sm font-semibold text-ink">Referral source <span className="font-normal text-slate-400">(optional)</span><input className="field" name="referralSource" /></label>
+        <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue="new">{REFERRAL_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
+        <label className="text-sm font-semibold text-ink md:col-span-2">Assigned therapist<select className="field" name="assignedTherapistId" defaultValue=""><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+        <details className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 md:col-span-2">
+          <summary className="cursor-pointer list-none font-semibold [&::-webkit-details-marker]:hidden">Manual review required</summary>
+          <p className="mt-2">No PHI in intake notes. Use scheduling, access, assignment, or status wording only; no diagnosis, treatment, symptoms, medications, clinical measurements, addresses, or clinical details.</p>
+        </details>
+        <label className="text-sm font-semibold text-ink md:col-span-2">Internal operational note <span className="font-normal text-slate-400">(optional, no PHI or clinical detail)</span><textarea className="field min-h-32" name="notes" placeholder="Fake scheduling/admin note only" /></label>
+        <label className="text-sm font-semibold text-ink md:col-span-2">Duplicate override reason <span className="font-normal text-slate-400">(only if the duplicate guard warns)</span><textarea className="field min-h-24" name="duplicateOverrideReason" placeholder="Example: Separate fake pilot test case; reviewed existing referral." /></label>
+        <div className="md:col-span-2">
+          <button className="btn-primary w-full justify-center sm:w-auto" type="submit"><Save size={18} />Create referral</button>
+        </div>
+      </form>
 
-        {params?.error === "missing_required" ? (
-          <p role="alert" className="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
-            Patient name and phone are required.
-          </p>
-        ) : null}
-
-        {params?.error === "duplicate_review_required" ? (
-          <div role="alert" className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-            <div className="flex items-center gap-2 font-semibold"><CircleAlert size={18} />Possible duplicate requires review before continuing.</div>
-            <p className="mt-2">The deterministic local duplicate guard found {params.duplicateCount || "one or more"} possible match{params.duplicateCount === "1" ? "" : "es"} with {params.duplicateScore || "review"} confidence. Review existing referrals, then enter an operational duplicate override reason if this fake referral should still be created.</p>
-          </div>
-        ) : null}
-
-        <section className="mt-8 grid gap-4 rounded-lg border border-line bg-white p-5">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ice text-blue"><ShieldAlert size={18} /></span>
-            <div>
-              <h2 className="text-lg font-semibold tracking-[-.02em] text-ink">Intake quality preview</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">The server checks missing intake data, scheduling readiness, local duplicate signals, opt-out state, and no-PHI note safety before this referral reaches scheduling or therapist work.</p>
-            </div>
-          </div>
+      <details className="mt-4 rounded-lg border border-line bg-white p-4 sm:mt-6 sm:p-5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+          <span>Intake checks</span>
+          <ShieldAlert size={18} className="text-blue" />
+        </summary>
+        <div className="mt-4 grid gap-4">
+          <p className="text-sm leading-6 text-slate-600">The server checks missing intake data, scheduling readiness, local duplicate signals, opt-out state, and no-PHI note safety before this referral reaches scheduling or therapist work.</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {emptyIntakePreview.warnings.slice(0, 5).map((item) => (
               <div key={item.code} className="rounded-lg border border-line bg-slate-50 p-3 text-sm">
@@ -286,28 +314,8 @@ export default async function NewReferralPage({
             ))}
           </div>
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold leading-6 text-amber-950">Duplicate guard is warning-only and local-data-only. It never auto-assigns therapists, creates visits, sends SMS, or calls external duplicate APIs.</p>
-        </section>
-
-        <form action={createReferralAction} className="mt-8 grid gap-6 rounded-lg border border-line bg-white p-6 md:grid-cols-2">
-          <label className="text-sm font-semibold text-ink">Patient name<input className="field" name="patientName" required /></label>
-          <label className="text-sm font-semibold text-ink">Phone<input className="field" name="phone" required inputMode="tel" /></label>
-          <label className="text-sm font-semibold text-ink">Email <span className="font-normal text-slate-400">(optional)</span><input className="field" name="email" type="email" /></label>
-          <label className="text-sm font-semibold text-ink">Target city <span className="font-normal text-slate-400">(optional)</span><input className="field" name="city" /></label>
-          <label className="text-sm font-semibold text-ink">Target ZIP <span className="font-normal text-slate-400">(optional)</span><input className="field" name="zip" inputMode="numeric" /></label>
-          <label className="text-sm font-semibold text-ink">Service area / workflow type <span className="font-normal text-slate-400">(optional)</span><input className="field" name="careType" placeholder="Example: demo mobility visit" /></label>
-          <label className="text-sm font-semibold text-ink md:col-span-2">Address <span className="font-normal text-slate-400">(optional, restricted)</span><input className="field" name="address" /></label>
-          <label className="text-sm font-semibold text-ink">Referral source <span className="font-normal text-slate-400">(optional)</span><input className="field" name="referralSource" /></label>
-          <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue="new">{REFERRAL_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
-          <label className="text-sm font-semibold text-ink md:col-span-2">Assigned therapist<select className="field" name="assignedTherapistId" defaultValue=""><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-950 md:col-span-2">
-            No PHI in intake notes. Use scheduling, access, assignment, or status wording only; no diagnosis, treatment, symptoms, medications, clinical measurements, addresses, or clinical details.
-          </div>
-          <label className="text-sm font-semibold text-ink md:col-span-2">Internal operational note <span className="font-normal text-slate-400">(optional, no PHI or clinical detail)</span><textarea className="field min-h-32" name="notes" placeholder="Fake scheduling/admin note only" /></label>
-          <label className="text-sm font-semibold text-ink md:col-span-2">Duplicate override reason <span className="font-normal text-slate-400">(only if the duplicate guard warns)</span><textarea className="field min-h-24" name="duplicateOverrideReason" placeholder="Example: Separate fake pilot test case; reviewed existing referral." /></label>
-          <div className="md:col-span-2">
-            <button className="btn-primary" type="submit"><Save size={18} />Create referral</button>
-          </div>
-        </form>
+        </div>
+      </details>
     </div>
   );
 }

@@ -68,6 +68,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
   const pilotAccess = getPilotOperationsAccessState();
   const messagesAccess = getAdminMessagesAccessState();
   const dataMode = getFlowviaDataModeStatus();
+  const isAdmin = section === "admin";
   const isWorkspace = section === "workspace";
   const renderNavigation = () => (
     <nav aria-label="Internal workspace navigation" className="grid gap-1">
@@ -99,18 +100,23 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
       <a href="#main-content" className="sr-only z-[100] rounded bg-white px-4 py-2 text-blue focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to workspace</a>
 
       <header className="border-b border-line bg-white">
-        <div className="container-page flex min-h-[74px] flex-col gap-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className={`container-page flex flex-col lg:flex-row lg:items-center lg:justify-between ${isAdmin ? "min-h-[58px] gap-2 py-3 sm:min-h-[74px] sm:gap-4 sm:py-4" : "min-h-[74px] gap-4 py-4"}`}>
           <Link href="/dashboard" aria-label="Flowvia internal dashboard" className="inline-flex w-fit">
             <LogoLockup compact />
           </Link>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex min-h-9 items-center rounded-lg border border-line bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+            <span className={`min-h-9 items-center rounded-lg border border-line bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 ${isAdmin ? "hidden sm:inline-flex" : "inline-flex"}`}>
               {roleLabel(session.role)} · {session.email}
             </span>
-            <span className={isWorkspace ? "hidden sm:inline-flex" : "inline-flex"}>
+            {isAdmin ? (
+              <span className="inline-flex min-h-9 items-center rounded-lg border border-line bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 sm:hidden">
+                {roleLabel(session.role)}
+              </span>
+            ) : null}
+            <span className={isWorkspace || isAdmin ? "hidden sm:inline-flex" : "inline-flex"}>
               <GateBadge enabled={pilotAccess.enabled} label={pilotAccess.enabled ? "Pilot gate open" : "Pilot gate closed"} />
             </span>
-            <span className={isWorkspace ? "hidden sm:inline-flex" : "inline-flex"}>
+            <span className={isWorkspace || isAdmin ? "hidden sm:inline-flex" : "inline-flex"}>
               <GateBadge enabled={messagesAccess.enabled} label={messagesAccess.enabled ? "Ledger gate open" : "Ledger gate closed"} />
             </span>
             <form action={logoutAction}>
@@ -118,16 +124,35 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
                 Logout
               </button>
             </form>
-            <Link href="/" className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue/40 hover:text-blue">
+            <Link href="/" className={`${isAdmin ? "hidden sm:inline-flex" : "inline-flex"} min-h-9 items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue/40 hover:text-blue`}>
               <Home size={15} />
               Public site
             </Link>
+            {isAdmin ? (
+              <details className="w-full rounded-lg border border-line bg-white sm:hidden">
+                <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 px-3 text-xs font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                  <span>Pilot details</span>
+                </summary>
+                <div className="grid gap-2 border-t border-line p-3">
+                  <span className="text-xs font-semibold text-slate-700">{session.email}</span>
+                  <div className="flex flex-wrap gap-2">
+                    <GateBadge enabled={pilotAccess.enabled} label={pilotAccess.enabled ? "Pilot gate open" : "Pilot gate closed"} />
+                    <GateBadge enabled={messagesAccess.enabled} label={messagesAccess.enabled ? "Ledger gate open" : "Ledger gate closed"} />
+                  </div>
+                  <Link href="/" className="inline-flex min-h-9 w-fit items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue/40 hover:text-blue">
+                    <Home size={15} />
+                    Public site
+                  </Link>
+                </div>
+              </details>
+            ) : null}
           </div>
         </div>
         <div className={`${isWorkspace ? "hidden lg:block" : ""} border-t border-amber-200 bg-amber-50`}>
-          <div className="container-page flex min-h-11 flex-wrap items-center gap-2 py-2 text-xs font-semibold text-amber-950">
+          <div className={`container-page flex flex-wrap items-center gap-2 py-2 text-xs font-semibold text-amber-950 ${isAdmin ? "min-h-9 sm:min-h-11" : "min-h-11"}`}>
             <ShieldAlert size={16} />
-            <span>{dataMode.warningLabel}</span>
+            <span className={isAdmin ? "sm:hidden" : ""}>{isAdmin ? "Pilot mode" : dataMode.warningLabel}</span>
+            <span className={isAdmin ? "hidden sm:inline" : "hidden"}>{dataMode.warningLabel}</span>
             <span className="rounded-md bg-white/70 px-2 py-1 text-[11px] uppercase tracking-[0.08em] text-amber-900">{dataMode.safeLabel}</span>
           </div>
         </div>
@@ -150,11 +175,36 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
                 {renderNavigation()}
               </div>
             </>
+          ) : isAdmin ? (
+            <>
+              <details className="rounded-lg border border-line bg-white lg:hidden">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                  <span>Admin menu</span>
+                </summary>
+                <div className="border-t border-line p-3">
+                  {renderNavigation()}
+                </div>
+              </details>
+              <div className="hidden lg:block">
+                {renderNavigation()}
+              </div>
+            </>
           ) : (
             renderNavigation()
           )}
 
-          <div className={`${isWorkspace ? "hidden lg:block" : ""} mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950`}>
+          <details className={`${isAdmin ? "mt-3 lg:hidden" : "hidden"} rounded-lg border border-amber-200 bg-amber-50 text-sm leading-6 text-amber-950`}>
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 font-semibold [&::-webkit-details-marker]:hidden">
+              <span>Pilot details</span>
+              <ShieldAlert size={16} />
+            </summary>
+            <div className="grid gap-3 border-t border-amber-200 p-4 text-xs leading-5">
+              <p>{dataMode.warningLabel}. Real patient use remains blocked until auth/RBAC, PHI policy, retention, backups, and incident response are approved.</p>
+              <p>Signed pilot sessions enforce admin and therapist route access. Operational cards and work queues read from Prisma/Postgres when gates are open.</p>
+            </div>
+          </details>
+
+          <div className={`${isWorkspace || isAdmin ? "hidden lg:block" : ""} mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950`}>
             <div className="flex items-center gap-2 font-semibold">
               <ShieldAlert size={17} />
               {dataMode.warningLabel}
@@ -162,7 +212,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             <p className="mt-2 text-xs leading-5">Real patient use remains blocked until auth/RBAC, PHI policy, retention, backups, and incident response are approved.</p>
           </div>
 
-          <div className={`${isWorkspace ? "hidden lg:block" : ""} mt-3 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600`}>
+          <div className={`${isWorkspace || isAdmin ? "hidden lg:block" : ""} mt-3 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600`}>
             <div className="flex items-center gap-2 font-semibold text-ink">
               <LockKeyhole size={16} />
               Access boundary
@@ -170,7 +220,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             <p className="mt-2">Signed pilot sessions enforce admin and therapist route access. This is still not final enterprise auth.</p>
           </div>
 
-          <div className={`${isWorkspace ? "hidden lg:block" : ""} mt-3 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600`}>
+          <div className={`${isWorkspace || isAdmin ? "hidden lg:block" : ""} mt-3 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600`}>
             <div className="flex items-center gap-2 font-semibold text-ink">
               <Database size={16} />
               Cloud data
