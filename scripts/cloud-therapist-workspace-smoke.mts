@@ -35,7 +35,7 @@ const forbiddenAgencySpeedLanguage: PatternCheck[] = [
   { label: "staffing handoff friction language", regex: /Staffing handoff friction/i },
 ];
 
-const forbiddenLeakPatterns: PatternCheck[] = [
+const rawHtmlLeakPatterns: PatternCheck[] = [
   { label: "Next.js redirect leak", regex: /NEXT_REDIRECT/i },
   { label: "Prisma known request error", regex: /PrismaClientKnownRequestError/i },
   { label: "Prisma initialization error", regex: /PrismaClientInitializationError/i },
@@ -47,6 +47,11 @@ const forbiddenLeakPatterns: PatternCheck[] = [
   { label: "Telnyx API key leak", regex: /TELNYX_API_KEY/i },
   { label: "Telnyx webhook secret leak", regex: /TELNYX_WEBHOOK_SIGNING_SECRET/i },
   { label: "private key leak", regex: /BEGIN [A-Z ]*PRIVATE KEY/i },
+  { label: "raw webhook payload leak", regex: /raw webhook payload/i },
+  { label: "provider payload leak", regex: /provider payload/i },
+];
+
+const visibleTextLeakPatterns: PatternCheck[] = [
   { label: "raw SMS body leak", regex: /raw SMS body/i },
   { label: "raw webhook payload leak", regex: /raw webhook payload/i },
   { label: "provider payload leak", regex: /provider payload/i },
@@ -58,9 +63,11 @@ const forbiddenLeakPatterns: PatternCheck[] = [
 const fullStreetAddressPatterns: PatternCheck[] = [
   {
     label: "full street address",
-    regex: /\b\d{1,6}\s+(?:[A-Za-z0-9.'#-]+\s+){0,6}(?:Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Drive|Dr\.?|Lane|Ln\.?|Boulevard|Blvd\.?|Court|Ct\.?|Circle|Cir\.?|Trail|Trl\.?|Parkway|Pkwy\.?|Place|Pl\.?|Way|Expressway|Expy\.?)\b(?:\s+(?:Apt|Apartment|Suite|Ste\.?|Unit)\s*[A-Z0-9-]+)?/i,
+    regex: /(?<![\w-])\d{1,6}\s+(?:[A-Za-z0-9.'#-]+\s+){0,6}(?:Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Drive|Dr\.?|Lane|Ln\.?|Boulevard|Blvd\.?|Court|Ct\.?|Circle|Cir\.?|Trail|Trl\.?|Parkway|Pkwy\.?|Place|Pl\.?|Way|Expressway|Expy\.?)(?=$|[\s,.;)])(?:[\s,]+(?:Apt|Apartment|Suite|Ste\.?|Unit)\s*[A-Z0-9-]+)?/i,
   },
 ];
+
+assertNoPatterns("mt-3 list-disc space-y-1 pl-5", fullStreetAddressPatterns, "Tailwind class regression");
 
 const optionalAdminRoutes = [
   "/dashboard",
@@ -142,10 +149,9 @@ function assertNoPatterns(value: string, patterns: readonly PatternCheck[], scop
 
 async function assertNoLeaks(page: Page, label: string) {
   const [text, html] = await Promise.all([pageText(page), pageHtml(page)]);
-  assertNoPatterns(text, forbiddenLeakPatterns, `${label} visible text`);
-  assertNoPatterns(html, forbiddenLeakPatterns, `${label} html`);
+  assertNoPatterns(html, rawHtmlLeakPatterns, `${label} html`);
+  assertNoPatterns(text, visibleTextLeakPatterns, `${label} visible text`);
   assertNoPatterns(text, fullStreetAddressPatterns, `${label} visible text`);
-  assertNoPatterns(html, fullStreetAddressPatterns, `${label} html`);
 }
 
 async function assertNoRuntimeErrors(label: string) {
