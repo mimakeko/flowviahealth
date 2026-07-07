@@ -83,7 +83,7 @@ export function getReferralAssistantCards(input: ReferralAssistantInput): Operat
   }
 
   if (input.status === "contacted" && input.upcomingVisitCount === 0) {
-    cards.push(card("Ready to schedule", "info", "The referral has been contacted and has no upcoming visit.", "Review scheduling readiness and create a visit when operational details are complete."));
+    cards.push(card("Intake ready", "info", "The referral has been contacted and has no upcoming visit.", "Review therapist opportunity state and create a visit only when manual gates are satisfied."));
   }
 
   if (!input.assignedTherapistId && !["completed", "canceled"].includes(input.status)) {
@@ -162,7 +162,7 @@ export function getQueueAssistantCards(input: QueueAssistantInput): OperationsAs
 
   if ((input.possibleDuplicates ?? 0) > 0) cards.push(card("Possible duplicate referrals", "warning", `${input.possibleDuplicates} referral${input.possibleDuplicates === 1 ? " has" : "s have"} deterministic local duplicate warnings.`, "Review safe duplicate signals before scheduling or creating more visits."));
   if ((input.intakeReviewNeeded ?? 0) > 0) cards.push(card("Intake review needed", "warning", `${input.intakeReviewNeeded} referral${input.intakeReviewNeeded === 1 ? " needs" : "s need"} missing-data or readiness review.`, "Complete intake checklist before scheduling."));
-  if ((input.readyForScheduling ?? 0) > 0) cards.push(card("Ready for scheduling", "info", `${input.readyForScheduling} referral${input.readyForScheduling === 1 ? " is" : "s are"} intake-ready for manual scheduling.`, "Open the referral and use the existing visit creation flow."));
+  if ((input.readyForScheduling ?? 0) > 0) cards.push(card("Intake-ready referrals", "info", `${input.readyForScheduling} referral${input.readyForScheduling === 1 ? " is" : "s are"} intake-ready for scheduling review.`, "Open the referral, confirm therapist opportunity state, and create a visit only when acceptance and other gates are satisfied."));
   if (input.newReferrals > 0) cards.push(card("New referrals waiting", "warning", `${input.newReferrals} referral${input.newReferrals === 1 ? " is" : "s are"} waiting for first contact.`, "Prioritize first contact and assignment review."));
   if (input.contactedNotScheduled > 0) cards.push(card("Contacted referrals not scheduled", "warning", `${input.contactedNotScheduled} contacted referral${input.contactedNotScheduled === 1 ? " has" : "s have"} no upcoming visit.`, "Review scheduling readiness and create visits where appropriate."));
   if (input.scheduledVisitsNextSevenDays > 0) cards.push(card("Scheduled visits in next 7 days", "info", `${input.scheduledVisitsNextSevenDays} visit${input.scheduledVisitsNextSevenDays === 1 ? " is" : "s are"} scheduled soon.`, "Monitor readiness and therapist assignment."));
@@ -179,7 +179,7 @@ export function getTherapistAssistantCards(input: TherapistAssistantInput): Oper
 
   if ((input.readyToStartVisits ?? 0) > 0) cards.push(card("Visits ready to start", "info", `${input.readyToStartVisits} assigned visit${input.readyToStartVisits === 1 ? " is" : "s are"} scheduled for today or earlier.`, "Open the visit card and manually start the field workflow when ready."));
   if (input.needsContact > 0) cards.push(card("Your next best operational step", "warning", `${input.needsContact} assigned referral${input.needsContact === 1 ? " needs" : "s need"} first contact.`, "Start with first-contact workflow and keep notes operational."));
-  if (input.readyToSchedule > 0) cards.push(card("Ready to schedule", "info", `${input.readyToSchedule} assigned referral${input.readyToSchedule === 1 ? " is" : "s are"} ready for scheduling review.`, "Flag scheduling readiness for admin if no visit exists."));
+  if (input.readyToSchedule > 0) cards.push(card("Intake-ready assigned referrals", "info", `${input.readyToSchedule} assigned referral${input.readyToSchedule === 1 ? " is" : "s are"} ready for scheduling review.`, "Flag intake readiness for admin when no visit exists and opportunity acceptance is still pending."));
   if (input.upcomingVisits > 0) cards.push(card("Upcoming visit", "info", `${input.upcomingVisits} assigned visit${input.upcomingVisits === 1 ? " is" : "s are"} scheduled or open.`, "Review timing and update status after the visit window."));
   if (input.inProgressVisits > 0) cards.push(card("In progress", "warning", `${input.inProgressVisits} assigned visit${input.inProgressVisits === 1 ? " is" : "s are"} in progress.`, "Complete or update operational status when finished."));
   if ((input.noShowVisits ?? 0) > 0) cards.push(card("No-show follow-up needed", "warning", `${input.noShowVisits} assigned visit${input.noShowVisits === 1 ? " is" : "s are"} marked no-show.`, "Use non-SMS operational follow-up if needed and keep notes free of clinical detail."));

@@ -79,7 +79,7 @@ export const dynamic = "force-dynamic";
 
 const THERAPIST_ACTIONS = [
   { value: "contacted", label: "Contacted", status: "contacted" },
-  { value: "ready_to_schedule", label: "Ready to schedule", status: "contacted" },
+  { value: "ready_to_schedule", label: "Intake ready", status: "contacted" },
   { value: "scheduled", label: "Scheduled", status: "scheduled" },
   { value: "visited_completed", label: "Visited / completed", status: "completed" },
   { value: "unable_to_reach", label: "Unable to reach", status: null },
@@ -153,7 +153,7 @@ function isFutureVisit(value: Date | string | null | undefined) {
 
 function referralWorkLabel(referral: TherapistWorkReferral) {
   if (referral.status === "new") return "Needs contact";
-  if (referral.status === "contacted") return "Ready to schedule";
+  if (referral.status === "contacted") return "Intake ready";
   if (referral.status === "scheduled") return "Upcoming visit";
   if (referral.status === "active") return "In progress";
   if (referral.status === "completed") return "Completed recently";
@@ -1085,7 +1085,7 @@ export default async function MyWorkPage({
                     <article id={`opportunity-${referral.id}`} key={referral.id} className="min-w-0 scroll-mt-6 rounded-lg border border-blue/20 bg-white p-4 sm:p-5">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Manual opportunity review</p>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Offered opportunity</p>
                           <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
                           <p className="mt-1 break-words text-sm text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
                         </div>

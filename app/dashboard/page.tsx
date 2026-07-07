@@ -116,7 +116,7 @@ async function TherapistDashboard({ email }: { email: string }) {
         <>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard icon={ClipboardList} label="Assigned referrals" note="Assigned referrals that are not completed or canceled." value={snapshot.assignedReferrals} />
-            <MetricCard icon={Activity} label="Ready to schedule" note="Assigned contacted referrals ready for admin scheduling." value={snapshot.readyToSchedule} />
+            <MetricCard icon={Activity} label="Intake-ready referrals" note="Assigned contacted referrals ready for scheduling review before visit creation." value={snapshot.readyToSchedule} />
             <MetricCard icon={CalendarClock} label="Upcoming visits" note="Scheduled or in-progress visits assigned to this therapist." value={snapshot.upcomingVisits} />
             <MetricCard icon={ShieldAlert} label="Needs contact" note="New assigned referrals waiting for first contact." value={snapshot.needsContact} />
           </section>
@@ -209,7 +209,7 @@ export default async function DashboardPage() {
   const metrics = [
     { icon: ClipboardList, label: "Total referrals", note: "All fake/test referrals in the pilot workspace.", value: snapshot.totalReferrals },
     { icon: ClipboardList, label: "New referrals", note: "Fake/test referrals waiting for first contact.", value: snapshot.referralCounts.new },
-    { icon: Activity, label: "Contacted referrals", note: "Referrals contacted and ready for scheduling decisions.", value: snapshot.referralCounts.contacted },
+    { icon: Activity, label: "Contacted referrals", note: "Referrals contacted and under scheduling review before visit creation.", value: snapshot.referralCounts.contacted },
     { icon: CalendarClock, label: "Scheduled referrals", note: "Referrals currently in scheduled workflow state.", value: snapshot.referralCounts.scheduled },
     { icon: Activity, label: "Active referrals", note: "Referrals actively moving through the field workflow.", value: snapshot.referralCounts.active },
     { icon: Activity, label: "Completed referrals", note: "Referrals completed in the fake/test pilot workflow.", value: snapshot.referralCounts.completed },

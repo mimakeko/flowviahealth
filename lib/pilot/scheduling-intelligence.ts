@@ -260,8 +260,8 @@ export function getSchedulingReadiness(input: SchedulingReadinessInput): Schedul
     cards.push(card("Consent pending", "caution", "SMS consent is pending confirmation.", "Use non-SMS follow-up until consent is active."));
   }
 
-  cards.push(card("Ready to schedule", "info", "This referral is contacted or active, assigned, and has no future visit.", "Use the existing visit creation flow and review suggested windows."));
-  return { cards, nextAction: "Review suggested windows and create visit manually.", readiness: "ready_to_schedule" };
+  cards.push(card("Intake ready", "info", "This referral is contacted or active, assigned, and has no future visit.", "Review suggested windows and create a visit manually only when therapist opportunity acceptance and other gates allow it."));
+  return { cards, nextAction: "Review suggested windows and confirm visit-creation readiness manually.", readiness: "ready_to_schedule" };
 }
 
 export function detectVisitConflicts(input: VisitConflictInput, now: Date = new Date()): VisitConflictResult {
@@ -374,7 +374,7 @@ export function getSchedulingQueueCards(input: SchedulingQueueInput): Scheduling
 
   if ((input.possibleDuplicates ?? 0) > 0) cards.push(card("Possible duplicate referrals", "caution", `${input.possibleDuplicates} referral${input.possibleDuplicates === 1 ? " has" : "s have"} deterministic local duplicate warnings.`, "Review safe duplicate signals before scheduling."));
   if ((input.intakeReviewNeeded ?? 0) > 0) cards.push(card("Needs intake review", "caution", `${input.intakeReviewNeeded} referral${input.intakeReviewNeeded === 1 ? " needs" : "s need"} intake checklist review before scheduling.`, "Complete missing contact, location, service area, assignment, and duplicate review steps."));
-  if (input.readyToSchedule > 0) cards.push(card("Ready to schedule", "info", `${input.readyToSchedule} referral${input.readyToSchedule === 1 ? " is" : "s are"} assigned and waiting for a future visit.`, "Open the referral and use the existing visit creation flow."));
+  if (input.readyToSchedule > 0) cards.push(card("Referrals ready for scheduling review", "info", `${input.readyToSchedule} referral${input.readyToSchedule === 1 ? " is" : "s are"} intake-ready and waiting for scheduling review.`, "Open the referral, confirm therapist opportunity state, and create a visit only when manual gates pass."));
   if (input.unassignedReferrals > 0) cards.push(card("Missing therapist assignment", "caution", `${input.unassignedReferrals} active referral${input.unassignedReferrals === 1 ? " has" : "s have"} no assigned therapist.`, "Assign a therapist before scheduling."));
   if (input.contactedWithoutFutureVisit > 0) cards.push(card("Contacted without future visit", "caution", `${input.contactedWithoutFutureVisit} contacted referral${input.contactedWithoutFutureVisit === 1 ? " has" : "s have"} no future visit.`, "Review scheduling readiness."));
   if (input.optedOutContacts > 0) cards.push(card("Opted-out non-SMS follow-up", "blocker", `${input.optedOutContacts} SMS enrollment${input.optedOutContacts === 1 ? " is" : "s are"} opted out.`, "Use non-SMS operational follow-up only."));

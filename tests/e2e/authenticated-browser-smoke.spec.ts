@@ -152,7 +152,7 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
 
     await gotoProtected(page, "/admin/referrals");
     await expect(page.getByRole("heading", { name: /Referral operations/i })).toBeVisible();
-    await expectAnyText(page, [/Operations Assistant/i, /Scheduling Intelligence/i, /Ready for scheduling/i, /Needs intake review/i], "/admin/referrals");
+    await expectAnyText(page, [/Operations Assistant/i, /Scheduling Intelligence/i, /Intake ready/i, /Needs intake review/i], "/admin/referrals");
     if (await page.locator('tbody a[href^="/admin/referrals/"]').count()) {
       await expectAnyText(page, [/Not offered/i, /Offered/i, /Accepted/i, /Declined/i], "/admin/referrals opportunity badges");
     } else {
@@ -171,7 +171,7 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
       visitedRoutes.add(new URL(page.url()).pathname);
       await expectNoDangerousVisibleText(page, "referral detail");
       await expectRawPageIsClean(page, "referral detail");
-      await expectAnyText(page, [/Referral decision/i, /Scheduling readiness/i, /Safety guarantees/i], "referral detail");
+      await expectAnyText(page, [/Visit creation gate/i, /Scheduling readiness/i, /Safety guarantees/i], "referral detail");
       await expect(page.getByTestId("therapist-opportunity-panel")).toBeVisible();
       await expectAnyText(page, [/Therapist opportunity/i, /deterministic\/manual/i, /no SMS send/i], "referral opportunity detail");
       const referralDetailText = await visibleBodyText(page);

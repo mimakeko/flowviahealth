@@ -259,7 +259,7 @@ export function evaluateReferralIntakeQuality(input: ReferralIntakeInput): Refer
     duplicateCandidates,
     duplicateReviewRequired,
     readinessLevel,
-    readinessLabel: readinessLevel === "ready" ? "Ready for scheduling" : readinessLevel === "blocked" ? "Blocked" : "Needs intake review",
+    readinessLabel: readinessLevel === "ready" ? "Intake ready" : readinessLevel === "blocked" ? "Blocked" : "Needs intake review",
     safeDisplay: {
       city: input.city || "Not provided",
       maskedPhone: redactPhone(input.phone || ""),

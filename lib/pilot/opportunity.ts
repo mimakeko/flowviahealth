@@ -144,12 +144,31 @@ export function opportunitySchedulingContext(input: {
   declinedReason?: OpportunityDeclineReason | null;
   opportunityState: OpportunityState;
 }) {
-  if (input.opportunityState === "accepted" && input.createVisitGateAllowed) return "Ready because accepted";
-  if (input.opportunityState === "accepted") return "Accepted, pending readiness cleanup";
+  if (input.opportunityState === "accepted" && input.createVisitGateAllowed) return "Opportunity accepted";
+  if (input.opportunityState === "accepted") return "Opportunity accepted";
   if (input.opportunityState === "offered") return "Awaiting therapist acceptance";
   if (input.opportunityState === "declined") return `Needs reassignment/review: ${opportunityDeclineReasonLabel(input.declinedReason).toLowerCase()}`;
-  if (input.opportunityState === "expired_or_review_needed") return "Blocked/review needed";
+  if (input.opportunityState === "expired_or_review_needed") return "Blocked: review-only";
   return "Not offered";
+}
+
+export function opportunityVisitCreationReadinessLabel(input: {
+  createVisitGateAllowed: boolean;
+  declinedReason?: OpportunityDeclineReason | null;
+  opportunityState: OpportunityState;
+  referralSource?: string | null;
+}) {
+  const opportunityReady = opportunityAllowsVisitCreation({
+    opportunityState: input.opportunityState,
+    referralSource: input.referralSource,
+  });
+
+  if (input.createVisitGateAllowed && input.opportunityState === "accepted" && opportunityReady) return "Ready for visit creation";
+  if (input.opportunityState === "offered") return "Create visit suppressed until therapist acceptance is recorded";
+  if (input.opportunityState === "declined") return "Needs reassignment/review";
+  if (input.opportunityState === "expired_or_review_needed") return "Review-only";
+  if (!input.createVisitGateAllowed) return "Review-only";
+  return "Review before visit creation";
 }
 
 export function opportunityCreateVisitBlockerMessage(input: {
@@ -159,7 +178,7 @@ export function opportunityCreateVisitBlockerMessage(input: {
 }) {
   if (input.opportunityState === "offered") return "Awaiting therapist acceptance before visit creation.";
   if (input.opportunityState === "declined") return `Therapist declined: ${opportunityDeclineReasonLabel(input.declinedReason).toLowerCase()}.`;
-  if (input.opportunityState === "expired_or_review_needed") return "Needs intake cleanup before offer.";
+  if (input.opportunityState === "expired_or_review_needed") return "Needs intake cleanup before offering or scheduling.";
   if (input.opportunityState === "not_offered") return "Create visit is suppressed until therapist acceptance is recorded.";
   return input.createVisitGateReasons?.[0] || "Create visit is suppressed until readiness checks pass.";
 }

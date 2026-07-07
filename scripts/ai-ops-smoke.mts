@@ -53,7 +53,7 @@ const queueCards = assistant.getQueueAssistantCards({
 assert.match(renderedCards(queueCards), /Opted-out contacts should not receive SMS/);
 assert.match(renderedCards(queueCards), /Possible duplicate referrals/);
 assert.match(renderedCards(queueCards), /Intake review needed/);
-assert.match(renderedCards(queueCards), /Ready for scheduling/);
+assert.match(renderedCards(queueCards), /Intake-ready referrals/);
 assert.match(renderedCards(queueCards), /Smoke\/test data present/);
 assertNoRestrictedTerms(queueCards);
 

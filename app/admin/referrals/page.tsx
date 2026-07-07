@@ -19,8 +19,10 @@ import {
 import {
   getOpportunityStatesByReferralId,
   opportunityBadgeClassName,
+  opportunityCreateVisitBlockerMessage,
   opportunityDeclineReasonLabel,
   opportunitySchedulingContext,
+  opportunityVisitCreationReadinessLabel,
   opportunityStateLabel,
   type OpportunityStateResult,
 } from "@/lib/pilot/opportunity";
@@ -88,6 +90,31 @@ function intakeBadgeClass(readiness: ReferralIntakeQualityResult["readinessLevel
   if (readiness === "ready") return "bg-emerald-50 text-emerald-800 ring-emerald-200";
   if (readiness === "blocked") return "bg-rose-50 text-rose-800 ring-rose-200";
   return "bg-amber-50 text-amber-800 ring-amber-200";
+}
+
+function intakeSummary(referral: ReferralListQualityRow) {
+  if (referral.intakeQuality.readinessLevel === "ready") return "Intake ready for scheduling review";
+  if (referral.intakeQuality.readinessLevel === "blocked") return "Blocked";
+  return referral.createVisitGate.reasons.slice(0, 2).join(" · ") || "Review checklist";
+}
+
+function schedulingSummary(referral: ReferralListQualityRow) {
+  const label = opportunityVisitCreationReadinessLabel({
+    createVisitGateAllowed: referral.createVisitGate.allowed,
+    declinedReason: referral.opportunityState.declinedReason,
+    opportunityState: referral.opportunityState.state,
+    referralSource: referral.referralSource,
+  });
+
+  if (label === "Ready for visit creation") return label;
+  if (label === "Needs reassignment/review") return label;
+  if (label === "Review-only") return "Review-only. Create visit suppressed until gates pass.";
+  if (label === "Create visit suppressed until therapist acceptance is recorded") return label;
+  return opportunityCreateVisitBlockerMessage({
+    createVisitGateReasons: referral.createVisitGate.reasons,
+    declinedReason: referral.opportunityState.declinedReason,
+    opportunityState: referral.opportunityState.state,
+  });
 }
 
 export default async function AdminReferralsPage({
@@ -348,7 +375,7 @@ export default async function AdminReferralsPage({
               <select className="field" name="group" defaultValue={selectedGroup}>
                 <option value="">All referrals</option>
                 <option value="needs_scheduling">Needs scheduling</option>
-                <option value="ready_scheduling">Ready for scheduling</option>
+                <option value="ready_scheduling">Intake ready</option>
                 <option value="needs_intake_review">Needs intake review</option>
                 <option value="possible_duplicate">Possible duplicate</option>
                 <option value="missing_therapist">Missing therapist</option>
@@ -396,14 +423,15 @@ export default async function AdminReferralsPage({
                     <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${intakeBadgeClass(referral.intakeQuality.readinessLevel)}`}>
                       {referral.intakeQuality.readinessLabel}
                     </span>
-                    {referral.createVisitGate.allowed ? <p className="mt-1 text-xs font-semibold text-emerald-700">Ready for scheduling</p> : <p className="mt-1 text-xs text-slate-500">{referral.createVisitGate.reasons.slice(0, 2).join(" · ") || "Review checklist"}</p>}
+                    <p className={`mt-1 text-xs ${referral.intakeQuality.readinessLevel === "ready" ? "font-semibold text-emerald-700" : "text-slate-500"}`}>Intake: {intakeSummary(referral)}</p>
                     <span className={`mt-2 inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
                       {opportunityStateLabel(referral.opportunityState.state)}
                     </span>
                     <p className="mt-1 text-xs text-slate-500">
-                      {opportunitySchedulingContext({ createVisitGateAllowed: referral.createVisitGate.allowed, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}
+                      Opportunity: {opportunitySchedulingContext({ createVisitGateAllowed: referral.createVisitGate.allowed, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}
                       {referral.opportunityState.state === "declined" ? ` · ${opportunityDeclineReasonLabel(referral.opportunityState.declinedReason)}` : ""}
                     </p>
+                    <p className="mt-1 text-xs text-slate-500">Scheduling: {schedulingSummary(referral)}</p>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</td>
                   <td className="px-4 py-3 text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Not provided"}</td>

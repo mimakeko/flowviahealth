@@ -49,6 +49,7 @@ import {
   opportunityCreateVisitBlockerMessage,
   opportunityDeclineReasonLabel,
   opportunitySchedulingContext,
+  opportunityVisitCreationReadinessLabel,
   opportunityStateLabel,
 } from "@/lib/pilot/opportunity";
 import { normalizeE164Phone } from "@/lib/sms/compliance";
@@ -846,12 +847,12 @@ export default async function ReferralDetailPage({
           <section className="mt-5 rounded-lg border border-line bg-white p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="eyebrow">Referral decision</p>
+                <p className="eyebrow">Visit creation gate</p>
                 <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">{referralDecision.state}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">{referralDecision.detail}</p>
               </div>
               <span className={`inline-flex w-fit rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ${referralDecision.badgeClassName}`}>
-                {createVisitGate.allowed ? "create allowed" : "review only"}
+                {createVisitGate.allowed && opportunityAllowsCreateVisit ? "ready for manual visit creation" : "review only"}
               </span>
             </div>
 
@@ -971,8 +972,9 @@ export default async function ReferralDetailPage({
               <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Assigned therapist</dt><dd className="mt-1 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</dd></div>
               <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Offer readiness</dt><dd className="mt-1 text-slate-600">{opportunityOfferGate.allowed ? "Safe to offer" : "Review required"}</dd></div>
               <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Source</dt><dd className="mt-1 text-slate-600">deterministic/manual</dd></div>
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Acceptance state</dt><dd className="mt-1 text-slate-600">{opportunitySchedulingContext({ createVisitGateAllowed: createVisitGate.allowed, declinedReason: opportunityState.declinedReason, opportunityState: opportunityState.state })}</dd></div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Therapist opportunity</dt><dd className="mt-1 text-slate-600">{opportunitySchedulingContext({ createVisitGateAllowed: createVisitGate.allowed, declinedReason: opportunityState.declinedReason, opportunityState: opportunityState.state })}</dd></div>
               <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Decline reason</dt><dd className="mt-1 text-slate-600">{opportunityDeclineReasonLabel(opportunityState.declinedReason)}</dd></div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Visit creation gate</dt><dd className="mt-1 text-slate-600">{opportunityVisitCreationReadinessLabel({ createVisitGateAllowed: createVisitGate.allowed, declinedReason: opportunityState.declinedReason, opportunityState: opportunityState.state, referralSource: referral.referralSource })}</dd></div>
               <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Safe decline note</dt><dd className="mt-1 text-slate-600">{opportunityState.noteAdded ? "Operational note recorded; raw text not displayed." : "Not recorded"}</dd></div>
             </dl>
             {opportunityOfferGate.allowed ? (

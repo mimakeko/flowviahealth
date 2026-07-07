@@ -118,7 +118,7 @@ const queueCards = scheduling.getSchedulingQueueCards({
 });
 assert.match(renderedCards(queueCards), /Possible duplicate referrals/);
 assert.match(renderedCards(queueCards), /Needs intake review/);
-assert.match(renderedCards(queueCards), /Ready to schedule/);
+assert.match(renderedCards(queueCards), /Referrals ready for scheduling review/);
 
 const actionPolicy = scheduling.getSchedulingWindowActionPolicy();
 assert.equal(actionPolicy.action, "fill_datetime_field_only");

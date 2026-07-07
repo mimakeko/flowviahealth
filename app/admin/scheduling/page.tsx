@@ -19,7 +19,6 @@ import {
   opportunityAllowsVisitCreation,
   opportunityBadgeClassName,
   opportunityDeclineReasonLabel,
-  opportunitySchedulingContext,
   opportunityStateLabel,
   type OpportunityStateResult,
 } from "@/lib/pilot/opportunity";
@@ -306,10 +305,10 @@ export default async function AdminSchedulingPage() {
                       <p className="font-semibold text-ink">{referral.patientName}</p>
                       <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>{statusLabel(referral.status)}</span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">{referral.intakeQuality.readinessLabel} · {readiness.readiness.replaceAll("_", " ")} · {fit.label.replaceAll("_", " ")} · {referral.assignedTherapist?.name || "Unassigned"}</p>
+                    <p className="mt-1 text-sm text-slate-600">Intake ready · {readiness.readiness.replaceAll("_", " ")} · {fit.label.replaceAll("_", " ")} · {referral.assignedTherapist?.name || "Unassigned"}</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>{opportunityStateLabel(referral.opportunityState.state)}</span>
-                      <span className="inline-flex rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200">{opportunitySchedulingContext({ createVisitGateAllowed: referral.createVisitGate.allowed, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}</span>
+                      <span className="inline-flex rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200">Ready for visit creation</span>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
                   </div>
@@ -351,7 +350,7 @@ export default async function AdminSchedulingPage() {
                     <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>{opportunityStateLabel(referral.opportunityState.state)}</span>
                     <span className="inline-flex rounded-md bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-800 ring-1 ring-rose-200">{opportunityDeclineReasonLabel(referral.opportunityState.declinedReason)}</span>
                   </div>
-                  <p className="mt-1 text-sm text-slate-600">{referral.assignedTherapist?.name || "Unassigned"} · Needs another therapist or admin review.</p>
+                  <p className="mt-1 text-sm text-slate-600">{referral.assignedTherapist?.name || "Unassigned"} · Needs reassignment/review before scheduling.</p>
                   <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 p-2 text-xs font-semibold text-rose-950">{opportunityCreateVisitBlockerMessage({ createVisitGateReasons: referral.createVisitGate.reasons, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}</p>
                 </div>
                 <Link href={`/admin/referrals/${referral.id}`} className="font-semibold text-blue underline">Open referral</Link>
@@ -373,7 +372,8 @@ export default async function AdminSchedulingPage() {
                   </div>
                   <p className="mt-1 text-sm text-slate-600">{referral.intakeQuality.readinessLabel} · {referral.assignedTherapist?.name || "Unassigned"}</p>
                   <p className="mt-1 text-xs text-slate-500">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
-                  <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-950">{referral.createVisitGate.reasons.slice(0, 3).join(" · ") || opportunityCreateVisitBlockerMessage({ createVisitGateReasons: referral.createVisitGate.reasons, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}</p>
+                  <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-950">Review-only. Create visit suppressed until gates pass.</p>
+                  <p className="mt-1 text-xs text-slate-500">{referral.createVisitGate.reasons.slice(0, 3).join(" · ") || opportunityCreateVisitBlockerMessage({ createVisitGateReasons: referral.createVisitGate.reasons, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Link href={`/admin/referrals/${referral.id}`} className="font-semibold text-blue underline">Open</Link>

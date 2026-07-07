@@ -279,7 +279,7 @@ try {
     assertNoForbiddenSourceTerms(source, label);
   }
 
-  assert.match(detailSource, /Referral decision/);
+  assert.match(detailSource, /Visit creation gate/);
   assert.match(detailSource, /createVisitGate\.allowed/);
   assert.match(detailSource, /\/admin\/visits\/new\?referralId=\$\{referral\.id\}/);
   assert.match(detailSource, /Create visit is suppressed until review blockers are resolved/);
