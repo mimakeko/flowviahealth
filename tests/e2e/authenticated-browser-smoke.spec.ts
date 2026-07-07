@@ -13,6 +13,8 @@ const visitedRoutes = new Set<string>();
 let dangerousTextChecksPassed = false;
 let rbacChecksPassed: "yes" | "skipped" = "skipped";
 
+// This list is only for text that should never appear anywhere on a protected page.
+// Product-scope guardrail copy and safe blocker copy must not live here.
 const forbiddenVisibleText = [
   /NEXT_REDIRECT/i,
   /PrismaClientKnownRequestError/i,
@@ -26,10 +28,6 @@ const forbiddenVisibleText = [
   /\+1\d{10}\b/,
   /\(\d{3}\)\s?\d{3}-\d{4}\b/,
   /\b\d{3}-\d{3}-\d{4}\b/,
-  /OASIS documentation workflow/i,
-  /Claims workflow/i,
-  /Billing workflow/i,
-  /Medicare billing workflow/i,
 ];
 
 const forbiddenActionControls = [
