@@ -80,6 +80,14 @@ const THERAPIST_ACTIONS = [
   { value: "needs_admin_help", label: "Needs admin help", status: null },
 ] as const;
 
+const DISPLAY_LIMITS = {
+  assignedWork: 1,
+  needsAttention: 2,
+  opportunities: 2,
+  todayVisits: 2,
+  upcomingVisits: 2,
+} as const;
+
 type TherapistAction = (typeof THERAPIST_ACTIONS)[number];
 
 type TherapistOption = {
@@ -542,6 +550,7 @@ function FieldVisitSection({
   selectedTherapistId,
   smsConsentByPhone,
   title,
+  visibleLimit,
   visits,
 }: {
   icon: LucideIcon;
@@ -549,8 +558,13 @@ function FieldVisitSection({
   selectedTherapistId: string;
   smsConsentByPhone: SmsConsentLookup;
   title: string;
+  visibleLimit?: number;
   visits: TherapistFieldVisit[];
 }) {
+  const cappedVisibleCount = visibleLimit ?? visits.length;
+  const visibleVisits = visits.slice(0, cappedVisibleCount);
+  const hiddenVisits = visits.slice(cappedVisibleCount);
+
   return (
     <section className="grid min-w-0 gap-4" data-field-visit-section={queue}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -560,7 +574,7 @@ function FieldVisitSection({
         </div>
         <p className="hidden text-sm leading-6 text-slate-500 sm:block">{getFieldVisitQueueCopy(queue)}</p>
       </div>
-      {visits.map((visit: TherapistFieldVisit) => (
+      {visibleVisits.map((visit: TherapistFieldVisit) => (
         <FieldVisitCard
           key={visit.id}
           selectedTherapistId={selectedTherapistId}
@@ -568,8 +582,146 @@ function FieldVisitSection({
           visit={visit}
         />
       ))}
+      {hiddenVisits.length > 0 ? (
+        <details className="rounded-lg border border-line bg-white">
+          <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+            Show {hiddenVisits.length} more {title.toLowerCase()} item{hiddenVisits.length === 1 ? "" : "s"}
+          </summary>
+          <div className="grid gap-4 border-t border-line p-4">
+            {hiddenVisits.map((visit: TherapistFieldVisit) => (
+              <FieldVisitCard
+                key={visit.id}
+                selectedTherapistId={selectedTherapistId}
+                smsConsentStatus={smsConsentByPhone[normalizeE164Phone(visit.referral.phone)]}
+                visit={visit}
+              />
+            ))}
+          </div>
+        </details>
+      ) : null}
       {visits.length === 0 ? <FieldWorkspaceEmptyState stateKey={queue} /> : null}
     </section>
+  );
+}
+
+function OpportunityCard({
+  referral,
+  selectedTherapistId,
+  selectedTherapistName,
+}: {
+  referral: TherapistOpportunityReferral;
+  selectedTherapistId: string;
+  selectedTherapistName: string | undefined;
+}) {
+  return (
+    <article id={`opportunity-${referral.id}`} className="min-w-0 scroll-mt-6 rounded-lg border border-blue/20 bg-white p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">New opportunity</p>
+          <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
+          <p className="mt-1 break-words text-sm text-slate-600">{locationLabel(referral.city, referral.zip)} · {referral.careType || "Service not provided"}</p>
+        </div>
+        <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
+          {opportunityStateLabel(referral.opportunityState.state)}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="text-sm font-semibold text-ink">Why this fits</p>
+          <ul className="mt-2 grid gap-1 text-sm leading-6 text-slate-600">
+            {opportunityWhyFits(referral, selectedTherapistName).slice(0, 2).map((item) => <li key={item}>- {item}</li>)}
+          </ul>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-ink">What is missing</p>
+          <ul className="mt-2 grid gap-1 text-sm leading-6 text-slate-600">
+            {opportunityMissingItems(referral).slice(0, 2).map((item) => <li key={item}>- {item}</li>)}
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-start">
+        <form action={therapistOpportunityAction}>
+          <input type="hidden" name="therapistId" value={selectedTherapistId} />
+          <input type="hidden" name="referralId" value={referral.id} />
+          <input type="hidden" name="action" value="accept" />
+          <PendingSubmitButton className="btn-primary min-h-12 w-full sm:w-auto" pendingLabel="Accepting...">Accept</PendingSubmitButton>
+        </form>
+        <details className="group rounded-lg border border-line bg-white sm:min-w-80">
+          <summary className="btn-secondary min-h-12 cursor-pointer list-none justify-center px-4 [&::-webkit-details-marker]:hidden">Decline</summary>
+          <form action={therapistOpportunityAction} className="grid gap-3 border-t border-line p-4">
+            <input type="hidden" name="therapistId" value={selectedTherapistId} />
+            <input type="hidden" name="referralId" value={referral.id} />
+            <input type="hidden" name="action" value="decline" />
+            <label className="text-sm font-semibold text-ink">Reason<select className="field" name="declineReason" defaultValue="outside_territory">{OPPORTUNITY_DECLINE_REASONS.map((reason) => <option key={reason} value={reason}>{opportunityDeclineReasonLabel(reason)}</option>)}</select></label>
+            <label className="text-sm font-semibold text-ink">Note <span className="font-normal text-slate-400">(optional, no PHI)</span><input className="field" name="note" placeholder="Operational reason only" /></label>
+            <PendingSubmitButton className="btn-secondary min-h-12 w-full" pendingLabel="Declining...">Confirm decline</PendingSubmitButton>
+          </form>
+        </details>
+        <details className="rounded-lg border border-line bg-white sm:min-w-64">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center px-4 text-sm font-semibold text-blue [&::-webkit-details-marker]:hidden">Open details</summary>
+          <dl className="grid gap-2 border-t border-line p-4 text-sm">
+            <div><dt className="font-semibold text-ink">Age</dt><dd className="mt-1 text-slate-600">{referralAgeLabel(referral.createdAt)}</dd></div>
+            <div><dt className="font-semibold text-ink">Readiness</dt><dd className="mt-1 text-slate-600">{opportunityPriorityLabel(referral).replace("Priority: ", "")}</dd></div>
+          </dl>
+        </details>
+      </div>
+    </article>
+  );
+}
+
+function AssignedReferralCard({
+  referral,
+  selectedTherapistId,
+}: {
+  referral: TherapistWorkReferral;
+  selectedTherapistId: string;
+}) {
+  return (
+    <article id={`referral-${referral.id}`} className="min-w-0 scroll-mt-6 rounded-lg border border-line bg-white p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned referral</p>
+          <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
+          <p className="mt-1 break-words text-sm text-slate-600">{locationLabel(referral.city, referral.zip)}</p>
+        </div>
+        <span className="inline-flex w-fit rounded-md bg-ice px-2 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">
+          {referralWorkLabel(referral)}
+        </span>
+      </div>
+
+      <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+        <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{getTherapistWorkspacePhoneDisplay(referral.phone)}</dd></div>
+        <div><dt className="font-semibold text-ink">Service</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
+        <div><dt className="font-semibold text-ink">Next visit</dt><dd className="mt-1 text-slate-600">{formatDateTime(referral.visits[0]?.scheduledAt)}</dd></div>
+      </dl>
+
+      {referral.notes ? (
+        <details className="mt-4 rounded-lg border border-line bg-slate-50">
+          <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">Open details</summary>
+          <p className="whitespace-pre-wrap break-words border-t border-line p-4 text-sm leading-6 text-slate-600">{referral.notes}</p>
+        </details>
+      ) : null}
+
+      <details className="mt-5 rounded-lg border border-line bg-slate-50">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+          <span>Update status / note</span>
+          <span className="text-xs font-semibold text-blue">Add no-PHI note</span>
+        </summary>
+        <form action={therapistReferralAction} className="grid gap-4 border-t border-line bg-white p-4 lg:grid-cols-[1fr_1fr_auto]">
+          <input type="hidden" name="therapistId" value={selectedTherapistId} />
+          <input type="hidden" name="referralId" value={referral.id} />
+          <label className="text-sm font-semibold text-ink">Update status<select className="field" name="action" defaultValue="contacted">{THERAPIST_ACTIONS.map((action: TherapistAction) => <option key={action.value} value={action.value}>{action.label}</option>)}</select></label>
+          <label className="text-sm font-semibold text-ink">Add no-PHI note <span className="font-normal text-slate-400">(optional)</span><input className="field" name="note" placeholder="No PHI in pilot notes" /></label>
+          <div className="flex items-end">
+            <PendingSubmitButton className="btn-primary min-h-14 w-full" pendingLabel="Saving...">
+              <Save size={18} />Save note
+            </PendingSubmitButton>
+          </div>
+        </form>
+      </details>
+    </article>
   );
 }
 
@@ -1056,6 +1208,12 @@ export default async function MyWorkPage({
   const errorMessage = visitErrorMessage(params?.error);
   const opportunitySuccess = opportunitySuccessMessage(params?.success);
   const opportunityError = opportunityErrorMessage(params?.error);
+  const visibleOpportunities = availableOpportunities.slice(0, DISPLAY_LIMITS.opportunities);
+  const hiddenOpportunities = availableOpportunities.slice(DISPLAY_LIMITS.opportunities);
+  const visibleNeedsAttentionItems = needsAttentionItems.slice(0, DISPLAY_LIMITS.needsAttention);
+  const hiddenNeedsAttentionItems = needsAttentionItems.slice(DISPLAY_LIMITS.needsAttention);
+  const visibleAssignedWorkReferrals = assignedWorkReferrals.slice(0, DISPLAY_LIMITS.assignedWork);
+  const hiddenAssignedWorkReferrals = assignedWorkReferrals.slice(DISPLAY_LIMITS.assignedWork);
 
   return (
     <div>
@@ -1063,7 +1221,7 @@ export default async function MyWorkPage({
         <p className="eyebrow">Therapist field workspace</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-.03em] text-ink sm:text-4xl">My work</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-          A calm workday view for visits, new opportunities, and assigned referrals. Phones stay masked; notes stay no PHI.
+          Phones stay masked. Notes stay no-PHI.
         </p>
       </div>
 
@@ -1131,66 +1289,30 @@ export default async function MyWorkPage({
           <NextFieldActionPanel action={nextAction} />
 
           <section data-testid="therapist-referral-opportunities" className="grid min-w-0 gap-4">
-            <div className="flex items-center gap-2">
-              <BriefcaseMedical size={18} className="text-blue" />
-              <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">New referral opportunities</h2>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex items-center gap-2">
+                <BriefcaseMedical size={18} className="text-blue" />
+                <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">New referral opportunities</h2>
+              </div>
+              {availableOpportunities.length > 0 ? (
+                <p className="text-sm text-slate-500">Showing {visibleOpportunities.length} of {availableOpportunities.length}</p>
+              ) : null}
             </div>
-            {availableOpportunities.map((referral: TherapistOpportunityReferral) => (
-              <article id={`opportunity-${referral.id}`} key={referral.id} className="min-w-0 scroll-mt-6 rounded-lg border border-blue/20 bg-white p-4 sm:p-5">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">New opportunity</p>
-                    <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
-                    <p className="mt-1 break-words text-sm text-slate-600">{locationLabel(referral.city, referral.zip)} · {referral.careType || "Service not provided"}</p>
-                  </div>
-                  <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
-                    {opportunityStateLabel(referral.opportunityState.state)}
-                  </span>
-                </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <p className="text-sm font-semibold text-ink">Why this fits</p>
-                    <ul className="mt-2 grid gap-1 text-sm leading-6 text-slate-600">
-                      {opportunityWhyFits(referral, selectedTherapistName).slice(0, 2).map((item) => <li key={item}>- {item}</li>)}
-                    </ul>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-ink">What is missing</p>
-                    <ul className="mt-2 grid gap-1 text-sm leading-6 text-slate-600">
-                      {opportunityMissingItems(referral).slice(0, 2).map((item) => <li key={item}>- {item}</li>)}
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-start">
-                  <form action={therapistOpportunityAction}>
-                    <input type="hidden" name="therapistId" value={selectedTherapistId} />
-                    <input type="hidden" name="referralId" value={referral.id} />
-                    <input type="hidden" name="action" value="accept" />
-                    <PendingSubmitButton className="btn-primary min-h-12 w-full sm:w-auto" pendingLabel="Accepting...">Accept</PendingSubmitButton>
-                  </form>
-                  <details className="group rounded-lg border border-line bg-white sm:min-w-80">
-                    <summary className="btn-secondary min-h-12 cursor-pointer list-none justify-center px-4 [&::-webkit-details-marker]:hidden">Decline</summary>
-                    <form action={therapistOpportunityAction} className="grid gap-3 border-t border-line p-4">
-                      <input type="hidden" name="therapistId" value={selectedTherapistId} />
-                      <input type="hidden" name="referralId" value={referral.id} />
-                      <input type="hidden" name="action" value="decline" />
-                      <label className="text-sm font-semibold text-ink">Reason<select className="field" name="declineReason" defaultValue="outside_territory">{OPPORTUNITY_DECLINE_REASONS.map((reason) => <option key={reason} value={reason}>{opportunityDeclineReasonLabel(reason)}</option>)}</select></label>
-                      <label className="text-sm font-semibold text-ink">Note <span className="font-normal text-slate-400">(optional, no PHI)</span><input className="field" name="note" placeholder="Operational reason only" /></label>
-                      <PendingSubmitButton className="btn-secondary min-h-12 w-full" pendingLabel="Declining...">Confirm decline</PendingSubmitButton>
-                    </form>
-                  </details>
-                  <details className="rounded-lg border border-line bg-white sm:min-w-64">
-                    <summary className="flex min-h-12 cursor-pointer list-none items-center px-4 text-sm font-semibold text-blue [&::-webkit-details-marker]:hidden">Open details</summary>
-                    <dl className="grid gap-2 border-t border-line p-4 text-sm">
-                      <div><dt className="font-semibold text-ink">Age</dt><dd className="mt-1 text-slate-600">{referralAgeLabel(referral.createdAt)}</dd></div>
-                      <div><dt className="font-semibold text-ink">Readiness</dt><dd className="mt-1 text-slate-600">{opportunityPriorityLabel(referral).replace("Priority: ", "")}</dd></div>
-                    </dl>
-                  </details>
-                </div>
-              </article>
+            {visibleOpportunities.map((referral: TherapistOpportunityReferral) => (
+              <OpportunityCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} selectedTherapistName={selectedTherapistName} />
             ))}
+            {hiddenOpportunities.length > 0 ? (
+              <details className="rounded-lg border border-line bg-white">
+                <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                  View {hiddenOpportunities.length} more opportunit{hiddenOpportunities.length === 1 ? "y" : "ies"}
+                </summary>
+                <div className="grid gap-4 border-t border-line p-4">
+                  {hiddenOpportunities.map((referral: TherapistOpportunityReferral) => (
+                    <OpportunityCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} selectedTherapistName={selectedTherapistName} />
+                  ))}
+                </div>
+              </details>
+            ) : null}
             {availableOpportunities.length === 0 ? (
               <p className="rounded-lg border border-line bg-white p-5 text-sm leading-6 text-slate-600">No new referral opportunities need a decision.</p>
             ) : null}
@@ -1202,6 +1324,7 @@ export default async function MyWorkPage({
             selectedTherapistId={selectedTherapistId}
             smsConsentByPhone={smsConsentByPhone}
             title="Today"
+            visibleLimit={DISPLAY_LIMITS.todayVisits}
             visits={todayVisits}
           />
 
@@ -1211,6 +1334,7 @@ export default async function MyWorkPage({
             selectedTherapistId={selectedTherapistId}
             smsConsentByPhone={smsConsentByPhone}
             title="Upcoming"
+            visibleLimit={DISPLAY_LIMITS.upcomingVisits}
             visits={upcomingVisits}
           />
 
@@ -1221,67 +1345,55 @@ export default async function MyWorkPage({
                 <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Needs attention</h2>
               </div>
               <div className="grid gap-3">
-                {needsAttentionItems.map((item: NeedsAttentionItem) => (
+                {visibleNeedsAttentionItems.map((item: NeedsAttentionItem) => (
                   <div key={item.label} className="rounded-lg border border-line bg-white p-4 text-sm">
                     <p className="font-semibold text-ink">{item.label}</p>
                     <p className="mt-1 leading-6 text-slate-600">{item.detail}</p>
                   </div>
                 ))}
+                {hiddenNeedsAttentionItems.length > 0 ? (
+                  <details className="rounded-lg border border-line bg-white">
+                    <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                      View {hiddenNeedsAttentionItems.length} more attention item{hiddenNeedsAttentionItems.length === 1 ? "" : "s"}
+                    </summary>
+                    <div className="grid gap-3 border-t border-line p-4">
+                      {hiddenNeedsAttentionItems.map((item: NeedsAttentionItem) => (
+                        <div key={item.label} className="text-sm">
+                          <p className="font-semibold text-ink">{item.label}</p>
+                          <p className="mt-1 leading-6 text-slate-600">{item.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
               </div>
             </section>
           ) : null}
 
           {assignedWorkReferrals.length > 0 ? (
             <section className="grid min-w-0 gap-4">
-              <div className="flex items-center gap-2">
-                <BriefcaseMedical size={18} className="text-blue" />
-                <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Assigned work</h2>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <BriefcaseMedical size={18} className="text-blue" />
+                  <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Assigned work</h2>
+                </div>
+                <p className="text-sm text-slate-500">{assignedWorkReferrals.length} active item{assignedWorkReferrals.length === 1 ? "" : "s"}</p>
               </div>
-              {assignedWorkReferrals.map((referral: TherapistWorkReferral) => (
-                <article id={`referral-${referral.id}`} key={referral.id} className="min-w-0 scroll-mt-6 rounded-lg border border-line bg-white p-4 sm:p-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned referral</p>
-                      <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
-                      <p className="mt-1 break-words text-sm text-slate-600">{locationLabel(referral.city, referral.zip)}</p>
-                    </div>
-                    <span className="inline-flex w-fit rounded-md bg-ice px-2 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">
-                      {referralWorkLabel(referral)}
-                    </span>
-                  </div>
-
-                  <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
-                    <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{getTherapistWorkspacePhoneDisplay(referral.phone)}</dd></div>
-                    <div><dt className="font-semibold text-ink">Service</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
-                    <div><dt className="font-semibold text-ink">Next visit</dt><dd className="mt-1 text-slate-600">{formatDateTime(referral.visits[0]?.scheduledAt)}</dd></div>
-                  </dl>
-
-                  {referral.notes ? (
-                    <details className="mt-4 rounded-lg border border-line bg-slate-50">
-                      <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">Open details</summary>
-                      <p className="whitespace-pre-wrap break-words border-t border-line p-4 text-sm leading-6 text-slate-600">{referral.notes}</p>
-                    </details>
-                  ) : null}
-
-                  <details className="mt-5 rounded-lg border border-line bg-slate-50">
-                    <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
-                      <span>Update status / note</span>
-                      <span className="text-xs font-semibold text-blue">Add no-PHI note</span>
-                    </summary>
-                    <form action={therapistReferralAction} className="grid gap-4 border-t border-line bg-white p-4 lg:grid-cols-[1fr_1fr_auto]">
-                      <input type="hidden" name="therapistId" value={selectedTherapistId} />
-                      <input type="hidden" name="referralId" value={referral.id} />
-                      <label className="text-sm font-semibold text-ink">Update status<select className="field" name="action" defaultValue="contacted">{THERAPIST_ACTIONS.map((action: TherapistAction) => <option key={action.value} value={action.value}>{action.label}</option>)}</select></label>
-                      <label className="text-sm font-semibold text-ink">Add no-PHI note <span className="font-normal text-slate-400">(optional)</span><input className="field" name="note" placeholder="No PHI in pilot notes" /></label>
-                      <div className="flex items-end">
-                        <PendingSubmitButton className="btn-primary min-h-14 w-full" pendingLabel="Saving...">
-                          <Save size={18} />Save note
-                        </PendingSubmitButton>
-                      </div>
-                    </form>
-                  </details>
-                </article>
+              {visibleAssignedWorkReferrals.map((referral: TherapistWorkReferral) => (
+                <AssignedReferralCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} />
               ))}
+              {hiddenAssignedWorkReferrals.length > 0 ? (
+                <details className="rounded-lg border border-line bg-white">
+                  <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                    Show assigned work ({hiddenAssignedWorkReferrals.length} more)
+                  </summary>
+                  <div className="grid gap-4 border-t border-line p-4">
+                    {hiddenAssignedWorkReferrals.map((referral: TherapistWorkReferral) => (
+                      <AssignedReferralCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} />
+                    ))}
+                  </div>
+                </details>
+              ) : null}
             </section>
           ) : (
             <FieldWorkspaceEmptyState stateKey="referrals" />

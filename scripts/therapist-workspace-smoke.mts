@@ -46,7 +46,7 @@ assert.match(transientActionBanner, /role="alert"/, "Validation failures should 
 assert.match(myWorkPage, /getTherapistWorkspacePhoneDisplay\(visit\.referral\.phone\)/, "Visit phone display must stay masked.");
 assert.match(myWorkPage, /getTherapistWorkspacePhoneDisplay\(referral\.phone\)/, "Referral phone display must stay masked.");
 assert.match(myWorkPage, /No PHI in notes/, "No-PHI guidance must remain close to visit note inputs.");
-assert.match(myWorkPage, /notes stay no PHI/, "Workspace copy must remind users notes are no-PHI.");
+assert.match(myWorkPage, /notes stay no[- ]PHI/i, "Workspace copy must remind users notes are no-PHI.");
 assert.doesNotMatch(myWorkPage, /SchedulingIntelligencePanel/, "Scheduling intelligence panel should not dominate My Work.");
 assert.doesNotMatch(myWorkPage, /OperationsAssistantPanel/, "Operations Assistant panel should not dominate My Work.");
 assert.doesNotMatch(myWorkPage, /deterministic, therapist-scoped guidance/i, "My Work should not lead with system-style assistant copy.");
