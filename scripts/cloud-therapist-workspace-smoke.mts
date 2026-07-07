@@ -47,14 +47,18 @@ const rawHtmlLeakPatterns: PatternCheck[] = [
   { label: "Telnyx API key leak", regex: /TELNYX_API_KEY/i },
   { label: "Telnyx webhook secret leak", regex: /TELNYX_WEBHOOK_SIGNING_SECRET/i },
   { label: "private key leak", regex: /BEGIN [A-Z ]*PRIVATE KEY/i },
-  { label: "raw webhook payload leak", regex: /raw webhook payload/i },
-  { label: "provider payload leak", regex: /provider payload/i },
+  { label: "raw webhook payload value leak", regex: /\b(?:raw\s+)?webhook\s+payload\s*(?:[:=]\s*|\{\s*)/i },
+  { label: "provider payload value leak", regex: /\b(?:raw\s+)?provider\s+payload\s*(?:[:=]\s*|\{\s*)/i },
+  { label: "Telnyx payload value leak", regex: /\btelnyx\s+payload\s*(?:[:=]\s*|\{\s*)/i },
+  { label: "JSON payload value leak", regex: /(?:"payload"|\bpayload)\s*:\s*\{/i },
 ];
 
 const visibleTextLeakPatterns: PatternCheck[] = [
   { label: "raw SMS body leak", regex: /raw SMS body/i },
-  { label: "raw webhook payload leak", regex: /raw webhook payload/i },
-  { label: "provider payload leak", regex: /provider payload/i },
+  { label: "raw webhook payload value leak", regex: /\b(?:raw\s+)?webhook\s+payload\s*(?:[:=]\s*|\{\s*)/i },
+  { label: "provider payload value leak", regex: /\b(?:raw\s+)?provider\s+payload\s*(?:[:=]\s*|\{\s*)/i },
+  { label: "Telnyx payload value leak", regex: /\btelnyx\s+payload\s*(?:[:=]\s*|\{\s*)/i },
+  { label: "JSON payload value leak", regex: /(?:"payload"|\bpayload)\s*:\s*\{/i },
   { label: "full E.164 phone number", regex: /\+1\d{10}\b/ },
   { label: "full formatted phone number", regex: /\(\d{3}\)\s?\d{3}-\d{4}\b/ },
   { label: "full dashed or dotted phone number", regex: /\b\d{3}[-.]\d{3}[-.]\d{4}\b/ },
@@ -68,6 +72,10 @@ const fullStreetAddressPatterns: PatternCheck[] = [
 ];
 
 assertNoPatterns("mt-3 list-disc space-y-1 pl-5", fullStreetAddressPatterns, "Tailwind class regression");
+assertNoPatterns("PHI, secrets, raw SMS bodies, and provider payloads are intentionally excluded.", visibleTextLeakPatterns, "safe payload exclusion copy");
+assertNoPatterns("raw provider payloads are not shown. safe metadata only.", visibleTextLeakPatterns, "safe payload guardrail copy");
+assertAnyPatternMatches("provider payload: {\"id\":\"secret\"}", visibleTextLeakPatterns, "provider payload value regression");
+assertAnyPatternMatches("\"payload\": {\"id\":\"secret\"}", visibleTextLeakPatterns, "JSON payload value regression");
 
 const optionalAdminRoutes = [
   "/dashboard",
@@ -147,6 +155,11 @@ function assertNoPatterns(value: string, patterns: readonly PatternCheck[], scop
   }
 }
 
+function assertAnyPatternMatches(value: string, patterns: readonly PatternCheck[], scopeLabel: string) {
+  const matched = patterns.some((pattern) => firstMatch(value, pattern.regex));
+  assert.ok(matched, `${scopeLabel} should match at least one leak pattern.`);
+}
+
 async function assertNoLeaks(page: Page, label: string) {
   const [text, html] = await Promise.all([pageText(page), pageHtml(page)]);
   assertNoPatterns(html, rawHtmlLeakPatterns, `${label} html`);
@@ -186,9 +199,11 @@ async function login(page: Page) {
 }
 
 async function assertTherapistWorkspace(page: Page, label: string) {
+  await page.getByText(/Today['’]s field focus/i).first().waitFor({ timeout: 30_000 });
   const text = await pageText(page);
   for (const pattern of therapistHierarchy) {
-    assert.match(text, pattern, `${label} should show therapist-first hierarchy item ${pattern}`);
+    if (pattern.test(text)) continue;
+    assert.fail(`${label} should show therapist-first hierarchy item ${pattern}. Visible text excerpt: ${JSON.stringify(excerptAround(text, 0, Math.min(text.length, 300)))}`);
   }
   assertNoPatterns(text, forbiddenAgencySpeedLanguage, `${label} visible text`);
   await assertNoLeaks(page, label);
