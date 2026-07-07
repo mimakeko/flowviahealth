@@ -1,27 +1,34 @@
 import { randomUUID } from "node:crypto";
 import { loadLocalEnv } from "./load-local-env.mts";
+import { requireSmokeEnv, smokeErrorSummary, smokeFailToken, withTimeout } from "./smoke-harness.mts";
 
 const SMOKE_SOURCE = "flowvia_db_smoke_v1";
 const SMOKE_ACTOR = "smoke_test";
 const SMOKE_PHONE = "+15550101990";
 const SMOKE_REFERRAL_PHONE = "+15550101991";
+const SCRIPT_TOKEN = "DB_SMOKE";
+const DB_TIMEOUT_MS = 15_000;
+const TRANSACTION_TIMEOUT_MS = 45_000;
 
-function requirePostgres() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error("DATABASE_URL is required. `pnpm db:smoke` verifies Postgres and will not use local JSON storage.");
-  }
+function db<T>(promise: Promise<T>, label: string, timeoutMs = DB_TIMEOUT_MS) {
+  return withTimeout(promise, timeoutMs, label);
 }
 
 async function main() {
   loadLocalEnv();
-  requirePostgres();
+  if (!requireSmokeEnv(SCRIPT_TOKEN, ["DATABASE_URL"])) return;
+
   const { getPrismaClient } = await import("../lib/db/prisma.ts");
   const prisma = getPrismaClient();
   const runId = randomUUID().slice(0, 8);
   const therapistEmail = `smoke.therapist.${runId}@flowviahealth.test`;
   const telnyxEventId = `smoke_${runId}`;
 
-  await prisma.$transaction(async (tx) => {
+  try {
+    await db(prisma.$connect(), "prisma.$connect db smoke");
+    await db(prisma.smsMessage.count(), "smsMessage.count db smoke connectivity probe");
+
+    await db(prisma.$transaction(async (tx) => {
     await tx.telnyxWebhookEvent.deleteMany({ where: { eventType: "smoke.webhook" } });
     await tx.smsMessage.deleteMany({ where: { eventType: "smoke.sms.dry_run" } });
     await tx.smsConsentEnrollment.deleteMany({ where: { fullName: "Smoke SMS Contact" } });
@@ -325,13 +332,25 @@ async function main() {
       tx.auditLog.findFirstOrThrow({ where: { actorType: SMOKE_ACTOR, action: "visit_status_changed" } }),
       tx.auditLog.findFirstOrThrow({ where: { actorType: SMOKE_ACTOR, action: "therapist_status_update" } }),
     ]);
-  });
+    }, {
+      maxWait: 10_000,
+      timeout: TRANSACTION_TIMEOUT_MS,
+    }), "prisma.$transaction db smoke", TRANSACTION_TIMEOUT_MS + 15_000);
 
-  await prisma.$disconnect();
-  console.log("DB smoke passed: Postgres models are queryable and fake create/read/update checks completed without sending SMS.");
+    console.log("PASS_DB_SMOKE");
+    console.log("DB smoke passed: Postgres models are queryable and fake create/read/update checks completed without sending SMS.");
+  } catch (error) {
+    console.error(`${smokeFailToken(SCRIPT_TOKEN, error)} ${smokeErrorSummary(error)}`);
+    process.exitCode = 1;
+  } finally {
+    await withTimeout(prisma.$disconnect(), 5_000, "prisma.$disconnect db smoke").catch((error) => {
+      console.error(`WARN_DB_SMOKE_DISCONNECT ${smokeErrorSummary(error)}`);
+    });
+    if (process.exitCode) process.exit(process.exitCode);
+  }
 }
 
-main().catch(async (error) => {
-  console.error(error instanceof Error ? error.message : "DB smoke failed.");
-  process.exitCode = 1;
+main().catch((error) => {
+  console.error(`FAIL_DB_SMOKE_UNEXPECTED ${smokeErrorSummary(error)}`);
+  process.exit(1);
 });

@@ -24,6 +24,8 @@ assert.match(myWorkPage, /Today&apos;s field focus/, "My Work should lead with t
 assert.match(myWorkPage, /getNextFieldAction/, "My Work should derive one prioritized next field action.");
 assert.match(myWorkPage, /New referral opportunities/, "My Work should separate new opportunities from assigned work.");
 assert.match(myWorkPage, /Needs attention/, "My Work should include a compact attention section.");
+assert.match(myWorkPage, /Update status \/ note/, "Assigned work update controls should stay behind a compact disclosure.");
+assert.match(myWorkPage, /Add no-PHI note/, "Assigned work note copy should stay therapist-friendly and no-PHI.");
 assert.match(myWorkPage, /Lower-priority details/, "My Work should demote completed and lower-priority details.");
 assert.doesNotMatch(myWorkPage, /xl:grid-cols-\[minmax\(0,1fr\)_390px\]/, "My Work should not keep the old dashboard rail layout.");
 assert.match(myWorkPage, /min-h-14/, "Field action buttons should be thumb-friendly.");

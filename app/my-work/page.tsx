@@ -1263,17 +1263,23 @@ export default async function MyWorkPage({
                     </details>
                   ) : null}
 
-                  <form action={therapistReferralAction} className="mt-5 grid gap-4 border-t border-line pt-5 lg:grid-cols-[1fr_1fr_auto]">
-                    <input type="hidden" name="therapistId" value={selectedTherapistId} />
-                    <input type="hidden" name="referralId" value={referral.id} />
-                    <label className="text-sm font-semibold text-ink">Action<select className="field" name="action" defaultValue="contacted">{THERAPIST_ACTIONS.map((action: TherapistAction) => <option key={action.value} value={action.value}>{action.label}</option>)}</select></label>
-                    <label className="text-sm font-semibold text-ink">Note <span className="font-normal text-slate-400">(optional, no PHI)</span><input className="field" name="note" placeholder="No PHI in pilot notes" /></label>
-                    <div className="flex items-end">
-                      <PendingSubmitButton className="btn-primary min-h-14 w-full" pendingLabel="Saving...">
-                        <Save size={18} />Save note
-                      </PendingSubmitButton>
-                    </div>
-                  </form>
+                  <details className="mt-5 rounded-lg border border-line bg-slate-50">
+                    <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                      <span>Update status / note</span>
+                      <span className="text-xs font-semibold text-blue">Add no-PHI note</span>
+                    </summary>
+                    <form action={therapistReferralAction} className="grid gap-4 border-t border-line bg-white p-4 lg:grid-cols-[1fr_1fr_auto]">
+                      <input type="hidden" name="therapistId" value={selectedTherapistId} />
+                      <input type="hidden" name="referralId" value={referral.id} />
+                      <label className="text-sm font-semibold text-ink">Update status<select className="field" name="action" defaultValue="contacted">{THERAPIST_ACTIONS.map((action: TherapistAction) => <option key={action.value} value={action.value}>{action.label}</option>)}</select></label>
+                      <label className="text-sm font-semibold text-ink">Add no-PHI note <span className="font-normal text-slate-400">(optional)</span><input className="field" name="note" placeholder="No PHI in pilot notes" /></label>
+                      <div className="flex items-end">
+                        <PendingSubmitButton className="btn-primary min-h-14 w-full" pendingLabel="Saving...">
+                          <Save size={18} />Save note
+                        </PendingSubmitButton>
+                      </div>
+                    </form>
+                  </details>
                 </article>
               ))}
             </section>

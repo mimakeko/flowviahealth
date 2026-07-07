@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { loadLocalEnv } from "./load-local-env.mts";
+import { requireSmokeEnv, smokeErrorSummary, smokeFailToken, withTimeout } from "./smoke-harness.mts";
 
 const SMOKE_SOURCE = "flowvia_therapist_field_smoke_v1";
+const SCRIPT_TOKEN = "THERAPIST_FIELD_SMOKE";
+const DB_TIMEOUT_MS = 15_000;
 
 loadLocalEnv();
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is required for therapist field smoke.");
-}
+if (!requireSmokeEnv(SCRIPT_TOKEN, ["DATABASE_URL"])) process.exit(0);
 
 const { classifyOperationalNote, getSafeBlockedNoteAuditMetadata, hasBlockedNoteClassification } = await import("../lib/compliance/note-classification.ts");
 const { getTherapistAssistantCards } = await import("../lib/ai/operations-assistant-v2.ts");
@@ -25,18 +26,24 @@ const prisma = getPrismaClient();
 const runId = randomUUID().slice(0, 8);
 const phoneA = "+15550112001";
 const phoneB = "+15550112002";
-const smsBefore = await prisma.smsMessage.count();
+let smsBefore = 0;
+
+function db<T>(promise: Promise<T>, label: string) {
+  return withTimeout(promise, DB_TIMEOUT_MS, label);
+}
 
 function assertSafeRendered(value: string) {
   assert.doesNotMatch(value, /\b(diagnosis|treatment|medication|symptom|blood pressure|pain score|api key|secret|full address)\b/i);
 }
 
 try {
-  await prisma.patientReferral.deleteMany({ where: { referralSource: SMOKE_SOURCE } });
-  await prisma.smsConsentEnrollment.deleteMany({ where: { fullName: { startsWith: "Therapist Field Smoke" } } });
-  await prisma.therapist.deleteMany({ where: { email: { startsWith: "therapist.field.smoke." } } });
+  smsBefore = await db(prisma.smsMessage.count(), "smsMessage.count initial guard");
 
-  const [therapistA, therapistB] = await Promise.all([
+  await db(prisma.patientReferral.deleteMany({ where: { referralSource: SMOKE_SOURCE } }), "patientReferral.deleteMany cleanup");
+  await db(prisma.smsConsentEnrollment.deleteMany({ where: { fullName: { startsWith: "Therapist Field Smoke" } } }), "smsConsentEnrollment.deleteMany cleanup");
+  await db(prisma.therapist.deleteMany({ where: { email: { startsWith: "therapist.field.smoke." } } }), "therapist.deleteMany cleanup");
+
+  const [therapistA, therapistB] = await db(Promise.all([
     prisma.therapist.create({
       data: {
         active: true,
@@ -55,9 +62,9 @@ try {
         serviceAreaNotes: "Therapist field smoke. No PHI.",
       },
     }),
-  ]);
+  ]), "therapist.create setup");
 
-  const [referralA, referralB] = await Promise.all([
+  const [referralA, referralB] = await db(Promise.all([
     prisma.patientReferral.create({
       data: {
         assignedTherapistId: therapistA.id,
@@ -80,9 +87,9 @@ try {
         zip: "75034",
       },
     }),
-  ]);
+  ]), "patientReferral.create setup");
 
-  const [scheduledVisit, noShowVisit, otherTherapistVisit] = await Promise.all([
+  const [scheduledVisit, noShowVisit, otherTherapistVisit] = await db(Promise.all([
     prisma.visit.create({
       data: {
         referralId: referralA.id,
@@ -117,9 +124,9 @@ try {
         status: "opted_out",
       },
     }),
-  ]);
+  ]), "visit and smsConsentEnrollment.create setup");
 
-  const assignedVisit = await prisma.visit.findFirst({ where: { id: scheduledVisit.id, therapistId: therapistA.id } });
+  const assignedVisit = await db(prisma.visit.findFirst({ where: { id: scheduledVisit.id, therapistId: therapistA.id } }), "visit.findFirst assigned scope");
   assert.ok(assignedVisit, "Therapist should be able to scope assigned visit.");
 
   assert.equal(isTherapistFieldVisitActionConfirmed({
@@ -131,13 +138,13 @@ try {
     confirmationIntent: null,
   }), false, "Missing confirmation should block a manual therapist field action.");
 
-  const unassignedVisit = await prisma.visit.findFirst({ where: { id: otherTherapistVisit.id, therapistId: therapistA.id } });
+  const unassignedVisit = await db(prisma.visit.findFirst({ where: { id: otherTherapistVisit.id, therapistId: therapistA.id } }), "visit.findFirst cross-therapist scope");
   assert.equal(unassignedVisit, null, "Therapist must not scope another therapist visit.");
 
   const start = resolveTherapistFieldVisitAction({ action: "start_visit", now: new Date("2026-07-10T15:30:00.000Z"), scheduledAt: scheduledVisit.scheduledAt, status: scheduledVisit.status });
   assert.equal(start?.allowed, true);
-  const inProgress = await prisma.visit.update({ where: { id: scheduledVisit.id }, data: { status: start!.nextStatus } });
-  await prisma.auditLog.create({
+  const inProgress = await db(prisma.visit.update({ where: { id: scheduledVisit.id }, data: { status: start!.nextStatus } }), "visit.update start");
+  await db(prisma.auditLog.create({
     data: {
       action: start!.auditAction,
       actorId: therapistA.id,
@@ -146,12 +153,12 @@ try {
       entityType: "Visit",
       metadataJson: { newStatus: inProgress.status, oldStatus: scheduledVisit.status, referralId: referralA.id, therapistId: therapistA.id },
     },
-  });
+  }), "auditLog.create visit started");
 
   const complete = resolveTherapistFieldVisitAction({ action: "mark_completed", now: new Date("2026-07-10T16:00:00.000Z"), scheduledAt: inProgress.scheduledAt, status: inProgress.status });
   assert.equal(complete?.allowed, true);
-  const completed = await prisma.visit.update({ where: { id: inProgress.id }, data: { status: complete!.nextStatus } });
-  await prisma.auditLog.create({
+  const completed = await db(prisma.visit.update({ where: { id: inProgress.id }, data: { status: complete!.nextStatus } }), "visit.update complete");
+  await db(prisma.auditLog.create({
     data: {
       action: complete!.auditAction,
       actorId: therapistA.id,
@@ -160,12 +167,12 @@ try {
       entityType: "Visit",
       metadataJson: { earlyCompletionWarning: complete.earlyCompletionWarning, newStatus: completed.status, oldStatus: inProgress.status, referralId: referralA.id, therapistId: therapistA.id },
     },
-  });
+  }), "auditLog.create visit completed");
 
   const noShow = resolveTherapistFieldVisitAction({ action: "mark_no_show", now: new Date("2026-07-11T16:00:00.000Z"), scheduledAt: noShowVisit.scheduledAt, status: noShowVisit.status });
   assert.equal(noShow?.allowed, true);
-  const noShowUpdated = await prisma.visit.update({ where: { id: noShowVisit.id }, data: { status: noShow!.nextStatus } });
-  await prisma.auditLog.create({
+  const noShowUpdated = await db(prisma.visit.update({ where: { id: noShowVisit.id }, data: { status: noShow!.nextStatus } }), "visit.update no-show");
+  await db(prisma.auditLog.create({
     data: {
       action: noShow!.auditAction,
       actorId: therapistA.id,
@@ -174,9 +181,9 @@ try {
       entityType: "Visit",
       metadataJson: { newStatus: noShowUpdated.status, oldStatus: noShowVisit.status, referralId: referralA.id, therapistId: therapistA.id },
     },
-  });
+  }), "auditLog.create visit no-show");
 
-  await prisma.auditLog.create({
+  await db(prisma.auditLog.create({
     data: {
       action: "permission_denied",
       actorId: therapistA.id,
@@ -185,11 +192,11 @@ try {
       entityType: "Visit",
       metadataJson: { reason: "therapist_scope_mismatch", route: "/my-work" },
     },
-  });
+  }), "auditLog.create permission denied");
 
   const unsafe = classifyOperationalNote("Patient medication list changed.", { fieldLabel: "Visit note" });
   assert.equal(hasBlockedNoteClassification(unsafe), true);
-  await prisma.auditLog.create({
+  await db(prisma.auditLog.create({
     data: {
       action: "therapist_visit_note_blocked",
       actorId: therapistA.id,
@@ -203,16 +210,16 @@ try {
         workflow: "therapist_field_visit_action",
       }),
     },
-  });
+  }), "auditLog.create blocked note");
 
-  const auditActions = await prisma.auditLog.findMany({
+  const auditActions = await db(prisma.auditLog.findMany({
     select: { action: true },
     where: {
       action: { in: ["therapist_visit_started", "therapist_visit_completed", "therapist_visit_no_show", "therapist_visit_note_blocked", "permission_denied"] },
       actorId: therapistA.id,
       entityType: "Visit",
     },
-  });
+  }), "auditLog.findMany action verification");
   const actionSet = new Set(auditActions.map((item) => item.action));
   assert.equal(actionSet.has("therapist_visit_started"), true);
   assert.equal(actionSet.has("therapist_visit_completed"), true);
@@ -254,10 +261,17 @@ try {
   const adminLayout = await readFile(new URL("../app/admin/layout.tsx", import.meta.url), "utf8");
   assert.match(adminLayout, /requirePilotSession\(\["admin"\]/, "Admin layout must remain admin-only.");
 
-  const smsAfter = await prisma.smsMessage.count();
+  const smsAfter = await db(prisma.smsMessage.count(), "smsMessage.count final no-SMS guard");
   assert.equal(smsAfter, smsBefore, "Therapist field workflow must not send or record SMS.");
 
+  console.log("PASS_THERAPIST_FIELD_SMOKE");
   console.log("Therapist field smoke passed: assigned-only updates, lifecycle actions, unsafe note block audit, no SMS, deterministic safety gates, and admin RBAC contract verified.");
+} catch (error) {
+  console.error(`${smokeFailToken(SCRIPT_TOKEN, error)} ${smokeErrorSummary(error)}`);
+  process.exitCode = 1;
 } finally {
-  await prisma.$disconnect();
+  await withTimeout(prisma.$disconnect(), 5_000, "prisma.$disconnect therapist field smoke").catch((error) => {
+    console.error(`WARN_THERAPIST_FIELD_SMOKE_DISCONNECT ${smokeErrorSummary(error)}`);
+  });
+  if (process.exitCode) process.exit(process.exitCode);
 }
