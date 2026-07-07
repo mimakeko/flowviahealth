@@ -16,6 +16,7 @@ const transientActionBanner = await readFile(new URL("../components/transient-ac
 const adminHealthPage = await readFile(new URL("../app/admin/health/page.tsx", import.meta.url), "utf8");
 const adminLayout = await readFile(new URL("../app/admin/layout.tsx", import.meta.url), "utf8");
 const myWorkLayout = await readFile(new URL("../app/my-work/layout.tsx", import.meta.url), "utf8");
+const dashboardShell = await readFile(new URL("../components/dashboard-shell.tsx", import.meta.url), "utf8");
 
 assert.match(myWorkPage, /data-therapist-field-workspace="phone-ipad"/, "My Work must expose the phone/iPad workspace marker.");
 assert.match(myWorkPage, /Next field action/, "My Work must show a near-top next field action panel.");
@@ -35,6 +36,9 @@ assert.match(myWorkPage, /id=\{visitDomId\(visit\.id\)\}/, "Visit cards should e
 assert.match(myWorkPage, /FieldWorkspaceEmptyState/, "My Work must render centralized calm empty states.");
 assert.match(myWorkPage, /TransientActionBanner/, "Action banners should clear transient query params after rendering.");
 assert.match(myWorkPage, /PendingSubmitButton/, "Manual action forms should prevent accidental double submits while pending.");
+assert.match(dashboardShell, /<details className="rounded-lg border border-line bg-white lg:hidden">/, "Workspace mobile navigation should collapse behind a compact disclosure.");
+assert.match(dashboardShell, /<span>Menu<\/span>/, "Workspace mobile navigation disclosure should use a short Menu label.");
+assert.match(dashboardShell, /hidden lg:block/, "Workspace desktop navigation should remain visible at desktop breakpoints.");
 assert.match(myWorkLoading, /Loading the field workspace/, "My Work should provide a calm loading state.");
 assert.match(myWorkError, /Field workspace unavailable/, "My Work should provide a safe operational error state.");
 assert.doesNotMatch(myWorkPage, /listedTodayVisits|listedUpcomingVisits|listedCompletedVisits/, "Assigned visits should remain visible in their queue instead of being hidden behind the summary card.");

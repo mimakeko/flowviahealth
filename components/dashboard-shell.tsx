@@ -69,6 +69,30 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
   const messagesAccess = getAdminMessagesAccessState();
   const dataMode = getFlowviaDataModeStatus();
   const isWorkspace = section === "workspace";
+  const renderNavigation = () => (
+    <nav aria-label="Internal workspace navigation" className="grid gap-1">
+      {navItems.map((item) => {
+        if (!item.roles.includes(session.role)) return null;
+
+        const Icon = item.icon;
+        const gatedOff = "gate" in item && item.gate === "messages" && !messagesAccess.enabled;
+        const active = item.section === section;
+        const className = `flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition ${active ? "bg-ice text-blue" : "text-slate-600 hover:bg-mist hover:text-ink"} ${gatedOff ? "cursor-not-allowed opacity-55 hover:bg-transparent" : ""}`;
+
+        return gatedOff ? (
+          <span key={item.href} aria-disabled="true" className={className} title={`${messagesAccess.envVar}=true required in production`}>
+            <Icon size={18} />
+            {item.label}
+          </span>
+        ) : (
+          <Link key={item.href} href={item.href} className={className}>
+            <Icon size={18} />
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
 
   return (
     <div className="min-h-screen bg-mist text-ink">
@@ -110,29 +134,25 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
       </header>
 
       <div className="container-page grid gap-5 py-4 sm:py-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:py-8">
-        <aside className={`${isWorkspace ? "order-2 lg:order-1" : ""} h-fit rounded-lg border border-line bg-white p-3 shadow-[0_10px_30px_rgba(10,37,64,0.05)] lg:sticky lg:top-6`}>
-          <nav aria-label="Internal workspace navigation" className="grid gap-1">
-            {navItems.map((item) => {
-              if (!item.roles.includes(session.role)) return null;
-
-              const Icon = item.icon;
-              const gatedOff = "gate" in item && item.gate === "messages" && !messagesAccess.enabled;
-              const active = item.section === section;
-              const className = `flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition ${active ? "bg-ice text-blue" : "text-slate-600 hover:bg-mist hover:text-ink"} ${gatedOff ? "cursor-not-allowed opacity-55 hover:bg-transparent" : ""}`;
-
-              return gatedOff ? (
-                <span key={item.href} aria-disabled="true" className={className} title={`${messagesAccess.envVar}=true required in production`}>
-                  <Icon size={18} />
-                  {item.label}
-                </span>
-              ) : (
-                <Link key={item.href} href={item.href} className={className}>
-                  <Icon size={18} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+        <aside className={`${isWorkspace ? "order-2 border-0 bg-transparent p-0 shadow-none lg:order-1 lg:rounded-lg lg:border lg:border-line lg:bg-white lg:p-3 lg:shadow-[0_10px_30px_rgba(10,37,64,0.05)]" : "rounded-lg border border-line bg-white p-3 shadow-[0_10px_30px_rgba(10,37,64,0.05)]"} h-fit lg:sticky lg:top-6`}>
+          {isWorkspace ? (
+            <>
+              <details className="rounded-lg border border-line bg-white lg:hidden">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                  <span>Menu</span>
+                  <span className="text-xs font-semibold text-blue">Field workspace</span>
+                </summary>
+                <div className="border-t border-line p-3">
+                  {renderNavigation()}
+                </div>
+              </details>
+              <div className="hidden lg:block">
+                {renderNavigation()}
+              </div>
+            </>
+          ) : (
+            renderNavigation()
+          )}
 
           <div className={`${isWorkspace ? "hidden lg:block" : ""} mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950`}>
             <div className="flex items-center gap-2 font-semibold">
