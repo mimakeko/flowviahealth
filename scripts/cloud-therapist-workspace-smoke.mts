@@ -12,6 +12,11 @@ const baseUrl = normalizeBaseUrl(process.env.FLOWVIA_CLOUD_SMOKE_BASE_URL || "ht
 const adminEmail = process.env.FLOWVIA_BROWSER_SMOKE_ADMIN_EMAIL;
 const adminPassword = process.env.FLOWVIA_BROWSER_SMOKE_ADMIN_PASSWORD;
 
+type PatternCheck = {
+  label: string;
+  regex: RegExp;
+};
+
 const therapistHierarchy = [
   /Today['’]s field focus/i,
   /Next field action/i,
@@ -22,34 +27,36 @@ const therapistHierarchy = [
   /Assigned work/i,
 ];
 
-const forbiddenAgencySpeedLanguage = [
-  /Referral speed/i,
-  /Acceptance funnel/i,
-  /Therapist response patterns/i,
-  /Acceptance visibility/i,
-  /Staffing handoff friction/i,
+const forbiddenAgencySpeedLanguage: PatternCheck[] = [
+  { label: "agency speed dashboard language", regex: /Referral speed/i },
+  { label: "acceptance funnel language", regex: /Acceptance funnel/i },
+  { label: "therapist response patterns language", regex: /Therapist response patterns/i },
+  { label: "acceptance visibility language", regex: /Acceptance visibility/i },
+  { label: "staffing handoff friction language", regex: /Staffing handoff friction/i },
 ];
 
-const forbiddenLeakPatterns = [
-  /NEXT_REDIRECT/i,
-  /PrismaClientKnownRequestError/i,
-  /PrismaClientInitializationError/i,
-  /\bstack trace\b/i,
-  /DATABASE_URL/i,
-  /DIRECT_URL/i,
-  /TELNYX_API_KEY/i,
-  /TELNYX_WEBHOOK_SIGNING_SECRET/i,
-  /raw SMS body/i,
-  /raw webhook payload/i,
-  /provider payload/i,
-  /\+1\d{10}\b/,
-  /\(\d{3}\)\s?\d{3}-\d{4}\b/,
-  /\b\d{3}[-.]\d{3}[-.]\d{4}\b/,
+const forbiddenLeakPatterns: PatternCheck[] = [
+  { label: "Next.js redirect leak", regex: /NEXT_REDIRECT/i },
+  { label: "Prisma known request error", regex: /PrismaClientKnownRequestError/i },
+  { label: "Prisma initialization error", regex: /PrismaClientInitializationError/i },
+  { label: "stack trace leak", regex: /\bstack trace\b/i },
+  { label: "DATABASE_URL leak", regex: /DATABASE_URL/i },
+  { label: "DIRECT_URL leak", regex: /DIRECT_URL/i },
+  { label: "Telnyx API key leak", regex: /TELNYX_API_KEY/i },
+  { label: "Telnyx webhook secret leak", regex: /TELNYX_WEBHOOK_SIGNING_SECRET/i },
+  { label: "raw SMS body leak", regex: /raw SMS body/i },
+  { label: "raw webhook payload leak", regex: /raw webhook payload/i },
+  { label: "provider payload leak", regex: /provider payload/i },
+  { label: "full E.164 phone number", regex: /\+1\d{10}\b/ },
+  { label: "full formatted phone number", regex: /\(\d{3}\)\s?\d{3}-\d{4}\b/ },
+  { label: "full dashed or dotted phone number", regex: /\b\d{3}[-.]\d{3}[-.]\d{4}\b/ },
 ];
 
-const fullStreetAddressPatterns = [
-  /\b\d{1,6}\s+(?:[A-Za-z0-9.'#-]+\s+){0,6}(?:Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Drive|Dr\.?|Lane|Ln\.?|Boulevard|Blvd\.?|Court|Ct\.?|Circle|Cir\.?|Trail|Trl\.?|Parkway|Pkwy\.?|Place|Pl\.?|Way)\b/i,
-  /\b(?:Apt|Apartment|Suite|Ste\.?|Unit)\s*[A-Z0-9-]+\b/i,
+const fullStreetAddressPatterns: PatternCheck[] = [
+  {
+    label: "full street address",
+    regex: /\b\d{1,6}\s+(?:[A-Za-z0-9.'#-]+\s+){0,6}(?:Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Drive|Dr\.?|Lane|Ln\.?|Boulevard|Blvd\.?|Court|Ct\.?|Circle|Cir\.?|Trail|Trl\.?|Parkway|Pkwy\.?|Place|Pl\.?|Way|Expressway|Expy\.?)\b(?:\s+(?:Apt|Apartment|Suite|Ste\.?|Unit)\s*[A-Z0-9-]+)?/i,
+  },
 ];
 
 const optionalAdminRoutes = [
@@ -96,9 +103,37 @@ async function pageHtml(page: Page) {
   return page.content();
 }
 
-function assertNoPatterns(value: string, patterns: readonly RegExp[], label: string) {
+function excerptAround(value: string, start: number, end: number) {
+  const excerptStart = Math.max(0, start - 40);
+  const excerptEnd = Math.min(value.length, end + 40);
+  const prefix = excerptStart > 0 ? "..." : "";
+  const suffix = excerptEnd < value.length ? "..." : "";
+  return `${prefix}${value.slice(excerptStart, excerptEnd).replace(/\s+/g, " ")}${suffix}`;
+}
+
+function firstMatch(value: string, regex: RegExp) {
+  const match = new RegExp(regex.source, regex.flags).exec(value);
+  if (!match || match.index === undefined) return null;
+  return {
+    excerpt: excerptAround(value, match.index, match.index + match[0].length),
+    matched: match[0],
+    start: match.index,
+  };
+}
+
+function assertNoPatterns(value: string, patterns: readonly PatternCheck[], scopeLabel: string) {
   for (const pattern of patterns) {
-    assert.doesNotMatch(value, pattern, `${label} should not expose ${pattern}`);
+    const match = firstMatch(value, pattern.regex);
+    if (!match) continue;
+    assert.fail(
+      [
+        `${scopeLabel} should not expose forbidden content.`,
+        `Pattern label: ${pattern.label}`,
+        `Regex: ${pattern.regex}`,
+        `Matched substring: ${JSON.stringify(match.matched)}`,
+        `Excerpt: ${JSON.stringify(match.excerpt)}`,
+      ].join(" "),
+    );
   }
 }
 
