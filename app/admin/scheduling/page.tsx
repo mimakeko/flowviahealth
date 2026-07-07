@@ -260,6 +260,12 @@ export default async function AdminSchedulingPage() {
     ? openVisits.filter((visit) => visit.therapistId === firstReadyReferral.assignedTherapistId)
     : [];
   const firstReferralWindows = firstReadyReferral ? getSuggestedSchedulingWindows({ scheduledVisits: firstReferralTherapistVisits }) : [];
+  const summaryCards = [
+    { label: "Ready for scheduling", value: readyToCreateRows.length, href: "#scheduling-ready" },
+    { label: "Awaiting response", value: awaitingAcceptanceRows.length, href: "#scheduling-awaiting" },
+    { label: "Blocked / declined", value: declinedRows.length + needsReviewRows.length, href: "#scheduling-blocked" },
+    { label: "Upcoming/open visits", value: visitRows.length, href: "#scheduling-visits" },
+  ];
 
   return (
     <div className="grid gap-8">
@@ -277,11 +283,18 @@ export default async function AdminSchedulingPage() {
         </Link>
       </div>
 
-      <SchedulingIntelligencePanel cards={schedulingCards} summary="Scheduling queue intelligence is generated from safe counts and open visit timing only." windows={firstReferralWindows} />
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {summaryCards.map((card) => (
+          <a key={card.label} href={card.href} className="rounded-lg border border-line bg-white p-4 transition hover:border-blue/40 hover:bg-slate-50">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{card.label}</p>
+            <p className="mt-2 text-3xl font-semibold tracking-[-.03em] text-ink">{card.value}</p>
+          </a>
+        ))}
+      </section>
 
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <div>
-          <h2 className="mb-3 text-xl font-semibold tracking-[-.02em] text-ink">Accepted — ready to schedule ({readyToCreateRows.length})</h2>
+          <h2 id="scheduling-ready" className="mb-3 scroll-mt-6 text-xl font-semibold tracking-[-.02em] text-ink">Accepted — ready to schedule ({readyToCreateRows.length})</h2>
           <div data-testid="scheduling-ready-referrals" className="overflow-hidden rounded-lg border border-line bg-white">
             {readyToCreateRows.map((referral: SchedulingQualityReferralRow) => {
               const readiness = getSchedulingReadiness({
@@ -322,6 +335,28 @@ export default async function AdminSchedulingPage() {
             {readyToCreateRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No create-ready referrals found.</p> : null}
           </div>
 
+          <div id="scheduling-awaiting" className="scroll-mt-6" />
+          <details className="mt-6 rounded-lg border border-line bg-white p-4 md:hidden">
+            <summary className="cursor-pointer text-sm font-semibold text-ink">Awaiting response ({awaitingAcceptanceRows.length})</summary>
+            <div data-testid="scheduling-awaiting-opportunity-acceptance-mobile" className="mt-4 overflow-hidden rounded-lg border border-line bg-white">
+              {awaitingAcceptanceRows.map((referral: SchedulingQualityReferralRow) => (
+                <div key={referral.id} className="grid gap-3 border-b border-line p-4 last:border-b-0">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-ink">{referral.patientName}</p>
+                      <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>{opportunityStateLabel(referral.opportunityState.state)}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-600">{referral.assignedTherapist?.name || "Unassigned"} · {opportunityCreateVisitBlockerMessage({ createVisitGateReasons: referral.createVisitGate.reasons, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}</p>
+                    <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-950">Create visit suppressed.</p>
+                  </div>
+                  <Link href={`/admin/referrals/${referral.id}`} className="font-semibold text-blue underline">Open</Link>
+                </div>
+              ))}
+              {awaitingAcceptanceRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No ready referrals are awaiting therapist acceptance.</p> : null}
+            </div>
+          </details>
+
+          <div className="hidden md:block">
           <h2 className="mb-3 mt-6 text-xl font-semibold tracking-[-.02em] text-ink">Offered — awaiting therapist acceptance ({awaitingAcceptanceRows.length})</h2>
           <div data-testid="scheduling-awaiting-opportunity-acceptance" className="overflow-hidden rounded-lg border border-line bg-white">
             {awaitingAcceptanceRows.map((referral: SchedulingQualityReferralRow) => (
@@ -339,7 +374,51 @@ export default async function AdminSchedulingPage() {
             ))}
             {awaitingAcceptanceRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No ready referrals are awaiting therapist acceptance.</p> : null}
           </div>
+          </div>
 
+          <div id="scheduling-blocked" className="scroll-mt-6" />
+          <details className="mt-6 rounded-lg border border-line bg-white p-4 md:hidden">
+            <summary className="cursor-pointer text-sm font-semibold text-ink">Blocked / declined ({declinedRows.length + needsReviewRows.length})</summary>
+            <div className="mt-4 grid gap-4">
+              <div data-testid="scheduling-declined-opportunities-mobile" className="overflow-hidden rounded-lg border border-line bg-white">
+                {declinedRows.map((referral: SchedulingQualityReferralRow) => (
+                  <div key={referral.id} className="grid gap-3 border-b border-line p-4 last:border-b-0">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-ink">{referral.patientName}</p>
+                        <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>{opportunityStateLabel(referral.opportunityState.state)}</span>
+                        <span className="inline-flex rounded-md bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-800 ring-1 ring-rose-200">{opportunityDeclineReasonLabel(referral.opportunityState.declinedReason)}</span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600">{referral.assignedTherapist?.name || "Unassigned"} · Needs reassignment/review before scheduling.</p>
+                      <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 p-2 text-xs font-semibold text-rose-950">{opportunityCreateVisitBlockerMessage({ createVisitGateReasons: referral.createVisitGate.reasons, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}</p>
+                    </div>
+                    <Link href={`/admin/referrals/${referral.id}`} className="font-semibold text-blue underline">Open referral</Link>
+                  </div>
+                ))}
+                {declinedRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No declined opportunities need reassignment.</p> : null}
+              </div>
+              <div data-testid="scheduling-review-referrals-mobile" className="overflow-hidden rounded-lg border border-line bg-white">
+                {needsReviewRows.map((referral: SchedulingQualityReferralRow) => (
+                  <div key={referral.id} className="grid gap-3 border-b border-line p-4 last:border-b-0">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-ink">{referral.patientName}</p>
+                        <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>{statusLabel(referral.status)}</span>
+                        <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${referral.createVisitGate.severity === "blocker" ? "bg-rose-50 text-rose-800 ring-rose-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>Review only</span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600">{referral.intakeQuality.readinessLabel} · {referral.assignedTherapist?.name || "Unassigned"}</p>
+                      <p className="mt-1 text-xs text-slate-500">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
+                      <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-950">Review-only. Create visit suppressed until gates pass.</p>
+                    </div>
+                    <Link href={`/admin/referrals/${referral.id}`} className="font-semibold text-blue underline">Open</Link>
+                  </div>
+                ))}
+                {needsReviewRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No review-only referrals in the scheduling queue.</p> : null}
+              </div>
+            </div>
+          </details>
+
+          <div className="hidden md:block">
           <h2 className="mb-3 mt-6 text-xl font-semibold tracking-[-.02em] text-ink">Declined — needs reassignment/review ({declinedRows.length})</h2>
           <div data-testid="scheduling-declined-opportunities" className="overflow-hidden rounded-lg border border-line bg-white">
             {declinedRows.map((referral: SchedulingQualityReferralRow) => (
@@ -382,10 +461,11 @@ export default async function AdminSchedulingPage() {
             ))}
             {needsReviewRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No review-only referrals in the scheduling queue.</p> : null}
           </div>
+          </div>
         </div>
 
         <div>
-          <h2 className="mb-3 text-xl font-semibold tracking-[-.02em] text-ink">Upcoming/open visits</h2>
+          <h2 id="scheduling-visits" className="mb-3 scroll-mt-6 text-xl font-semibold tracking-[-.02em] text-ink">Upcoming/open visits</h2>
           <div data-testid="scheduling-upcoming-visits" className="overflow-hidden rounded-lg border border-line bg-white">
             {visitRows.map((visit: SchedulingVisitRow) => {
               const therapistVisits = visit.therapistId ? openVisits.filter((item) => item.therapistId === visit.therapistId) : [];
@@ -415,6 +495,14 @@ export default async function AdminSchedulingPage() {
           </div>
         </div>
       </section>
+
+      <SchedulingIntelligencePanel
+        cards={schedulingCards}
+        mobileCollapsed
+        mobileSummaryLabel="Scheduling checks"
+        summary="Scheduling queue checks use safe counts and open visit timing only. Manual review required."
+        windows={firstReferralWindows}
+      />
     </div>
   );
 }

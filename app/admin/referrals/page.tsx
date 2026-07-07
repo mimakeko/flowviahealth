@@ -117,6 +117,63 @@ function schedulingSummary(referral: ReferralListQualityRow) {
   });
 }
 
+function hasReferralReviewSignal(referral: ReferralListQualityRow) {
+  return (
+    referral.intakeQuality.readinessLevel !== "ready" ||
+    referral.intakeQuality.duplicateCandidates.length > 0 ||
+    !referral.assignedTherapistId ||
+    referral.smsConsentStatus === "opted_out"
+  );
+}
+
+function ReferralFilterFields({
+  selectedGroup,
+  selectedStatus,
+  selectedTherapistId,
+  therapistOptions,
+}: {
+  selectedGroup: string;
+  selectedStatus: string;
+  selectedTherapistId: string;
+  therapistOptions: TherapistFilterOption[];
+}) {
+  return (
+    <div className="grid gap-4 md:grid-cols-4">
+      <label className="text-sm font-semibold text-ink">
+        Referral status
+        <select className="field" name="status" defaultValue={selectedStatus}>
+          <option value="">All statuses</option>
+          {REFERRAL_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
+        </select>
+      </label>
+      <label className="text-sm font-semibold text-ink">
+        Therapist
+        <select className="field" name="therapistId" defaultValue={selectedTherapistId}>
+          <option value="">All therapists</option>
+          <option value="unassigned">Unassigned</option>
+          {therapistOptions.map((therapist: TherapistFilterOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
+        </select>
+      </label>
+      <label className="text-sm font-semibold text-ink">
+        Queue
+        <select className="field" name="group" defaultValue={selectedGroup}>
+          <option value="">All referrals</option>
+          <option value="needs_scheduling">Needs scheduling</option>
+          <option value="ready_scheduling">Intake ready</option>
+          <option value="needs_intake_review">Needs intake review</option>
+          <option value="possible_duplicate">Possible duplicate</option>
+          <option value="missing_therapist">Missing therapist</option>
+          <option value="opted_out">Opted out / non-SMS</option>
+        </select>
+      </label>
+      <div className="flex items-end gap-2">
+        <button className="btn-primary w-full" type="submit">Apply</button>
+        <Link href="/admin/referrals" className="btn-secondary w-full justify-center">Reset</Link>
+      </div>
+    </div>
+  );
+}
+
 export default async function AdminReferralsPage({
   searchParams,
 }: {
@@ -324,6 +381,23 @@ export default async function AdminReferralsPage({
     unassignedReferrals,
     upcomingNextSevenDays: scheduledVisitsNextSevenDays,
   });
+  const needsReviewCount = qualityRows.filter((referral: ReferralListQualityRow) => referral.intakeQuality.readinessLevel !== "ready").length;
+  const readyForSchedulingCount = qualityRows.filter((referral: ReferralListQualityRow) => referral.createVisitGate.allowed).length;
+  const waitingContactCount = qualityRows.filter((referral: ReferralListQualityRow) => referral.status === "new").length;
+  const blockedSafetyCount = qualityRows.filter((referral: ReferralListQualityRow) => (
+    referral.intakeQuality.readinessLevel === "blocked" ||
+    referral.intakeQuality.duplicateCandidates.length > 0 ||
+    referral.smsConsentStatus === "opted_out"
+  )).length;
+  const summaryCards = [
+    { label: "Needs review", value: needsReviewCount, href: "/admin/referrals?group=needs_intake_review" },
+    { label: "Ready for scheduling", value: readyForSchedulingCount, href: "/admin/referrals?group=ready_scheduling" },
+    { label: "Waiting contact", value: waitingContactCount, href: "/admin/referrals?status=new" },
+    { label: "Blocked / safety", value: blockedSafetyCount, href: "/admin/referrals?group=possible_duplicate" },
+  ];
+  const mobileReferralRows = [...displayedReferralRows].sort((a, b) => Number(hasReferralReviewSignal(b)) - Number(hasReferralReviewSignal(a)));
+  const initialMobileReferralRows = mobileReferralRows.slice(0, 12);
+  const remainingMobileReferralRows = mobileReferralRows.slice(12);
 
   return (
     <div className="grid gap-8">
@@ -341,120 +415,179 @@ export default async function AdminReferralsPage({
           </Link>
         </div>
 
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {summaryCards.map((card) => (
+            <Link key={card.label} href={card.href} className="rounded-lg border border-line bg-white p-4 transition hover:border-blue/40 hover:bg-slate-50">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{card.label}</p>
+              <p className="mt-2 text-3xl font-semibold tracking-[-.03em] text-ink">{card.value}</p>
+            </Link>
+          ))}
+        </section>
+
+        <section>
+          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="eyebrow">Referral queue</p>
+              <h2 className="mt-2 text-xl font-semibold tracking-[-.02em] text-ink">Referral queue ({displayedReferralRows.length})</h2>
+            </div>
+            <p className="text-xs font-semibold text-slate-500 md:hidden">Showing review signals first on mobile.</p>
+          </div>
+
+          <div className="grid gap-3 md:hidden">
+            {initialMobileReferralRows.map((referral: ReferralListQualityRow) => (
+              <Link key={referral.id} href={`/admin/referrals/${referral.id}`} className="rounded-lg border border-line bg-white p-4 transition hover:border-blue/40 hover:bg-slate-50">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-ink">{referral.patientName}</p>
+                  <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>
+                    {statusLabel(referral.status)}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm font-semibold text-slate-700">{referral.intakeQuality.readinessLabel}</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">{intakeSummary(referral)}</p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {referral.intakeQuality.duplicateCandidates.length > 0 ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Possible duplicate</span> : null}
+                  {!referral.assignedTherapistId ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Missing therapist</span> : null}
+                  {referral.smsConsentStatus === "opted_out" ? <span className="rounded-md bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-900 ring-1 ring-rose-200">Non-SMS only</span> : null}
+                  {referral.createVisitGate.allowed ? <span className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200">Ready for scheduling</span> : null}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                  <span>{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</span>
+                  <span className="font-semibold text-blue underline">Open</span>
+                </div>
+              </Link>
+            ))}
+            {remainingMobileReferralRows.length > 0 ? (
+              <details className="rounded-lg border border-line bg-white p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-ink">Show more referrals ({remainingMobileReferralRows.length})</summary>
+                <div className="mt-4 grid gap-3">
+                  {remainingMobileReferralRows.map((referral: ReferralListQualityRow) => (
+                    <Link key={referral.id} href={`/admin/referrals/${referral.id}`} className="rounded-lg border border-line bg-slate-50 p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-ink">{referral.patientName}</p>
+                        <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>
+                          {statusLabel(referral.status)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-600">{intakeSummary(referral)}</p>
+                      <p className="mt-2 text-xs text-slate-500">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
+                    </Link>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+            {displayedReferralRows.length === 0 ? (
+              <div className="rounded-lg border border-line bg-white p-8 text-center">
+                <ClipboardList className="mx-auto mb-3 text-slate-400" size={28} />
+                <p className="font-semibold text-ink">No referrals yet</p>
+                <p className="mt-1 text-sm text-slate-500">Seed fake pilot data or create a manual referral to start testing.</p>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-lg border border-line bg-white md:block">
+            <table className="min-w-full divide-y divide-line text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Patient</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Intake</th>
+                  <th className="px-4 py-3">Therapist</th>
+                  <th className="px-4 py-3">City / ZIP</th>
+                  <th className="px-4 py-3">Created</th>
+                  <th className="px-4 py-3">Detail</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {displayedReferralRows.map((referral: ReferralListQualityRow) => (
+                  <tr key={referral.id}>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-ink">{referral.patientName}</p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {referral.intakeQuality.duplicateCandidates.length > 0 ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Possible duplicate</span> : null}
+                        {!referral.assignedTherapistId ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Missing therapist</span> : null}
+                        {referral.smsConsentStatus === "opted_out" ? <span className="rounded-md bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-900 ring-1 ring-rose-200">Non-SMS only</span> : null}
+                        {!referral.createVisitGate.allowed && referral.intakeQuality.duplicateCandidates.length === 0 && referral.assignedTherapistId && referral.smsConsentStatus !== "opted_out" ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Needs intake review</span> : null}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>
+                        {statusLabel(referral.status)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${intakeBadgeClass(referral.intakeQuality.readinessLevel)}`}>
+                        {referral.intakeQuality.readinessLabel}
+                      </span>
+                      <p className={`mt-1 text-xs ${referral.intakeQuality.readinessLevel === "ready" ? "font-semibold text-emerald-700" : "text-slate-500"}`}>Intake: {intakeSummary(referral)}</p>
+                      <span className={`mt-2 inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
+                        {opportunityStateLabel(referral.opportunityState.state)}
+                      </span>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Opportunity: {opportunitySchedulingContext({ createVisitGateAllowed: referral.createVisitGate.allowed, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}
+                        {referral.opportunityState.state === "declined" ? ` · ${opportunityDeclineReasonLabel(referral.opportunityState.declinedReason)}` : ""}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">Scheduling: {schedulingSummary(referral)}</p>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</td>
+                    <td className="px-4 py-3 text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Not provided"}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(referral.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <Link href={`/admin/referrals/${referral.id}`} className="font-semibold text-blue underline">
+                        Open
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+                {displayedReferralRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-12 text-center">
+                      <ClipboardList className="mx-auto mb-3 text-slate-400" size={28} />
+                      <p className="font-semibold text-ink">No referrals yet</p>
+                      <p className="mt-1 text-sm text-slate-500">Seed fake pilot data or create a manual referral to start testing.</p>
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <details className="rounded-lg border border-line bg-white p-4 md:hidden">
+          <summary className="cursor-pointer text-sm font-semibold text-ink">Filters</summary>
+          <form className="mt-4">
+            <ReferralFilterFields
+              selectedGroup={selectedGroup}
+              selectedStatus={selectedStatus}
+              selectedTherapistId={selectedTherapistId}
+              therapistOptions={therapistOptions}
+            />
+          </form>
+        </details>
+
+        <form className="hidden rounded-lg border border-line bg-white p-5 md:block">
+          <ReferralFilterFields
+            selectedGroup={selectedGroup}
+            selectedStatus={selectedStatus}
+            selectedTherapistId={selectedTherapistId}
+            therapistOptions={therapistOptions}
+          />
+        </form>
+
         <OperationsAssistantPanel
           cards={assistantCards}
+          mobileCollapsed
+          mobileSummaryLabel="Operational checks"
           status={assistantStatus}
-          summary="Referral queue signals are deterministic and based on safe workflow counts. Review before taking action."
+          summary="Referral queue checks use safe workflow counts. Manual review required before action."
           title="Operations Assistant"
         />
 
         <SchedulingIntelligencePanel
           cards={schedulingCards}
-          summary="Referral scheduling signals are deterministic and based on safe workflow counts. Use existing visit forms for any scheduling action."
+          mobileCollapsed
+          mobileSummaryLabel="Scheduling checks"
+          summary="Referral scheduling checks use safe workflow counts. Use existing visit forms for any scheduling action."
         />
-
-        <form className="rounded-lg border border-line bg-white p-5">
-          <div className="grid gap-4 md:grid-cols-4">
-            <label className="text-sm font-semibold text-ink">
-              Referral status
-              <select className="field" name="status" defaultValue={selectedStatus}>
-                <option value="">All statuses</option>
-                {REFERRAL_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
-              </select>
-            </label>
-            <label className="text-sm font-semibold text-ink">
-              Therapist
-              <select className="field" name="therapistId" defaultValue={selectedTherapistId}>
-                <option value="">All therapists</option>
-                <option value="unassigned">Unassigned</option>
-                {therapistOptions.map((therapist: TherapistFilterOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
-              </select>
-            </label>
-            <label className="text-sm font-semibold text-ink">
-              Queue
-              <select className="field" name="group" defaultValue={selectedGroup}>
-                <option value="">All referrals</option>
-                <option value="needs_scheduling">Needs scheduling</option>
-                <option value="ready_scheduling">Intake ready</option>
-                <option value="needs_intake_review">Needs intake review</option>
-                <option value="possible_duplicate">Possible duplicate</option>
-                <option value="missing_therapist">Missing therapist</option>
-                <option value="opted_out">Opted out / non-SMS</option>
-              </select>
-            </label>
-            <div className="flex items-end gap-2">
-              <button className="btn-primary w-full" type="submit">Apply</button>
-              <Link href="/admin/referrals" className="btn-secondary w-full justify-center">Reset</Link>
-            </div>
-          </div>
-        </form>
-
-        <div className="overflow-x-auto rounded-lg border border-line bg-white">
-          <table className="min-w-full divide-y divide-line text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Patient</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Intake</th>
-                <th className="px-4 py-3">Therapist</th>
-                <th className="px-4 py-3">City / ZIP</th>
-                <th className="px-4 py-3">Created</th>
-                <th className="px-4 py-3">Detail</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {displayedReferralRows.map((referral: ReferralListQualityRow) => (
-                <tr key={referral.id}>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-ink">{referral.patientName}</p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {referral.intakeQuality.duplicateCandidates.length > 0 ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Possible duplicate</span> : null}
-                      {!referral.assignedTherapistId ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Missing therapist</span> : null}
-                      {referral.smsConsentStatus === "opted_out" ? <span className="rounded-md bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-900 ring-1 ring-rose-200">Non-SMS only</span> : null}
-                      {!referral.createVisitGate.allowed && referral.intakeQuality.duplicateCandidates.length === 0 && referral.assignedTherapistId && referral.smsConsentStatus !== "opted_out" ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Needs intake review</span> : null}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>
-                      {statusLabel(referral.status)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${intakeBadgeClass(referral.intakeQuality.readinessLevel)}`}>
-                      {referral.intakeQuality.readinessLabel}
-                    </span>
-                    <p className={`mt-1 text-xs ${referral.intakeQuality.readinessLevel === "ready" ? "font-semibold text-emerald-700" : "text-slate-500"}`}>Intake: {intakeSummary(referral)}</p>
-                    <span className={`mt-2 inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
-                      {opportunityStateLabel(referral.opportunityState.state)}
-                    </span>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Opportunity: {opportunitySchedulingContext({ createVisitGateAllowed: referral.createVisitGate.allowed, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}
-                      {referral.opportunityState.state === "declined" ? ` · ${opportunityDeclineReasonLabel(referral.opportunityState.declinedReason)}` : ""}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">Scheduling: {schedulingSummary(referral)}</p>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</td>
-                  <td className="px-4 py-3 text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Not provided"}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(referral.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <Link href={`/admin/referrals/${referral.id}`} className="font-semibold text-blue underline">
-                      Open
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {displayedReferralRows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
-                    <ClipboardList className="mx-auto mb-3 text-slate-400" size={28} />
-                    <p className="font-semibold text-ink">No referrals yet</p>
-                    <p className="mt-1 text-sm text-slate-500">Seed fake pilot data or create a manual referral to start testing.</p>
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
     </div>
   );
 }

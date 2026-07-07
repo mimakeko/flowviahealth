@@ -41,6 +41,52 @@ type TherapistFilterOption = {
   name: string;
 };
 
+function VisitFilterFields({
+  selectedGroup,
+  selectedStatus,
+  selectedTherapistId,
+  therapistOptions,
+}: {
+  selectedGroup: string;
+  selectedStatus: string;
+  selectedTherapistId: string;
+  therapistOptions: TherapistFilterOption[];
+}) {
+  return (
+    <div className="grid gap-4 md:grid-cols-5">
+      <label className="text-sm font-semibold text-ink">
+        Visit status
+        <select className="field" name="status" defaultValue={selectedStatus}>
+          <option value="">All statuses</option>
+          {VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
+        </select>
+      </label>
+      <label className="text-sm font-semibold text-ink">
+        Therapist
+        <select className="field" name="therapistId" defaultValue={selectedTherapistId}>
+          <option value="">All therapists</option>
+          <option value="unassigned">Unassigned</option>
+          {therapistOptions.map((therapist: TherapistFilterOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
+        </select>
+      </label>
+      <label className="text-sm font-semibold text-ink">
+        Queue
+        <select className="field" name="group" defaultValue={selectedGroup}>
+          <option value="">All visits</option>
+          <option value="upcoming">Upcoming</option>
+          <option value="unscheduled">Needs scheduling</option>
+        </select>
+      </label>
+      <div className="flex items-end md:col-span-2">
+        <div className="grid w-full grid-cols-2 gap-2">
+          <button className="btn-primary justify-center" type="submit">Apply</button>
+          <Link href="/admin/visits" className="btn-secondary justify-center">Reset</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default async function AdminVisitsPage({
   searchParams,
 }: {
@@ -144,6 +190,14 @@ export default async function AdminVisitsPage({
     unassignedReferrals,
     upcomingNextSevenDays: scheduledVisitsNextSevenDays,
   });
+  const upcomingVisitCount = visitRows.filter((visit: VisitListRow) => visit.status === "scheduled" || visit.status === "in_progress").length;
+  const unscheduledVisitCount = visitRows.filter((visit: VisitListRow) => !visit.scheduledAt || visit.status === "unscheduled").length;
+  const summaryCards = [
+    { label: "Upcoming/open", value: upcomingVisitCount, href: "/admin/visits?group=upcoming" },
+    { label: "Needs scheduling", value: unscheduledVisitCount, href: "/admin/visits?group=unscheduled" },
+    { label: "Past open", value: pastScheduledVisits, href: "/admin/visits?status=scheduled" },
+    { label: "Unassigned referrals", value: unassignedReferrals, href: "/admin/referrals?therapistId=unassigned" },
+  ];
 
   return (
     <div className="grid gap-8">
@@ -161,75 +215,81 @@ export default async function AdminVisitsPage({
         </Link>
       </div>
 
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {summaryCards.map((card) => (
+          <Link key={card.label} href={card.href} className="rounded-lg border border-line bg-white p-4 transition hover:border-blue/40 hover:bg-slate-50">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{card.label}</p>
+            <p className="mt-2 text-3xl font-semibold tracking-[-.03em] text-ink">{card.value}</p>
+          </Link>
+        ))}
+      </section>
+
+      <section>
+        <div className="mb-3">
+          <p className="eyebrow">Visit queue</p>
+          <h2 className="mt-2 text-xl font-semibold tracking-[-.02em] text-ink">Visit queue ({visitRows.length})</h2>
+        </div>
+        <div className="overflow-hidden rounded-lg border border-line bg-white">
+          {visitRows.map((visit: VisitListRow) => (
+            <Link key={visit.id} href={`/admin/visits/${visit.id}`} className="grid gap-3 border-b border-line p-4 transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[1fr_auto] md:items-center">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-ink">{visit.referral.patientName}</p>
+                  <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(visit.status)}`}>{statusLabel(visit.status)}</span>
+                </div>
+                <p className="mt-1 text-sm text-slate-600">
+                  {visit.therapist?.name || "Unassigned"} · {[visit.referral.city, visit.referral.zip].filter(Boolean).join(" / ") || "Location not provided"}
+                </p>
+              </div>
+              <p className="text-sm text-slate-500">{formatDateTime(visit.scheduledAt)}</p>
+            </Link>
+          ))}
+          {visitRows.length === 0 ? (
+            <div className="p-8 text-center">
+              <CalendarClock className="mx-auto mb-3 text-slate-400" size={28} />
+              <p className="font-semibold text-ink">No visits yet</p>
+              <p className="mt-1 text-sm text-slate-500">Create a visit from a referral detail page or the visit form.</p>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <details className="rounded-lg border border-line bg-white p-4 md:hidden">
+        <summary className="cursor-pointer text-sm font-semibold text-ink">Filters</summary>
+        <form className="mt-4">
+          <VisitFilterFields
+            selectedGroup={selectedGroup}
+            selectedStatus={selectedStatus}
+            selectedTherapistId={selectedTherapistId}
+            therapistOptions={therapistOptions}
+          />
+        </form>
+      </details>
+
+      <form className="hidden rounded-lg border border-line bg-white p-5 md:block">
+        <VisitFilterFields
+          selectedGroup={selectedGroup}
+          selectedStatus={selectedStatus}
+          selectedTherapistId={selectedTherapistId}
+          therapistOptions={therapistOptions}
+        />
+      </form>
+
       <OperationsAssistantPanel
         cards={assistantCards}
+        mobileCollapsed
+        mobileSummaryLabel="Operational checks"
         status={assistantStatus}
-        summary="Visit queue signals are deterministic and based on safe workflow counts. Review before updating status."
+        summary="Visit queue checks use safe workflow counts. Manual review required before updating status."
         title="Operations Assistant"
       />
 
       <SchedulingIntelligencePanel
         cards={schedulingCards}
-        summary="Visit scheduling signals highlight upcoming visits, past open visits, and therapist capacity cautions. No travel-time or geocoding is used."
+        mobileCollapsed
+        mobileSummaryLabel="Scheduling checks"
+        summary="Visit scheduling checks highlight upcoming visits, past open visits, and capacity cautions. No travel-time or geocoding is used."
       />
-
-      <form className="rounded-lg border border-line bg-white p-5">
-        <div className="grid gap-4 md:grid-cols-5">
-          <label className="text-sm font-semibold text-ink">
-            Visit status
-            <select className="field" name="status" defaultValue={selectedStatus}>
-              <option value="">All statuses</option>
-              {VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}
-            </select>
-          </label>
-          <label className="text-sm font-semibold text-ink">
-            Therapist
-            <select className="field" name="therapistId" defaultValue={selectedTherapistId}>
-              <option value="">All therapists</option>
-              <option value="unassigned">Unassigned</option>
-              {therapistOptions.map((therapist: TherapistFilterOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
-            </select>
-          </label>
-          <label className="text-sm font-semibold text-ink">
-            Queue
-            <select className="field" name="group" defaultValue={selectedGroup}>
-              <option value="">All visits</option>
-              <option value="upcoming">Upcoming</option>
-              <option value="unscheduled">Needs scheduling</option>
-            </select>
-          </label>
-          <div className="flex items-end md:col-span-2">
-            <div className="grid w-full grid-cols-2 gap-2">
-              <button className="btn-primary justify-center" type="submit">Apply</button>
-              <Link href="/admin/visits" className="btn-secondary justify-center">Reset</Link>
-            </div>
-          </div>
-        </div>
-      </form>
-
-      <div className="overflow-hidden rounded-lg border border-line bg-white">
-        {visitRows.map((visit: VisitListRow) => (
-          <Link key={visit.id} href={`/admin/visits/${visit.id}`} className="grid gap-3 border-b border-line p-4 transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[1fr_auto] md:items-center">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold text-ink">{visit.referral.patientName}</p>
-                <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(visit.status)}`}>{statusLabel(visit.status)}</span>
-              </div>
-              <p className="mt-1 text-sm text-slate-600">
-                {visit.therapist?.name || "Unassigned"} · {[visit.referral.city, visit.referral.zip].filter(Boolean).join(" / ") || "Location not provided"}
-              </p>
-            </div>
-            <p className="text-sm text-slate-500">{formatDateTime(visit.scheduledAt)}</p>
-          </Link>
-        ))}
-        {visitRows.length === 0 ? (
-          <div className="p-8 text-center">
-            <CalendarClock className="mx-auto mb-3 text-slate-400" size={28} />
-            <p className="font-semibold text-ink">No visits yet</p>
-            <p className="mt-1 text-sm text-slate-500">Create a visit from a referral detail page or the visit form.</p>
-          </div>
-        ) : null}
-      </div>
     </div>
   );
 }

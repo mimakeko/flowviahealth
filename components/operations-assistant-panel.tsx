@@ -18,6 +18,8 @@ type OperationsAssistantStatus = Readonly<{
 
 type OperationsAssistantPanelProps = Readonly<{
   cards?: OperationsAssistantCardData[];
+  mobileCollapsed?: boolean;
+  mobileSummaryLabel?: string;
   summary?: string;
   status: OperationsAssistantStatus;
   suggestion?: OperationsAssistantSuggestion;
@@ -29,12 +31,20 @@ function briefingItems(suggestion: OperationsAssistantSuggestion) {
   return Array.isArray(items) ? items.filter((item): item is string => typeof item === "string") : [];
 }
 
-export function OperationsAssistantPanel({ cards = [], status, suggestion, summary, title = "Operations Assistant" }: OperationsAssistantPanelProps) {
+export function OperationsAssistantPanel({
+  cards = [],
+  mobileCollapsed = false,
+  mobileSummaryLabel = "Operational checks",
+  status,
+  suggestion,
+  summary,
+  title = "Operations Assistant",
+}: OperationsAssistantPanelProps) {
   const items = suggestion ? briefingItems(suggestion) : [];
   const panelSummary = summary || suggestion?.summary || "Deterministic operational guidance generated from safe workflow state.";
 
-  return (
-    <section className="rounded-lg border border-line bg-white p-5 shadow-[0_10px_30px_rgba(10,37,64,0.05)]">
+  const panelBody = (
+    <>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-sm font-semibold text-blue">
@@ -69,6 +79,26 @@ export function OperationsAssistantPanel({ cards = [], status, suggestion, summa
         <div className="flex justify-between gap-3"><dt>No-PHI mode</dt><dd className="font-semibold text-ink">{status.noPhiMode ? "On" : "Off"}</dd></div>
         <div className="flex justify-between gap-3"><dt>Autonomous actions</dt><dd className="font-semibold text-ink">{status.autonomousActionsEnabled ? "Enabled" : "Disabled"}</dd></div>
       </dl>
+    </>
+  );
+
+  if (mobileCollapsed) {
+    return (
+      <>
+        <details className="rounded-lg border border-line bg-white p-4 shadow-[0_10px_30px_rgba(10,37,64,0.05)] md:hidden">
+          <summary className="cursor-pointer text-sm font-semibold text-ink">{mobileSummaryLabel}</summary>
+          <div className="mt-4">{panelBody}</div>
+        </details>
+        <section className="hidden rounded-lg border border-line bg-white p-5 shadow-[0_10px_30px_rgba(10,37,64,0.05)] md:block">
+          {panelBody}
+        </section>
+      </>
+    );
+  }
+
+  return (
+    <section className="rounded-lg border border-line bg-white p-5 shadow-[0_10px_30px_rgba(10,37,64,0.05)]">
+      {panelBody}
     </section>
   );
 }
