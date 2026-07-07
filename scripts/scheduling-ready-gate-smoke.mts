@@ -183,7 +183,7 @@ try {
     assertNoForbiddenSourceTerms(source, label);
   }
   assert.match(schedulingSource, /readyToCreateRows/);
-  assert.match(schedulingSource, /Needs review before scheduling/);
+  assert.match(schedulingSource, /Blocked.+intake\/review-only/);
   assert.match(newVisitSource, /visit_create_blocked/);
   assert.match(newVisitSource, /Review referral first/);
   assert.match(referralsSource, /createVisitGate\.allowed/);

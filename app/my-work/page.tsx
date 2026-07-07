@@ -104,6 +104,7 @@ type TherapistWorkReferral = {
   id: string;
   careType: string | null;
   city: string | null;
+  createdAt: Date | string;
   notes: string | null;
   patientName: string;
   phone: string;
@@ -194,6 +195,38 @@ function nextFieldVisit(visits: TherapistFieldVisit[]) {
 function shortId(value: string | null | undefined) {
   if (!value) return "not recorded";
   return value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+}
+
+function referralAgeLabel(value: Date | string | null | undefined) {
+  if (!value) return "Age not recorded";
+  const elapsed = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(elapsed) || elapsed < 0) return "New referral";
+  const hours = Math.max(1, Math.floor(elapsed / (60 * 60 * 1000)));
+  if (hours < 24) return `${hours}h old`;
+  const days = Math.floor(hours / 24);
+  return `${days}d old`;
+}
+
+function opportunityPriorityLabel(referral: TherapistWorkReferral) {
+  if (referral.status === "contacted" && referral.visits.length === 0) return "Priority: ready for scheduling review";
+  if (referral.status === "new") return "Priority: needs contact readiness";
+  return "Priority: standard operational review";
+}
+
+function opportunityWhyFits(referral: TherapistWorkReferral, therapistName: string | undefined) {
+  return [
+    therapistName ? `Assigned to ${therapistName}` : "Assigned therapist selected",
+    referral.careType ? `${referral.careType} service area` : "Service type ready for review",
+    [referral.city, referral.zip].filter(Boolean).join(" / ") || "Operational area needs confirmation",
+  ];
+}
+
+function opportunityMissingItems(referral: TherapistWorkReferral) {
+  const items: string[] = [];
+  if (!referral.city || !referral.zip) items.push("City / ZIP");
+  if (!referral.careType) items.push("Discipline or service type");
+  if (referral.visits.length > 0) items.push("Existing visit review");
+  return items.length > 0 ? items : ["No missing operational card fields"];
 }
 
 function visitDomId(visitId: string) {
@@ -1046,24 +1079,53 @@ export default async function MyWorkPage({
                     <BriefcaseMedical size={18} className="text-blue" />
                     <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Referral opportunities</h2>
                   </div>
-                  {availableOpportunities.map((referral: TherapistOpportunityReferral) => (
-                    <article key={referral.id} className="min-w-0 rounded-lg border border-blue/20 bg-white p-4 sm:p-5">
+                  {availableOpportunities.map((referral: TherapistOpportunityReferral) => {
+                    const selectedTherapistName = therapistOptions.find((therapist: TherapistOption) => therapist.id === selectedTherapistId)?.name;
+                    return (
+                    <article id={`opportunity-${referral.id}`} key={referral.id} className="min-w-0 scroll-mt-6 rounded-lg border border-blue/20 bg-white p-4 sm:p-5">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Manual opportunity review</p>
                           <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
                           <p className="mt-1 break-words text-sm text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
                         </div>
-                        <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
-                          {opportunityStateLabel(referral.opportunityState.state)}
-                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
+                            {opportunityStateLabel(referral.opportunityState.state)}
+                          </span>
+                          <span className="inline-flex w-fit rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+                            {opportunityPriorityLabel(referral)}
+                          </span>
+                        </div>
                       </div>
 
                       <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
-                        <div><dt className="font-semibold text-ink">Service area</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
-                        <div><dt className="font-semibold text-ink">Status</dt><dd className="mt-1 text-slate-600">{statusLabel(referral.status)}</dd></div>
-                        <div><dt className="font-semibold text-ink">Readiness</dt><dd className="mt-1 text-slate-600">Deterministic/manual review</dd></div>
+                        <div><dt className="font-semibold text-ink">Discipline / service</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
+                        <div><dt className="font-semibold text-ink">Assigned therapist</dt><dd className="mt-1 text-slate-600">{selectedTherapistName || "Selected therapist"}</dd></div>
+                        <div><dt className="font-semibold text-ink">Referral age</dt><dd className="mt-1 text-slate-600">{referralAgeLabel(referral.createdAt)}</dd></div>
+                        <div><dt className="font-semibold text-ink">Intake readiness</dt><dd className="mt-1 text-slate-600">{opportunityMissingItems(referral)[0] === "No missing operational card fields" ? "Core operational fields present" : "Needs intake cleanup"}</dd></div>
+                        <div><dt className="font-semibold text-ink">Opportunity status</dt><dd className="mt-1 text-slate-600">{opportunityStateLabel(referral.opportunityState.state)}</dd></div>
+                        <div><dt className="font-semibold text-ink">Referral status</dt><dd className="mt-1 text-slate-600">{statusLabel(referral.status)}</dd></div>
                       </dl>
+
+                      <div className="mt-5 grid gap-3 md:grid-cols-2">
+                        <div className="rounded-lg border border-line bg-slate-50 p-4">
+                          <p className="text-sm font-semibold text-ink">Why this fits</p>
+                          <div className="mt-3 grid gap-2">
+                            {opportunityWhyFits(referral, selectedTherapistName).map((item) => (
+                              <p key={item} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-line">{item}</p>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-line bg-slate-50 p-4">
+                          <p className="text-sm font-semibold text-ink">What is missing</p>
+                          <div className="mt-3 grid gap-2">
+                            {opportunityMissingItems(referral).map((item) => (
+                              <p key={item} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-line">{item}</p>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
 
                       <div className="mt-5 grid gap-3 border-t border-line pt-5 lg:grid-cols-[auto_1fr]">
                         <form action={therapistOpportunityAction}>
@@ -1081,8 +1143,10 @@ export default async function MyWorkPage({
                           <div className="flex items-end"><PendingSubmitButton className="btn-secondary min-h-12 w-full" pendingLabel="Declining...">Decline opportunity</PendingSubmitButton></div>
                         </form>
                       </div>
+                      <a href={`#opportunity-${referral.id}`} className="mt-4 inline-flex font-semibold text-blue underline">Open details</a>
                     </article>
-                  ))}
+                    );
+                  })}
                   {availableOpportunities.length === 0 ? (
                     <p className="rounded-lg border border-line bg-white p-5 text-sm leading-6 text-slate-600">No referral opportunities are waiting for manual review.</p>
                   ) : null}

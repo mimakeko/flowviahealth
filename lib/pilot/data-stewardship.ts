@@ -491,6 +491,42 @@ async function seedDemoScenariosInTransaction(
         },
       },
     });
+    const scheduleFullDeclinedReferral = await trackReferral(createDemoReferral(tx, {
+      assignedTherapistId: northDallas.id,
+      careType: "Demo declined opportunity",
+      city: "Dallas",
+      emailSlug: "demo.opportunity.schedule.full",
+      patientName: "Demo Scenario Opportunity Schedule Full",
+      phone: "+15550102112",
+      status: "contacted",
+      zip: "75231",
+    }));
+    await tx.auditLog.createMany({
+      data: [
+        {
+          actorType: "pilot_admin",
+          action: "opportunity_offered",
+          entityType: "PatientReferral",
+          entityId: scheduleFullDeclinedReferral.id,
+          metadataJson: {
+            source: "demo_scenario_seed",
+            therapistId: northDallas.id,
+          },
+        },
+        {
+          actorType: "therapist_pilot",
+          action: "opportunity_declined",
+          entityType: "PatientReferral",
+          entityId: scheduleFullDeclinedReferral.id,
+          metadataJson: {
+            declineReason: "schedule_full",
+            noteAdded: false,
+            source: "demo_scenario_seed",
+            therapistId: northDallas.id,
+          },
+        },
+      ],
+    });
     await trackReferral(createDemoReferral(tx, {
       assignedTherapistId: northDallas.id,
       careType: "Demo ready not offered",

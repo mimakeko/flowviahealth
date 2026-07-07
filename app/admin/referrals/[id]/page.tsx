@@ -42,8 +42,13 @@ import {
 import {
   canOfferReferralOpportunity,
   getOpportunityStateFromAuditLogs,
+  getOpportunityTimelineFromAuditLogs,
   opportunityAllowsVisitCreation,
   opportunityBadgeClassName,
+  opportunityActionLabel,
+  opportunityCreateVisitBlockerMessage,
+  opportunityDeclineReasonLabel,
+  opportunitySchedulingContext,
   opportunityStateLabel,
 } from "@/lib/pilot/opportunity";
 import { normalizeE164Phone } from "@/lib/sms/compliance";
@@ -648,6 +653,7 @@ export default async function ReferralDetailPage({
   ]);
   const referralAuditLogs = auditLogs as AuditLogListItem[];
   const opportunityState = getOpportunityStateFromAuditLogs(referralAuditLogs);
+  const opportunityTimeline = getOpportunityTimelineFromAuditLogs(referralAuditLogs);
   const intakeAuditLogs = referralAuditLogs.filter((log: AuditLogListItem) => INTAKE_AUDIT_ACTIONS.has(log.action));
   const smsReadiness = smsConsent?.status || "none";
   const futureOpenVisitCount = referralVisits.filter((visit: ReferralDetailVisit) => ["scheduled", "in_progress"].includes(visit.status)).length;
@@ -965,6 +971,9 @@ export default async function ReferralDetailPage({
               <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Assigned therapist</dt><dd className="mt-1 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</dd></div>
               <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Offer readiness</dt><dd className="mt-1 text-slate-600">{opportunityOfferGate.allowed ? "Safe to offer" : "Review required"}</dd></div>
               <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Source</dt><dd className="mt-1 text-slate-600">deterministic/manual</dd></div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Acceptance state</dt><dd className="mt-1 text-slate-600">{opportunitySchedulingContext({ createVisitGateAllowed: createVisitGate.allowed, declinedReason: opportunityState.declinedReason, opportunityState: opportunityState.state })}</dd></div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Decline reason</dt><dd className="mt-1 text-slate-600">{opportunityDeclineReasonLabel(opportunityState.declinedReason)}</dd></div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Safe decline note</dt><dd className="mt-1 text-slate-600">{opportunityState.noteAdded ? "Operational note recorded; raw text not displayed." : "Not recorded"}</dd></div>
             </dl>
             {opportunityOfferGate.allowed ? (
               <form action={offerOpportunityAction} className="mt-4">
@@ -978,8 +987,31 @@ export default async function ReferralDetailPage({
               </div>
             )}
             <div className="mt-4 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600">
-              Safety guarantees: no PHI fields, no full address, no SMS send, no auto scheduling, no automatic therapist matching, no EMR/billing/OASIS/claims workflow.
+              Safety guarantees: no PHI fields, no full address, no SMS sent, no visit auto-created, manual action only, no automatic therapist matching, no EMR/billing/OASIS/claims workflow.
             </div>
+            <div className="mt-4 rounded-lg border border-line bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-ink">Opportunity timeline</p>
+              <div className="mt-3 grid gap-2">
+                {opportunityTimeline.map((item) => (
+                  <div key={`${item.action}-${new Date(item.createdAt).getTime()}-${item.actorId || "system"}`} className="rounded-md bg-white p-3 text-sm leading-6 ring-1 ring-line">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                      <p className="font-semibold text-ink">{opportunityActionLabel(item.action)}</p>
+                      <p className="text-xs text-slate-500">{formatDateTime(item.createdAt)}</p>
+                    </div>
+                    <p className="mt-1 text-slate-600">Actor/source: {item.actorType}{item.source ? ` / ${item.source}` : ""}</p>
+                    {item.declinedReason ? <p className="mt-1 text-slate-600">Decline reason: {opportunityDeclineReasonLabel(item.declinedReason)}</p> : null}
+                    {item.blockerReason ? <p className="mt-1 text-slate-600">Blocked reason: {item.blockerReason}</p> : null}
+                    {item.noteAdded ? <p className="mt-1 font-semibold text-slate-700">Safe operational note recorded; raw text is not displayed.</p> : null}
+                  </div>
+                ))}
+                {opportunityTimeline.length === 0 ? <p className="rounded-md bg-white p-3 text-sm text-slate-500 ring-1 ring-line">No opportunity events recorded yet.</p> : null}
+              </div>
+            </div>
+            {!opportunityAllowsCreateVisit ? (
+              <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+                {opportunityCreateVisitBlockerMessage({ createVisitGateReasons: createVisitGate.reasons, declinedReason: opportunityState.declinedReason, opportunityState: opportunityState.state })}
+              </p>
+            ) : null}
           </section>
 
           <div className="mt-5">

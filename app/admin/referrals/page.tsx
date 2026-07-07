@@ -19,6 +19,8 @@ import {
 import {
   getOpportunityStatesByReferralId,
   opportunityBadgeClassName,
+  opportunityDeclineReasonLabel,
+  opportunitySchedulingContext,
   opportunityStateLabel,
   type OpportunityStateResult,
 } from "@/lib/pilot/opportunity";
@@ -398,6 +400,10 @@ export default async function AdminReferralsPage({
                     <span className={`mt-2 inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
                       {opportunityStateLabel(referral.opportunityState.state)}
                     </span>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {opportunitySchedulingContext({ createVisitGateAllowed: referral.createVisitGate.allowed, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}
+                      {referral.opportunityState.state === "declined" ? ` · ${opportunityDeclineReasonLabel(referral.opportunityState.declinedReason)}` : ""}
+                    </p>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</td>
                   <td className="px-4 py-3 text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Not provided"}</td>

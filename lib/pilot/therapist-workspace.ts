@@ -12,6 +12,7 @@ export const THERAPIST_WORKSPACE_THERAPIST_SELECT = {
 export const THERAPIST_WORKSPACE_REFERRAL_SELECT = {
   careType: true,
   city: true,
+  createdAt: true,
   id: true,
   notes: true,
   patientName: true,

@@ -252,6 +252,28 @@ try {
   });
   assert.equal(blockedGate.createVisitGate.allowed, false, "Blocked referral should fail create-visit gate.");
   assert.equal(blockedOfferGate.allowed, false, "Blocked referral should not be offerable.");
+  await prisma.auditLog.create({
+    data: {
+      action: "opportunity_action_blocked",
+      actorId: "opportunity_workflow_validation",
+      actorType: "pilot_admin",
+      entityId: blockedReferral.id,
+      entityType: "PatientReferral",
+      metadataJson: {
+        attemptedAction: "offer",
+        reason: "missing_intake_or_therapist",
+        source: "opportunity_workflow_validation",
+        therapistId: null,
+      },
+    },
+  });
+  const blockedLogs = await prisma.auditLog.findMany({
+    orderBy: { createdAt: "desc" },
+    where: { AND: [opportunityWhereClause(), { entityId: blockedReferral.id, entityType: "PatientReferral" }] },
+  });
+  const blockedState = getOpportunityStateFromAuditLogs(blockedLogs);
+  assert.equal(blockedState.state, "expired_or_review_needed", "Blocked opportunity action should be readable as review-needed state when no offer/accept/decline exists.");
+  assert.equal(blockedState.blockedReason, "missing_intake_or_therapist", "Blocked opportunity state should preserve safe operational reason.");
 
   await prisma.auditLog.create({
     data: {
@@ -291,6 +313,9 @@ try {
   assert.equal(offeredState.offeredTherapistId === wrongTherapist.id, false, "Acceptance must require the therapist who was offered the referral.");
 
   assert.equal(isOpportunityDeclineReason("outside_territory"), true, "Fixed decline reason should be accepted.");
+  assert.equal(isOpportunityDeclineReason("schedule_full"), true, "Schedule-full decline reason should be accepted.");
+  assert.equal(isOpportunityDeclineReason("need_more_intake_info"), true, "Intake-info decline reason should be accepted.");
+  assert.equal(isOpportunityDeclineReason("patient_unreachable"), true, "Patient-unreachable decline reason should be accepted.");
   assert.equal(isOpportunityDeclineReason("patient_requested_clinical_change"), false, "Unsafe/free-form decline reason should not be accepted.");
   const unsafeNote = classifyOperationalNote("Patient diagnosis changed and medication list needs review.", { fieldLabel: "Opportunity decline note" });
   assert.equal(hasBlockedNoteClassification(unsafeNote), true, "Clinical/PHI-like opportunity notes must be blocked by note classification.");
@@ -418,9 +443,12 @@ try {
     assertNoForbiddenSourceTerms(source, label);
   }
   assert.match(referralDetailSource, /therapist-opportunity-panel/);
+  assert.match(referralDetailSource, /Opportunity timeline/);
   assert.match(referralDetailSource, /offerOpportunityAction/);
   assert.match(referralListSource, /opportunityBadgeClassName/);
+  assert.match(referralListSource, /opportunitySchedulingContext/);
   assert.match(schedulingSource, /scheduling-awaiting-opportunity-acceptance/);
+  assert.match(schedulingSource, /scheduling-declined-opportunities/);
   assert.match(schedulingSource, /opportunityAllowsVisitCreation/);
   assert.match(newVisitSource, /Therapist opportunity acceptance required/);
   assert.match(myWorkSource, /therapist-referral-opportunities/);

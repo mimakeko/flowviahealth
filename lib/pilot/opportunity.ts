@@ -13,6 +13,8 @@ export const OPPORTUNITY_DECLINE_REASONS = [
   "schedule_full",
   "not_available_today",
   "discipline_mismatch",
+  "need_more_intake_info",
+  "patient_unreachable",
   "other_operational_reason",
 ] as const;
 
@@ -32,6 +34,7 @@ export type OpportunityAuditLog = {
 export type OpportunityStateResult = {
   actorId?: string | null;
   actorType?: string;
+  blockedReason?: string | null;
   declinedReason?: OpportunityDeclineReason | null;
   lastAction?: OpportunityAction;
   lastActionAt?: Date | string;
@@ -67,6 +70,18 @@ export type OfferGateResult = {
   reasons: readonly string[];
 };
 
+export type OpportunityTimelineItem = {
+  action: OpportunityAction;
+  actorId?: string | null;
+  actorType: string;
+  blockerReason?: string | null;
+  createdAt: Date | string;
+  declinedReason?: OpportunityDeclineReason | null;
+  noteAdded: boolean;
+  source?: string | null;
+  therapistId?: string | null;
+};
+
 function metadataObject(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
@@ -98,13 +113,55 @@ export function isOpportunityDeclineReason(value: string): value is OpportunityD
 
 export function opportunityDeclineReasonLabel(value: OpportunityDeclineReason | string | null | undefined) {
   if (!value) return "Not recorded";
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const labels: Record<OpportunityDeclineReason, string> = {
+    discipline_mismatch: "Discipline mismatch",
+    need_more_intake_info: "Need more intake info",
+    not_available_today: "Not available today",
+    other_operational_reason: "Other operational reason",
+    outside_territory: "Outside territory",
+    patient_unreachable: "Patient unreachable",
+    schedule_full: "Schedule full",
+  };
+  return isOpportunityDeclineReason(value) ? labels[value] : value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export function opportunityStateLabel(value: OpportunityState) {
   if (value === "not_offered") return "Not offered";
-  if (value === "expired_or_review_needed") return "Expired / review needed";
+  if (value === "expired_or_review_needed") return "Blocked / review needed";
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+export function opportunityActionLabel(value: OpportunityAction | string | null | undefined) {
+  if (value === "opportunity_offered") return "Offered";
+  if (value === "opportunity_accepted") return "Accepted";
+  if (value === "opportunity_declined") return "Declined";
+  if (value === "opportunity_action_blocked") return "Blocked action";
+  return "Opportunity event";
+}
+
+export function opportunitySchedulingContext(input: {
+  createVisitGateAllowed?: boolean;
+  declinedReason?: OpportunityDeclineReason | null;
+  opportunityState: OpportunityState;
+}) {
+  if (input.opportunityState === "accepted" && input.createVisitGateAllowed) return "Ready because accepted";
+  if (input.opportunityState === "accepted") return "Accepted, pending readiness cleanup";
+  if (input.opportunityState === "offered") return "Awaiting therapist acceptance";
+  if (input.opportunityState === "declined") return `Needs reassignment/review: ${opportunityDeclineReasonLabel(input.declinedReason).toLowerCase()}`;
+  if (input.opportunityState === "expired_or_review_needed") return "Blocked/review needed";
+  return "Not offered";
+}
+
+export function opportunityCreateVisitBlockerMessage(input: {
+  createVisitGateReasons?: readonly string[];
+  declinedReason?: OpportunityDeclineReason | null;
+  opportunityState: OpportunityState;
+}) {
+  if (input.opportunityState === "offered") return "Awaiting therapist acceptance before visit creation.";
+  if (input.opportunityState === "declined") return `Therapist declined: ${opportunityDeclineReasonLabel(input.declinedReason).toLowerCase()}.`;
+  if (input.opportunityState === "expired_or_review_needed") return "Needs intake cleanup before offer.";
+  if (input.opportunityState === "not_offered") return "Create visit is suppressed until therapist acceptance is recorded.";
+  return input.createVisitGateReasons?.[0] || "Create visit is suppressed until readiness checks pass.";
 }
 
 export function opportunityBadgeClassName(value: OpportunityState) {
@@ -131,17 +188,22 @@ export function getOpportunityStatus(): OpportunityStatus {
 }
 
 export function getOpportunityStateFromAuditLogs(logs: readonly OpportunityAuditLog[]): OpportunityStateResult {
-  const event = [...logs]
+  const stateEvent = [...logs]
     .filter((log) => log.action === "opportunity_offered" || log.action === "opportunity_accepted" || log.action === "opportunity_declined")
     .sort((left, right) => {
       const timeDiff = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
       return timeDiff || stateActionPriority(right.action) - stateActionPriority(left.action);
     })[0];
+  const blockedEvent = [...logs]
+    .filter((log) => log.action === "opportunity_action_blocked")
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())[0];
+  const event = stateEvent || blockedEvent;
 
   if (!event) return { state: "not_offered" };
 
   const therapistId = metadataString(event.metadataJson, "therapistId") || metadataString(event.metadataJson, "assignedTherapistId");
   const declineReason = metadataString(event.metadataJson, "declineReason");
+  const blockedReason = metadataString(event.metadataJson, "reason") || metadataString(event.metadataJson, "blockedReason");
   const state: OpportunityState =
     event.action === "opportunity_accepted" ? "accepted" :
     event.action === "opportunity_declined" ? "declined" :
@@ -151,6 +213,7 @@ export function getOpportunityStateFromAuditLogs(logs: readonly OpportunityAudit
   return {
     actorId: event.actorId,
     actorType: event.actorType,
+    blockedReason,
     declinedReason: declineReason && isOpportunityDeclineReason(declineReason) ? declineReason : null,
     lastAction: event.action as OpportunityAction,
     lastActionAt: event.createdAt,
@@ -158,6 +221,26 @@ export function getOpportunityStateFromAuditLogs(logs: readonly OpportunityAudit
     offeredTherapistId: therapistId,
     state,
   };
+}
+
+export function getOpportunityTimelineFromAuditLogs(logs: readonly OpportunityAuditLog[]): OpportunityTimelineItem[] {
+  return [...logs]
+    .filter((log) => isOpportunityAction(log.action))
+    .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())
+    .map((log) => {
+      const declineReason = metadataString(log.metadataJson, "declineReason");
+      return {
+        action: log.action as OpportunityAction,
+        actorId: log.actorId,
+        actorType: log.actorType,
+        blockerReason: metadataString(log.metadataJson, "reason") || metadataString(log.metadataJson, "blockedReason"),
+        createdAt: log.createdAt,
+        declinedReason: declineReason && isOpportunityDeclineReason(declineReason) ? declineReason : null,
+        noteAdded: metadataBoolean(log.metadataJson, "noteAdded"),
+        source: metadataString(log.metadataJson, "source"),
+        therapistId: metadataString(log.metadataJson, "therapistId") || metadataString(log.metadataJson, "assignedTherapistId"),
+      };
+    });
 }
 
 export function getOpportunityStatesByReferralId(logs: readonly OpportunityAuditLog[]) {

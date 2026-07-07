@@ -198,13 +198,15 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
 
     await gotoProtected(page, "/admin/scheduling");
     await expect(page.getByRole("heading", { name: /Scheduling Intelligence/i })).toBeVisible();
-    await expectAnyText(page, [/ready-to-schedule/i, /ready gate/i, /No maps/i, /No create-ready referrals/i], "/admin/scheduling");
+    await expectAnyText(page, [/Accepted.+ready to schedule/i, /ready gate/i, /No maps/i, /No create-ready referrals/i], "/admin/scheduling");
     const readyReferrals = page.getByTestId("scheduling-ready-referrals");
     const awaitingOpportunityAcceptance = page.getByTestId("scheduling-awaiting-opportunity-acceptance");
+    const declinedOpportunities = page.getByTestId("scheduling-declined-opportunities");
     const reviewReferrals = page.getByTestId("scheduling-review-referrals");
     const upcomingVisits = page.getByTestId("scheduling-upcoming-visits");
     await expect(readyReferrals).toBeVisible();
     await expect(awaitingOpportunityAcceptance).toBeVisible();
+    await expect(declinedOpportunities).toBeVisible();
     await expect(reviewReferrals).toBeVisible();
     await expect(upcomingVisits).toBeVisible();
 
@@ -220,6 +222,7 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     }
     await expectNoForbiddenActionControls(reviewReferrals, "/admin/scheduling review lane", [/^Create visit$/i]);
     await expectNoForbiddenActionControls(awaitingOpportunityAcceptance, "/admin/scheduling awaiting acceptance lane", [/^Create visit$/i]);
+    await expectNoForbiddenActionControls(declinedOpportunities, "/admin/scheduling declined lane", [/^Create visit$/i]);
     await expectAnyText(page, [/Awaiting therapist acceptance/i, /Accepted/i, /Offered/i, /Declined/i, /Not offered/i], "/admin/scheduling opportunity state");
     await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Duplicate A");
     await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Duplicate B");
