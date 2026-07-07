@@ -30,7 +30,7 @@ assert.match(myWorkPage, /Lower-priority details/, "My Work should demote comple
 assert.doesNotMatch(myWorkPage, /xl:grid-cols-\[minmax\(0,1fr\)_390px\]/, "My Work should not keep the old dashboard rail layout.");
 assert.match(myWorkPage, /min-h-14/, "Field action buttons should be thumb-friendly.");
 assert.match(myWorkPage, /sm:grid-cols-2 2xl:grid-cols-4/, "Field action buttons should adapt from phone to tablet/desktop.");
-assert.match(myWorkPage, /Open visit/, "The top next-action panel should jump to the full visit action card.");
+assert.match(myWorkPage, /Open details/, "The top next-action panel should jump to the selected work card.");
 assert.match(myWorkPage, /id=\{visitDomId\(visit\.id\)\}/, "Visit cards should expose stable anchors for the next-action jump.");
 assert.match(myWorkPage, /FieldWorkspaceEmptyState/, "My Work must render centralized calm empty states.");
 assert.match(myWorkPage, /TransientActionBanner/, "Action banners should clear transient query params after rendering.");

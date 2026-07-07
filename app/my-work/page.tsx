@@ -460,7 +460,7 @@ function FieldVisitCard({
   visit: TherapistFieldVisit;
 }) {
   return (
-    <article id={visitDomId(visit.id)} className="scroll-mt-6 min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5" data-field-visit-card="true">
+    <article id={visitDomId(visit.id)} className="scroll-mt-4 min-w-0 rounded-lg border border-line bg-white p-4 sm:scroll-mt-6 sm:p-5" data-field-visit-card="true">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Visit</p>
@@ -479,7 +479,15 @@ function FieldVisitCard({
       </dl>
 
       <VisitWarnings smsConsentStatus={smsConsentStatus} visit={visit} />
-      <VisitActionForm selectedTherapistId={selectedTherapistId} visit={visit} />
+      <details className="mt-4 rounded-lg border border-line bg-slate-50">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+          <span>Update status / note</span>
+          <span className="text-xs font-semibold text-blue">Manual action</span>
+        </summary>
+        <div className="border-t border-line bg-white p-4">
+          <VisitActionForm selectedTherapistId={selectedTherapistId} visit={visit} />
+        </div>
+      </details>
 
       {visit.notes ? <p className="mt-4 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-600">{visit.notes}</p> : null}
     </article>
@@ -515,7 +523,7 @@ function NextFieldActionPanel({ action }: { action: NextFieldAction }) {
         : "#lower-priority-details";
 
   return (
-    <section className="min-w-0 rounded-lg border border-blue/20 bg-white p-4 shadow-[0_14px_34px_rgba(10,37,64,0.08)] sm:p-5" data-field-next-action="true">
+    <section id="next-field-action" className="min-w-0 rounded-lg border border-blue/20 bg-white p-4 shadow-[0_14px_34px_rgba(10,37,64,0.08)] sm:p-5" data-field-next-action="true">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="eyebrow">Next field action</p>
@@ -525,8 +533,8 @@ function NextFieldActionPanel({ action }: { action: NextFieldAction }) {
         <span className="inline-flex w-fit rounded-md bg-ice px-2.5 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">{status}</span>
       </div>
 
-      <a href={href} className={action.kind === "none" ? "btn-secondary mt-4 min-h-12 w-full justify-center" : "btn-primary mt-4 min-h-12 w-full justify-center"}>
-        {action.kind === "visit" ? "Open visit" : action.kind === "opportunity" ? "Open opportunity" : action.kind === "referral" ? "Open details" : "Review later"}
+      <a href={href} className={action.kind === "none" ? "btn-secondary mt-4 min-h-14 w-full justify-center text-base sm:text-sm" : "btn-primary mt-4 min-h-14 w-full justify-center text-base sm:text-sm"}>
+        {action.kind === "none" ? "Review later" : "Open details"}
       </a>
     </section>
   );
@@ -544,18 +552,36 @@ function FieldWorkspaceEmptyState({ stateKey }: { stateKey: FieldWorkspaceEmptyS
   );
 }
 
+function NoScheduledVisitsState() {
+  return (
+    <section id="today" className="rounded-lg border border-line bg-white p-4 text-sm leading-6 text-slate-600">
+      <span id="upcoming" className="sr-only">Upcoming</span>
+      <div className="flex items-center gap-2">
+        <CalendarClock size={18} className="text-blue" />
+        <h2 className="text-lg font-semibold tracking-[-.02em] text-ink">Today / Upcoming</h2>
+      </div>
+      <p className="mt-2 font-semibold text-ink">No visits scheduled</p>
+      <p className="mt-1">No visits scheduled right now. Check assigned referrals ready to schedule.</p>
+    </section>
+  );
+}
+
 function FieldVisitSection({
   icon: Icon,
+  id,
   queue,
   selectedTherapistId,
+  showEmptyState = true,
   smsConsentByPhone,
   title,
   visibleLimit,
   visits,
 }: {
   icon: LucideIcon;
+  id?: string;
   queue: FieldVisitQueue;
   selectedTherapistId: string;
+  showEmptyState?: boolean;
   smsConsentByPhone: SmsConsentLookup;
   title: string;
   visibleLimit?: number;
@@ -566,7 +592,7 @@ function FieldVisitSection({
   const hiddenVisits = visits.slice(cappedVisibleCount);
 
   return (
-    <section className="grid min-w-0 gap-4" data-field-visit-section={queue}>
+    <section id={id} className="grid min-w-0 gap-3 sm:gap-4" data-field-visit-section={queue}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex items-center gap-2">
           <Icon size={18} className="text-blue" />
@@ -599,7 +625,7 @@ function FieldVisitSection({
           </div>
         </details>
       ) : null}
-      {visits.length === 0 ? <FieldWorkspaceEmptyState stateKey={queue} /> : null}
+      {showEmptyState && visits.length === 0 ? <FieldWorkspaceEmptyState stateKey={queue} /> : null}
     </section>
   );
 }
@@ -679,7 +705,7 @@ function AssignedReferralCard({
   selectedTherapistId: string;
 }) {
   return (
-    <article id={`referral-${referral.id}`} className="min-w-0 scroll-mt-6 rounded-lg border border-line bg-white p-4 sm:p-5">
+    <article id={`referral-${referral.id}`} className="min-w-0 scroll-mt-4 rounded-lg border border-line bg-white p-4 sm:scroll-mt-6 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned referral</p>
@@ -691,18 +717,19 @@ function AssignedReferralCard({
         </span>
       </div>
 
-      <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
-        <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{getTherapistWorkspacePhoneDisplay(referral.phone)}</dd></div>
-        <div><dt className="font-semibold text-ink">Service</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
-        <div><dt className="font-semibold text-ink">Next visit</dt><dd className="mt-1 text-slate-600">{formatDateTime(referral.visits[0]?.scheduledAt)}</dd></div>
-      </dl>
-
-      {referral.notes ? (
-        <details className="mt-4 rounded-lg border border-line bg-slate-50">
-          <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">Open details</summary>
-          <p className="whitespace-pre-wrap break-words border-t border-line p-4 text-sm leading-6 text-slate-600">{referral.notes}</p>
-        </details>
-      ) : null}
+      <details className="mt-4 rounded-lg border border-line bg-white">
+        <summary className="btn-primary min-h-14 w-full cursor-pointer list-none justify-center px-4 text-base sm:text-sm [&::-webkit-details-marker]:hidden">Open details</summary>
+        <div className="grid gap-4 border-t border-line p-4">
+          <dl className="grid gap-3 text-sm sm:grid-cols-3">
+            <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{getTherapistWorkspacePhoneDisplay(referral.phone)}</dd></div>
+            <div><dt className="font-semibold text-ink">Service</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
+            <div><dt className="font-semibold text-ink">Next visit</dt><dd className="mt-1 text-slate-600">{formatDateTime(referral.visits[0]?.scheduledAt)}</dd></div>
+          </dl>
+          {referral.notes ? (
+            <p className="whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-600">{referral.notes}</p>
+          ) : null}
+        </div>
+      </details>
 
       <details className="mt-5 rounded-lg border border-line bg-slate-50">
         <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
@@ -1214,13 +1241,14 @@ export default async function MyWorkPage({
   const hiddenNeedsAttentionItems = needsAttentionItems.slice(DISPLAY_LIMITS.needsAttention);
   const visibleAssignedWorkReferrals = assignedWorkReferrals.slice(0, DISPLAY_LIMITS.assignedWork);
   const hiddenAssignedWorkReferrals = assignedWorkReferrals.slice(DISPLAY_LIMITS.assignedWork);
+  const hasScheduledVisits = todayVisits.length > 0 || upcomingVisits.length > 0;
 
   return (
     <div>
-      <div className="border-b border-line pb-6">
+      <div className="border-b border-line pb-4 sm:pb-6">
         <p className="eyebrow">Therapist field workspace</p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-[-.03em] text-ink sm:text-4xl">My work</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+        <h1 className="mt-2 text-2xl font-semibold tracking-[-.03em] text-ink sm:mt-3 sm:text-4xl">My work</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:mt-3">
           Phones stay masked. Notes stay no-PHI.
         </p>
       </div>
@@ -1252,25 +1280,27 @@ export default async function MyWorkPage({
       ) : null}
 
       {selectedTherapistId ? (
-        <div className="mt-8 grid min-w-0 gap-5" data-therapist-field-workspace="phone-ipad">
-          <section className="grid min-w-0 gap-4 rounded-lg border border-line bg-white p-4 sm:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mt-4 grid min-w-0 gap-4 sm:mt-8 sm:gap-5" data-therapist-field-workspace="phone-ipad">
+          <section className="grid min-w-0 gap-3 rounded-lg border border-line bg-white p-3 sm:gap-4 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
                 <p className="eyebrow">Today&apos;s field focus</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-[-.03em] text-ink">{todayLabel}</h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Start with the next visit or any new opportunity that needs a decision.</p>
+                <h2 className="mt-1 text-xl font-semibold tracking-[-.03em] text-ink sm:mt-2 sm:text-2xl">{todayLabel}</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600 sm:mt-2 sm:leading-6">{workdaySummary}</p>
               </div>
 
               {session.role === "admin" ? (
-                <form className="grid gap-2 sm:min-w-72">
-                  <label className="text-sm font-semibold text-ink">
-                    Demo therapist
-                    <select className="field" name="therapistId" defaultValue={selectedTherapistId || ""}>
-                      {therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
-                    </select>
-                  </label>
-                  <button className="btn-secondary min-h-11 justify-center" type="submit"><BriefcaseMedical size={17} />Load work</button>
-                </form>
+                <>
+                  <form className="hidden gap-2 sm:grid sm:min-w-72">
+                    <label className="text-sm font-semibold text-ink">
+                      Demo therapist
+                      <select className="field" name="therapistId" defaultValue={selectedTherapistId || ""}>
+                        {therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
+                      </select>
+                    </label>
+                    <button className="btn-secondary min-h-11 justify-center" type="submit"><BriefcaseMedical size={17} />Load work</button>
+                  </form>
+                </>
               ) : (
                 <div className="rounded-lg border border-line bg-slate-50 p-3 text-sm">
                   <p className="font-semibold text-ink">{selectedTherapistName || "Therapist record not linked"}</p>
@@ -1279,14 +1309,43 @@ export default async function MyWorkPage({
               )}
             </div>
 
-            <div className="grid gap-3 border-t border-line pt-4 text-sm sm:grid-cols-3">
-              <div><p className="font-semibold text-ink">{assignedVisitCount} visit{assignedVisitCount === 1 ? "" : "s"}</p><p className="mt-1 text-slate-600">Today and upcoming</p></div>
-              <div><p className="font-semibold text-ink">{availableOpportunities.length} new opportunit{availableOpportunities.length === 1 ? "y" : "ies"}</p><p className="mt-1 text-slate-600">Awaiting decision</p></div>
-              <div><p className="font-semibold text-ink">{needsAttentionItems.length} attention item{needsAttentionItems.length === 1 ? "" : "s"}</p><p className="mt-1 text-slate-600">{workdaySummary}</p></div>
+            <div className="grid grid-cols-3 gap-2 border-t border-line pt-2 text-center text-xs sm:gap-3 sm:pt-4 sm:text-left sm:text-sm">
+              <div className="rounded-lg bg-slate-50 p-2 sm:bg-transparent sm:p-0"><p className="font-semibold text-ink">{assignedVisitCount}</p><p className="mt-1 text-slate-600">Visits</p></div>
+              <div className="rounded-lg bg-slate-50 p-2 sm:bg-transparent sm:p-0"><p className="font-semibold text-ink">{availableOpportunities.length}</p><p className="mt-1 text-slate-600">New</p></div>
+              <div className="rounded-lg bg-slate-50 p-2 sm:bg-transparent sm:p-0"><p className="font-semibold text-ink">{needsAttentionItems.length}</p><p className="mt-1 text-slate-600">Attention</p></div>
             </div>
           </section>
 
           <NextFieldActionPanel action={nextAction} />
+
+          <nav aria-label="My Work quick links" className="grid grid-cols-4 gap-2 text-xs font-semibold sm:hidden">
+            <a className="rounded-lg border border-line bg-white px-2 py-3 text-center text-blue" href="#next-field-action">Next</a>
+            <a className="rounded-lg border border-line bg-white px-2 py-3 text-center text-blue" href="#today">Today</a>
+            {needsAttentionItems.length > 0 ? (
+              <a className="rounded-lg border border-line bg-white px-2 py-3 text-center text-blue" href="#attention">Attention</a>
+            ) : (
+              <span className="rounded-lg border border-line bg-white px-2 py-3 text-center text-slate-400">Attention</span>
+            )}
+            <a className="rounded-lg border border-line bg-white px-2 py-3 text-center text-blue" href="#assigned">Assigned</a>
+          </nav>
+
+          {session.role === "admin" ? (
+            <details className="rounded-lg border border-line bg-slate-50 text-sm sm:hidden">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                <span>{selectedTherapistName || "Demo therapist"}</span>
+                <span className="text-xs text-blue">Change demo therapist</span>
+              </summary>
+              <form className="grid gap-2 border-t border-line bg-white p-3">
+                <label className="text-sm font-semibold text-ink">
+                  Demo therapist
+                  <select className="field" name="therapistId" defaultValue={selectedTherapistId || ""}>
+                    {therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
+                  </select>
+                </label>
+                <button className="btn-secondary min-h-11 justify-center" type="submit"><BriefcaseMedical size={17} />Load work</button>
+              </form>
+            </details>
+          ) : null}
 
           <section data-testid="therapist-referral-opportunities" className="grid min-w-0 gap-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -1314,32 +1373,42 @@ export default async function MyWorkPage({
               </details>
             ) : null}
             {availableOpportunities.length === 0 ? (
-              <p className="rounded-lg border border-line bg-white p-5 text-sm leading-6 text-slate-600">No new referral opportunities need a decision.</p>
+              <p className="rounded-lg border border-line bg-white p-4 text-sm leading-6 text-slate-600 sm:p-5">No new opportunities.</p>
             ) : null}
           </section>
 
-          <FieldVisitSection
-            icon={CalendarClock}
-            queue="today"
-            selectedTherapistId={selectedTherapistId}
-            smsConsentByPhone={smsConsentByPhone}
-            title="Today"
-            visibleLimit={DISPLAY_LIMITS.todayVisits}
-            visits={todayVisits}
-          />
+          {hasScheduledVisits ? (
+            <>
+              <FieldVisitSection
+                icon={CalendarClock}
+                id="today"
+                queue="today"
+                selectedTherapistId={selectedTherapistId}
+                showEmptyState={upcomingVisits.length > 0}
+                smsConsentByPhone={smsConsentByPhone}
+                title="Today"
+                visibleLimit={DISPLAY_LIMITS.todayVisits}
+                visits={todayVisits}
+              />
 
-          <FieldVisitSection
-            icon={Clock3}
-            queue="upcoming"
-            selectedTherapistId={selectedTherapistId}
-            smsConsentByPhone={smsConsentByPhone}
-            title="Upcoming"
-            visibleLimit={DISPLAY_LIMITS.upcomingVisits}
-            visits={upcomingVisits}
-          />
+              <FieldVisitSection
+                icon={Clock3}
+                id="upcoming"
+                queue="upcoming"
+                selectedTherapistId={selectedTherapistId}
+                showEmptyState={todayVisits.length > 0}
+                smsConsentByPhone={smsConsentByPhone}
+                title="Upcoming"
+                visibleLimit={DISPLAY_LIMITS.upcomingVisits}
+                visits={upcomingVisits}
+              />
+            </>
+          ) : (
+            <NoScheduledVisitsState />
+          )}
 
           {needsAttentionItems.length > 0 ? (
-            <section className="grid min-w-0 gap-4">
+            <section id="attention" className="grid min-w-0 gap-3 sm:gap-4">
               <div className="flex items-center gap-2">
                 <CircleAlert size={18} className="text-blue" />
                 <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Needs attention</h2>
@@ -1371,7 +1440,7 @@ export default async function MyWorkPage({
           ) : null}
 
           {assignedWorkReferrals.length > 0 ? (
-            <section className="grid min-w-0 gap-4">
+            <section id="assigned" className="grid min-w-0 gap-3 sm:gap-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div className="flex items-center gap-2">
                   <BriefcaseMedical size={18} className="text-blue" />
@@ -1396,7 +1465,9 @@ export default async function MyWorkPage({
               ) : null}
             </section>
           ) : (
-            <FieldWorkspaceEmptyState stateKey="referrals" />
+            <section id="assigned">
+              <FieldWorkspaceEmptyState stateKey="referrals" />
+            </section>
           )}
 
           <section id="lower-priority-details" className="grid min-w-0 gap-4">
@@ -1412,14 +1483,16 @@ export default async function MyWorkPage({
                 <p className="text-sm leading-6 text-slate-600">
                   {completedRecentlyVisitCount} completed visit{completedRecentlyVisitCount === 1 ? "" : "s"} recently, {inProgressVisitCount} in progress.
                 </p>
-                <FieldVisitSection
-                  icon={CheckCircle2}
-                  queue="completed"
-                  selectedTherapistId={selectedTherapistId}
-                  smsConsentByPhone={smsConsentByPhone}
-                  title="Completed recently"
-                  visits={completedVisits}
-                />
+                {completedVisits.length > 0 ? (
+                  <FieldVisitSection
+                    icon={CheckCircle2}
+                    queue="completed"
+                    selectedTherapistId={selectedTherapistId}
+                    smsConsentByPhone={smsConsentByPhone}
+                    title="Completed recently"
+                    visits={completedVisits}
+                  />
+                ) : null}
               </div>
             </details>
           </section>

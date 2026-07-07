@@ -68,6 +68,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
   const pilotAccess = getPilotOperationsAccessState();
   const messagesAccess = getAdminMessagesAccessState();
   const dataMode = getFlowviaDataModeStatus();
+  const isWorkspace = section === "workspace";
 
   return (
     <div className="min-h-screen bg-mist text-ink">
@@ -82,8 +83,12 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             <span className="inline-flex min-h-9 items-center rounded-lg border border-line bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
               {roleLabel(session.role)} · {session.email}
             </span>
-            <GateBadge enabled={pilotAccess.enabled} label={pilotAccess.enabled ? "Pilot gate open" : "Pilot gate closed"} />
-            <GateBadge enabled={messagesAccess.enabled} label={messagesAccess.enabled ? "Ledger gate open" : "Ledger gate closed"} />
+            <span className={isWorkspace ? "hidden sm:inline-flex" : "inline-flex"}>
+              <GateBadge enabled={pilotAccess.enabled} label={pilotAccess.enabled ? "Pilot gate open" : "Pilot gate closed"} />
+            </span>
+            <span className={isWorkspace ? "hidden sm:inline-flex" : "inline-flex"}>
+              <GateBadge enabled={messagesAccess.enabled} label={messagesAccess.enabled ? "Ledger gate open" : "Ledger gate closed"} />
+            </span>
             <form action={logoutAction}>
               <button className="inline-flex min-h-9 items-center rounded-lg border border-line bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue/40 hover:text-blue" type="submit">
                 Logout
@@ -95,7 +100,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             </Link>
           </div>
         </div>
-        <div className="border-t border-amber-200 bg-amber-50">
+        <div className={`${isWorkspace ? "hidden lg:block" : ""} border-t border-amber-200 bg-amber-50`}>
           <div className="container-page flex min-h-11 flex-wrap items-center gap-2 py-2 text-xs font-semibold text-amber-950">
             <ShieldAlert size={16} />
             <span>{dataMode.warningLabel}</span>
@@ -104,8 +109,8 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
         </div>
       </header>
 
-      <div className="container-page grid gap-6 py-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:py-8">
-        <aside className="h-fit rounded-lg border border-line bg-white p-3 shadow-[0_10px_30px_rgba(10,37,64,0.05)] lg:sticky lg:top-6">
+      <div className="container-page grid gap-5 py-4 sm:py-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:py-8">
+        <aside className={`${isWorkspace ? "order-2 lg:order-1" : ""} h-fit rounded-lg border border-line bg-white p-3 shadow-[0_10px_30px_rgba(10,37,64,0.05)] lg:sticky lg:top-6`}>
           <nav aria-label="Internal workspace navigation" className="grid gap-1">
             {navItems.map((item) => {
               if (!item.roles.includes(session.role)) return null;
@@ -129,7 +134,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             })}
           </nav>
 
-          <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+          <div className={`${isWorkspace ? "hidden lg:block" : ""} mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950`}>
             <div className="flex items-center gap-2 font-semibold">
               <ShieldAlert size={17} />
               {dataMode.warningLabel}
@@ -137,7 +142,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             <p className="mt-2 text-xs leading-5">Real patient use remains blocked until auth/RBAC, PHI policy, retention, backups, and incident response are approved.</p>
           </div>
 
-          <div className="mt-3 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600">
+          <div className={`${isWorkspace ? "hidden lg:block" : ""} mt-3 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600`}>
             <div className="flex items-center gap-2 font-semibold text-ink">
               <LockKeyhole size={16} />
               Access boundary
@@ -145,7 +150,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             <p className="mt-2">Signed pilot sessions enforce admin and therapist route access. This is still not final enterprise auth.</p>
           </div>
 
-          <div className="mt-3 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600">
+          <div className={`${isWorkspace ? "hidden lg:block" : ""} mt-3 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600`}>
             <div className="flex items-center gap-2 font-semibold text-ink">
               <Database size={16} />
               Cloud data
@@ -154,7 +159,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
           </div>
         </aside>
 
-        <main id="main-content" className="min-w-0 pb-10">
+        <main id="main-content" className={`${isWorkspace ? "order-1 lg:order-2" : ""} min-w-0 pb-10`}>
           {children}
         </main>
       </div>
