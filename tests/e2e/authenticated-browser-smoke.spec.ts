@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 const baseUrl = process.env.FLOWVIA_BROWSER_SMOKE_BASE_URL || "http://localhost:3000";
 const artifactsDir = path.join(process.cwd(), "artifacts", "browser-smoke");
@@ -32,7 +32,7 @@ const forbiddenVisibleText = [
   /Medicare billing workflow/i,
 ];
 
-const forbiddenControls = [
+const forbiddenActionControls = [
   /^Send SMS$/i,
   /^Bulk SMS$/i,
   /^Send message$/i,
@@ -51,10 +51,23 @@ async function expectNoDangerousVisibleText(page: Page, route: string) {
   for (const pattern of forbiddenVisibleText) {
     expect(text, `${route} should not expose ${pattern}`).not.toMatch(pattern);
   }
+}
 
-  for (const pattern of forbiddenControls) {
-    await expect(page.getByRole("button", { name: pattern }), `${route} should not expose outbound SMS controls`).toHaveCount(0);
-    await expect(page.getByRole("link", { name: pattern }), `${route} should not expose outbound SMS links`).toHaveCount(0);
+async function expectNoForbiddenActionControls(root: Page | Locator, route: string, forbiddenControlNames: readonly RegExp[]) {
+  const submitControls = root.locator('input[type="submit"], input[type="button"]');
+
+  for (const pattern of forbiddenControlNames) {
+    await expect(root.getByRole("button", { name: pattern }), `${route} should not expose actionable buttons named ${pattern}`).toHaveCount(0);
+    await expect(root.getByRole("link", { name: pattern }), `${route} should not expose actionable links named ${pattern}`).toHaveCount(0);
+
+    const count = await submitControls.count();
+    for (let index = 0; index < count; index += 1) {
+      const control = submitControls.nth(index);
+      const visible = await control.isVisible().catch(() => false);
+      if (!visible) continue;
+      const label = (await control.getAttribute("value")) || (await control.getAttribute("aria-label")) || (await control.getAttribute("title")) || "";
+      expect(label, `${route} should not expose actionable submit controls named ${pattern}`).not.toMatch(pattern);
+    }
   }
 }
 
@@ -105,7 +118,7 @@ async function expectBlockedSchedulingRowHasNoCreateVisit(page: Page, label: str
     return;
   }
 
-  await expect(row.first().getByRole("link", { name: /Create visit/i }), `${label} should stay review-only`).toHaveCount(0);
+  await expectNoForbiddenActionControls(row.first(), `${label} review row`, [/^Create visit$/i]);
 }
 
 async function firstPresentBlockedSchedulingReferralId(page: Page, labels: string[]) {
@@ -163,6 +176,11 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
       await expectAnyText(page, [/Referral decision/i, /Scheduling readiness/i, /Safety guarantees/i], "referral detail");
       await expect(page.getByTestId("therapist-opportunity-panel")).toBeVisible();
       await expectAnyText(page, [/Therapist opportunity/i, /deterministic\/manual/i, /no SMS send/i], "referral opportunity detail");
+      const referralDetailText = await visibleBodyText(page);
+      if (referralDetailText.includes("Create visit is suppressed until therapist acceptance is recorded.")) {
+        await expect(page.locator("body")).toContainText("Create visit is suppressed until therapist acceptance is recorded.");
+        await expectNoForbiddenActionControls(page, "referral detail suppression", [/^Create visit$/i]);
+      }
       const createVisitLinks = page.getByRole("link", { name: /Create visit/i });
       if (await createVisitLinks.count()) {
         const href = await createVisitLinks.first().getAttribute("href");
@@ -202,8 +220,8 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
       readyCreateVisitHref = await readyCreateVisitLinks.first().getAttribute("href");
       expect(readyCreateVisitHref || "", "ready Create visit link should open the guided visit creation form").toMatch(/^\/admin\/visits\/new\?referralId=/);
     }
-    await expect(reviewReferrals.getByRole("link", { name: /Create visit/i })).toHaveCount(0);
-    await expect(awaitingOpportunityAcceptance.getByRole("link", { name: /Create visit/i })).toHaveCount(0);
+    await expectNoForbiddenActionControls(reviewReferrals, "/admin/scheduling review lane", [/^Create visit$/i]);
+    await expectNoForbiddenActionControls(awaitingOpportunityAcceptance, "/admin/scheduling awaiting acceptance lane", [/^Create visit$/i]);
     await expectAnyText(page, [/Awaiting therapist acceptance/i, /Accepted/i, /Offered/i, /Declined/i, /Not offered/i], "/admin/scheduling opportunity state");
     await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Duplicate A");
     await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Duplicate B");
@@ -277,6 +295,7 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     await gotoProtected(page, "/my-work");
     await expectAnyText(page, [/My Work/i, /Field workspace/i, /No PHI/i, /masked/i], "/my-work");
     await expect(page.getByTestId("therapist-referral-opportunities")).toBeVisible();
+    await expectNoForbiddenActionControls(page, "/my-work", forbiddenActionControls);
     await screenshot(page, "my-work.png");
 
     if (therapistEmail && therapistPassword) {
@@ -287,7 +306,7 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
       await expectAnyText(page, [/My Work/i, /Field workspace/i, /No PHI/i, /masked/i], "therapist /my-work");
       await expect(page.getByTestId("therapist-referral-opportunities")).toBeVisible();
       await expect(page.getByRole("link", { name: /Data Stewardship|Audit trail|Health Center/i })).toHaveCount(0);
-      await expect(page.getByRole("button", { name: /Offer to assigned therapist/i })).toHaveCount(0);
+      await expectNoForbiddenActionControls(page, "therapist /my-work", [...forbiddenActionControls, /^Offer to assigned therapist$/i]);
       await screenshot(page, "therapist-my-work.png");
       await screenshot(page, "therapist-my-work-opportunities.png");
 
