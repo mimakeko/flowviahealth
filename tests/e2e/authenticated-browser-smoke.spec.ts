@@ -142,6 +142,11 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     await gotoProtected(page, "/admin/referrals");
     await expect(page.getByRole("heading", { name: /Referral operations/i })).toBeVisible();
     await expectAnyText(page, [/Operations Assistant/i, /Scheduling Intelligence/i, /Ready for scheduling/i, /Needs intake review/i], "/admin/referrals");
+    if (await page.locator('tbody a[href^="/admin/referrals/"]').count()) {
+      await expectAnyText(page, [/Not offered/i, /Offered/i, /Accepted/i, /Declined/i], "/admin/referrals opportunity badges");
+    } else {
+      console.log("Browser auth smoke note: no referral rows found; opportunity badge check skipped.");
+    }
     await screenshot(page, "admin-referrals.png");
 
     await gotoProtected(page, "/admin/referrals/new");
@@ -156,12 +161,15 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
       await expectNoDangerousVisibleText(page, "referral detail");
       await expectRawPageIsClean(page, "referral detail");
       await expectAnyText(page, [/Referral decision/i, /Scheduling readiness/i, /Safety guarantees/i], "referral detail");
+      await expect(page.getByTestId("therapist-opportunity-panel")).toBeVisible();
+      await expectAnyText(page, [/Therapist opportunity/i, /deterministic\/manual/i, /no SMS send/i], "referral opportunity detail");
       const createVisitLinks = page.getByRole("link", { name: /Create visit/i });
       if (await createVisitLinks.count()) {
         const href = await createVisitLinks.first().getAttribute("href");
         expect(href || "", "Create visit CTA should only point to the manual visit form").toMatch(/^\/admin\/visits\/new\?/);
       }
       await screenshot(page, "referral-detail.png");
+      await screenshot(page, "admin-referral-opportunity-detail.png");
     } else {
       console.log("Browser auth smoke note: no referral detail link found; detail screenshot skipped.");
     }
@@ -176,9 +184,11 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     await expect(page.getByRole("heading", { name: /Scheduling Intelligence/i })).toBeVisible();
     await expectAnyText(page, [/ready-to-schedule/i, /ready gate/i, /No maps/i, /No create-ready referrals/i], "/admin/scheduling");
     const readyReferrals = page.getByTestId("scheduling-ready-referrals");
+    const awaitingOpportunityAcceptance = page.getByTestId("scheduling-awaiting-opportunity-acceptance");
     const reviewReferrals = page.getByTestId("scheduling-review-referrals");
     const upcomingVisits = page.getByTestId("scheduling-upcoming-visits");
     await expect(readyReferrals).toBeVisible();
+    await expect(awaitingOpportunityAcceptance).toBeVisible();
     await expect(reviewReferrals).toBeVisible();
     await expect(upcomingVisits).toBeVisible();
 
@@ -193,11 +203,14 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
       expect(readyCreateVisitHref || "", "ready Create visit link should open the guided visit creation form").toMatch(/^\/admin\/visits\/new\?referralId=/);
     }
     await expect(reviewReferrals.getByRole("link", { name: /Create visit/i })).toHaveCount(0);
+    await expect(awaitingOpportunityAcceptance.getByRole("link", { name: /Create visit/i })).toHaveCount(0);
+    await expectAnyText(page, [/Awaiting therapist acceptance/i, /Accepted/i, /Offered/i, /Declined/i, /Not offered/i], "/admin/scheduling opportunity state");
     await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Duplicate A");
     await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Duplicate B");
     await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Non SMS Follow Up");
     await expectBlockedSchedulingRowHasNoCreateVisit(page, "Demo Scenario Intake Review");
     await screenshot(page, "admin-scheduling.png");
+    await screenshot(page, "admin-scheduling-opportunity-state.png");
 
     if (readyCreateVisitHref) {
       await page.goto(readyCreateVisitHref);
@@ -252,7 +265,9 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     await gotoProtected(page, "/admin/health");
     await expect(page.getByRole("heading", { name: /Health Center/i })).toBeVisible();
     await expectAnyText(page, [/Real SMS gate/i, /Guided visit creation/i, /Manual submit required/i, /Blocked create audit/i, /Maps\/geocoding APIs/i], "/admin/health");
+    await expectAnyText(page, [/Therapist opportunity workflow/i, /Opportunity source/i, /Opportunity auto-assignment/i, /SMS from opportunity workflow/i, /Manual accept\/decline/i, /Opportunity safe audit/i], "/admin/health opportunity cards");
     await screenshot(page, "admin-health.png");
+    await screenshot(page, "health-opportunity-workflow.png");
 
     await gotoProtected(page, "/admin/audit");
     await expect(page.getByRole("heading", { name: /Audit trail/i })).toBeVisible();
@@ -261,6 +276,7 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
 
     await gotoProtected(page, "/my-work");
     await expectAnyText(page, [/My Work/i, /Field workspace/i, /No PHI/i, /masked/i], "/my-work");
+    await expect(page.getByTestId("therapist-referral-opportunities")).toBeVisible();
     await screenshot(page, "my-work.png");
 
     if (therapistEmail && therapistPassword) {
@@ -269,7 +285,11 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
       await expect(page).toHaveURL(/\/my-work|\/dashboard/);
       await gotoProtected(page, "/my-work");
       await expectAnyText(page, [/My Work/i, /Field workspace/i, /No PHI/i, /masked/i], "therapist /my-work");
+      await expect(page.getByTestId("therapist-referral-opportunities")).toBeVisible();
+      await expect(page.getByRole("link", { name: /Data Stewardship|Audit trail|Health Center/i })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /Offer to assigned therapist/i })).toHaveCount(0);
       await screenshot(page, "therapist-my-work.png");
+      await screenshot(page, "therapist-my-work-opportunities.png");
 
       for (const route of ["/admin/data", "/admin/audit", "/admin/health"]) {
         await page.goto(route);
@@ -279,6 +299,8 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
         await expectNoDangerousVisibleText(page, route);
       }
       rbacChecksPassed = "yes";
+    } else {
+      console.log("Browser auth smoke note: therapist credentials not provided; therapist opportunity screenshot skipped.");
     }
 
     dangerousTextChecksPassed = true;

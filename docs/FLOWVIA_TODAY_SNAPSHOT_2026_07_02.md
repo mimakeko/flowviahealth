@@ -46,8 +46,10 @@
 
 - Admin dashboard now tracks referral status counts, visit counts, SMS consent status, recent audit activity, recent referral activity, and SMS activity summary.
 - Therapist dashboard now shows scoped assigned referrals, ready-to-schedule count, upcoming visits, needs-contact count, and recent assigned activity.
-- Admin referral workflow supports fake referral creation, status update, therapist assignment, operational notes, visit creation, audit trail, masked phone display, and SMS readiness indicators.
+- Admin referral workflow supports fake referral creation, status update, therapist assignment, operational notes, therapist opportunity offers, visit creation, audit trail, masked phone display, and SMS readiness indicators.
 - Admin visit workflow lives inside `/admin/visits`, `/admin/visits/new`, and `/admin/visits/[id]`.
-- Therapist `/my-work` shows assigned referrals and visits, with visit actions for `in_progress`, `completed`, and `no_show`.
+- Therapist `/my-work` shows assigned referrals, referral opportunities, and visits, with visit actions for `in_progress`, `completed`, and `no_show`.
+- Therapist opportunity acceptance is deterministic/manual: admins offer safe assigned fake referrals, therapists manually accept or decline with fixed safe reasons, accepted demo opportunities can unlock scheduling only after the existing ready gate passes, and declined opportunities suppress `Create visit`.
 - SMS remains readiness-only in referral/visit workflow pages; no real SMS send button was added.
+- Opportunity workflow sends no SMS, creates no visits automatically, performs no auto-assignment or auto-acceptance, and calls no external AI, matching, maps, geocoding, or travel-time APIs.
 - All workflow data remains fake/no-PHI/personal-test boundary only.

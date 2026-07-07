@@ -27,6 +27,15 @@ import {
 } from "@/lib/compliance/note-classification";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { activeWorkflowVisitWhere, activeWorkflowWhereClause } from "@/lib/pilot/data-stewardship";
+import {
+  getOpportunityStatesByReferralId,
+  isOpportunityDeclineReason,
+  OPPORTUNITY_DECLINE_REASONS,
+  opportunityBadgeClassName,
+  opportunityDeclineReasonLabel,
+  opportunityStateLabel,
+  type OpportunityStateResult,
+} from "@/lib/pilot/opportunity";
 import { getSchedulingQueueCards } from "@/lib/pilot/scheduling-intelligence";
 import { requirePilotSession } from "@/lib/pilot/auth";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
@@ -101,6 +110,10 @@ type TherapistWorkReferral = {
   status: string;
   visits: TherapistWorkVisit[];
   zip: string | null;
+};
+
+type TherapistOpportunityReferral = TherapistWorkReferral & {
+  opportunityState: OpportunityStateResult;
 };
 
 type TherapistFieldVisit = {
@@ -196,6 +209,18 @@ function visitErrorMessage(error: string | null | undefined) {
   if (error === "visit_terminal") return "That visit is already terminal and cannot be changed from the therapist field workflow.";
   if (error === "invalid_transition") return "That visit action is not available for the current status.";
   if (error === "confirmation_required") return "Review the visit action details and use the confirmation button before submitting.";
+  return null;
+}
+
+function opportunitySuccessMessage(value: string | null | undefined) {
+  if (value === "opportunity_accepted") return "Opportunity accepted. Admin scheduling can continue after ready-gate review.";
+  if (value === "opportunity_declined") return "Opportunity declined with safe operational metadata.";
+  return null;
+}
+
+function opportunityErrorMessage(error: string | null | undefined) {
+  if (error === "opportunity_blocked") return "That opportunity is no longer available for this therapist.";
+  if (error === "opportunity_decline_reason") return "Choose a fixed safe decline reason before declining.";
   return null;
 }
 
@@ -509,6 +534,117 @@ async function therapistReferralAction(formData: FormData) {
   redirect(`/my-work?therapistId=${therapistId}`);
 }
 
+async function therapistOpportunityAction(formData: FormData) {
+  "use server";
+
+  requirePilotOperationsAccess();
+  const session = await requirePilotSession(["admin", "therapist"], "/my-work");
+
+  const prisma = getPrismaClient();
+  const therapistId = textField(formData.get("therapistId"), 80);
+  const referralId = textField(formData.get("referralId"), 80);
+  const action = textField(formData.get("action"), 40);
+  const declineReason = textField(formData.get("declineReason"), 80);
+  const note = textField(formData.get("note"), 1000);
+
+  if (!therapistId || !referralId || (action !== "accept" && action !== "decline")) {
+    redirect("/my-work");
+  }
+
+  if (session.role === "therapist") {
+    const therapist = await prisma.therapist.findFirst({
+      where: { active: true, email: session.email },
+    });
+
+    if (!therapist || therapist.id !== therapistId) {
+      await prisma.auditLog.create({
+        data: {
+          actorId: therapist?.id || session.email,
+          actorType: "therapist_pilot",
+          action: "opportunity_action_blocked",
+          entityType: "PatientReferral",
+          entityId: referralId,
+          metadataJson: { attemptedAction: action, reason: "therapist_scope_mismatch", route: "/my-work" },
+        },
+      }).catch(() => undefined);
+      redirect("/unauthorized");
+    }
+  }
+
+  const [referral, opportunityLogs] = await Promise.all([
+    prisma.patientReferral.findFirst({
+      where: activeWorkflowWhereClause({ id: referralId, assignedTherapistId: therapistId }),
+    }),
+    prisma.auditLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      where: {
+        action: { in: ["opportunity_offered", "opportunity_accepted", "opportunity_declined", "opportunity_action_blocked"] },
+        entityId: referralId,
+        entityType: "PatientReferral",
+      },
+    }),
+  ]);
+
+  const opportunityState = getOpportunityStatesByReferralId(opportunityLogs).get(referralId) || { state: "not_offered" };
+  const offeredToTherapist = opportunityState.offeredTherapistId === therapistId;
+  if (!referral || opportunityState.state !== "offered" || !offeredToTherapist) {
+    await prisma.auditLog.create({
+      data: {
+        actorId: therapistId,
+        actorType: session.role === "admin" ? "pilot_admin" : "therapist_pilot",
+        action: "opportunity_action_blocked",
+        entityType: "PatientReferral",
+        entityId: referralId,
+        metadataJson: {
+          attemptedAction: action,
+          reason: "not_offered_to_assigned_therapist",
+          route: "/my-work",
+          therapistId,
+        },
+      },
+    }).catch(() => undefined);
+    redirect(`/my-work?therapistId=${encodeURIComponent(therapistId)}&error=opportunity_blocked`);
+  }
+
+  if (action === "decline") {
+    if (!isOpportunityDeclineReason(declineReason)) {
+      redirect(`/my-work?therapistId=${encodeURIComponent(therapistId)}&error=opportunity_decline_reason`);
+    }
+
+    const blockedNoteSearch = await getBlockedOperationalNoteRedirectSearch({
+      actorId: session.role === "therapist" ? session.email : therapistId,
+      actorType: session.role === "admin" ? "pilot_admin" : "therapist_pilot",
+      entityId: referralId,
+      entityType: "PatientReferral",
+      extra: { declineReason, therapistId },
+      fieldLabel: "Opportunity decline note",
+      route: "/my-work",
+      value: note,
+      workflow: "therapist_opportunity_decline",
+    });
+    if (blockedNoteSearch) redirect(`/my-work?therapistId=${encodeURIComponent(therapistId)}&${blockedNoteSearch}`);
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      actorId: therapistId,
+      actorType: session.role === "admin" ? "pilot_admin" : "therapist_pilot",
+      action: action === "accept" ? "opportunity_accepted" : "opportunity_declined",
+      entityType: "PatientReferral",
+      entityId: referralId,
+      metadataJson: {
+        declineReason: action === "decline" ? declineReason : null,
+        noteAdded: Boolean(note),
+        source: "manual_therapist_workspace",
+        therapistId,
+      },
+    },
+  });
+
+  redirect(`/my-work?therapistId=${encodeURIComponent(therapistId)}&success=${action === "accept" ? "opportunity_accepted" : "opportunity_declined"}`);
+}
+
 async function therapistVisitAction(formData: FormData) {
   "use server";
 
@@ -719,6 +855,26 @@ export default async function MyWorkPage({
     : [[], []];
   const assignedReferrals = referrals as TherapistWorkReferral[];
   const assignedVisits = visits as TherapistFieldVisit[];
+  const opportunityLogs = assignedReferrals.length > 0
+    ? await prisma.auditLog.findMany({
+        orderBy: { createdAt: "desc" },
+        select: { action: true, actorId: true, actorType: true, createdAt: true, entityId: true, metadataJson: true },
+        where: {
+          action: { in: ["opportunity_offered", "opportunity_accepted", "opportunity_declined", "opportunity_action_blocked"] },
+          entityId: { in: assignedReferrals.map((referral: TherapistWorkReferral) => referral.id) },
+          entityType: "PatientReferral",
+        },
+      })
+    : [];
+  const opportunityStates = getOpportunityStatesByReferralId(opportunityLogs);
+  const opportunityReferrals: TherapistOpportunityReferral[] = assignedReferrals.map((referral: TherapistWorkReferral) => ({
+    ...referral,
+    opportunityState: opportunityStates.get(referral.id) || { state: "not_offered" },
+  }));
+  const availableOpportunities = opportunityReferrals.filter((referral: TherapistOpportunityReferral) => (
+    referral.opportunityState.state === "offered" &&
+    referral.opportunityState.offeredTherapistId === selectedTherapistId
+  ));
   const normalizedPhones = Array.from(new Set(assignedVisits.map((visit: TherapistFieldVisit) => normalizeE164Phone(visit.referral.phone)).filter(Boolean)));
   const smsConsentRows = normalizedPhones.length > 0
     ? await prisma.smsConsentEnrollment.findMany({
@@ -763,6 +919,8 @@ export default async function MyWorkPage({
   const assistantStatus = getOperationsAssistantV2Status();
   const successMessage = visitSuccessMessage(params?.success);
   const errorMessage = visitErrorMessage(params?.error);
+  const opportunitySuccess = opportunitySuccessMessage(params?.success);
+  const opportunityError = opportunityErrorMessage(params?.error);
 
   return (
     <div>
@@ -780,8 +938,16 @@ export default async function MyWorkPage({
           <TransientActionBanner message={successMessage} tone="success" />
         ) : null}
 
+        {opportunitySuccess ? (
+          <TransientActionBanner message={opportunitySuccess} tone="success" />
+        ) : null}
+
         {errorMessage ? (
           <TransientActionBanner message={errorMessage} tone="error" />
+        ) : null}
+
+        {opportunityError ? (
+          <TransientActionBanner message={opportunityError} tone="error" />
         ) : null}
 
         {session.role === "admin" ? (
@@ -874,6 +1040,53 @@ export default async function MyWorkPage({
                   title="Completed recently"
                   visits={completedVisits}
                 />
+
+                <section data-testid="therapist-referral-opportunities" className="grid min-w-0 gap-4">
+                  <div className="flex items-center gap-2">
+                    <BriefcaseMedical size={18} className="text-blue" />
+                    <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Referral opportunities</h2>
+                  </div>
+                  {availableOpportunities.map((referral: TherapistOpportunityReferral) => (
+                    <article key={referral.id} className="min-w-0 rounded-lg border border-blue/20 bg-white p-4 sm:p-5">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Manual opportunity review</p>
+                          <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
+                          <p className="mt-1 break-words text-sm text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
+                        </div>
+                        <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
+                          {opportunityStateLabel(referral.opportunityState.state)}
+                        </span>
+                      </div>
+
+                      <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+                        <div><dt className="font-semibold text-ink">Service area</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
+                        <div><dt className="font-semibold text-ink">Status</dt><dd className="mt-1 text-slate-600">{statusLabel(referral.status)}</dd></div>
+                        <div><dt className="font-semibold text-ink">Readiness</dt><dd className="mt-1 text-slate-600">Deterministic/manual review</dd></div>
+                      </dl>
+
+                      <div className="mt-5 grid gap-3 border-t border-line pt-5 lg:grid-cols-[auto_1fr]">
+                        <form action={therapistOpportunityAction}>
+                          <input type="hidden" name="therapistId" value={selectedTherapistId} />
+                          <input type="hidden" name="referralId" value={referral.id} />
+                          <input type="hidden" name="action" value="accept" />
+                          <PendingSubmitButton className="btn-primary min-h-12" pendingLabel="Accepting...">Accept opportunity</PendingSubmitButton>
+                        </form>
+                        <form action={therapistOpportunityAction} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+                          <input type="hidden" name="therapistId" value={selectedTherapistId} />
+                          <input type="hidden" name="referralId" value={referral.id} />
+                          <input type="hidden" name="action" value="decline" />
+                          <label className="text-sm font-semibold text-ink">Decline reason<select className="field" name="declineReason" defaultValue="outside_territory">{OPPORTUNITY_DECLINE_REASONS.map((reason) => <option key={reason} value={reason}>{opportunityDeclineReasonLabel(reason)}</option>)}</select></label>
+                          <label className="text-sm font-semibold text-ink">Note <span className="font-normal text-slate-400">(optional, no PHI)</span><input className="field" name="note" placeholder="Operational reason only" /></label>
+                          <div className="flex items-end"><PendingSubmitButton className="btn-secondary min-h-12 w-full" pendingLabel="Declining...">Decline opportunity</PendingSubmitButton></div>
+                        </form>
+                      </div>
+                    </article>
+                  ))}
+                  {availableOpportunities.length === 0 ? (
+                    <p className="rounded-lg border border-line bg-white p-5 text-sm leading-6 text-slate-600">No referral opportunities are waiting for manual review.</p>
+                  ) : null}
+                </section>
 
                 {actionReferrals.length > 0 ? (
                   <section className="grid min-w-0 gap-4">

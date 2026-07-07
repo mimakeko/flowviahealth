@@ -40,6 +40,7 @@ const AUDIT_CATEGORIES = [
   { value: "therapist_field", label: "Therapist field actions" },
   { value: "blocked_notes", label: "Blocked notes" },
   { value: "visit_status_changes", label: "Visit status changes" },
+  { value: "opportunity", label: "Opportunity events" },
   { value: "future_completion_warnings", label: "Future completion warnings" },
 ] as const;
 
@@ -55,6 +56,7 @@ const THERAPIST_FIELD_ACTIONS = [
 
 const BLOCKED_NOTE_ACTIONS = ["operational_note_blocked", "therapist_visit_note_blocked"] as const;
 const VISIT_STATUS_ACTIONS = ["visit_status_changed"] as const;
+const OPPORTUNITY_ACTIONS = ["opportunity_offered", "opportunity_accepted", "opportunity_declined", "opportunity_action_blocked"] as const;
 const REFERRAL_INTAKE_ACTIONS = [
   "referral_created",
   "referral_updated",
@@ -91,6 +93,7 @@ const SAFE_METADATA_KEYS = new Set([
   "consentPreserved",
   "count",
   "destinationHint",
+  "declineReason",
   "duplicateCandidateCount",
   "duplicateHighestScore",
   "earlyCompletionWarning",
@@ -174,6 +177,7 @@ function auditCategoryFilter(category: AuditCategory): Prisma.AuditLogWhereInput
   if (category === "therapist_field") return { action: { in: [...THERAPIST_FIELD_ACTIONS] } };
   if (category === "blocked_notes") return { action: { in: [...BLOCKED_NOTE_ACTIONS] } };
   if (category === "visit_status_changes") return { action: { in: [...VISIT_STATUS_ACTIONS] } };
+  if (category === "opportunity") return { action: { in: [...OPPORTUNITY_ACTIONS] } };
   return { action: "therapist_visit_completed" };
 }
 

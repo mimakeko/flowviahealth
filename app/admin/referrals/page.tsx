@@ -17,6 +17,12 @@ import {
   type ReferralIntakeQualityResult,
 } from "@/lib/pilot/referral-intake-quality";
 import {
+  getOpportunityStatesByReferralId,
+  opportunityBadgeClassName,
+  opportunityStateLabel,
+  type OpportunityStateResult,
+} from "@/lib/pilot/opportunity";
+import {
   formatDate,
   REFERRAL_STATUSES,
   requirePilotOperationsAccess,
@@ -57,6 +63,7 @@ type TherapistFilterOption = {
 type ReferralListQualityRow = ReferralListRow & {
   createVisitGate: CreateVisitGateResult;
   intakeQuality: ReferralIntakeQualityResult;
+  opportunityState: OpportunityStateResult;
   smsConsentStatus: string;
 };
 
@@ -187,12 +194,26 @@ export default async function AdminReferralsPage({
   const referralRows = referrals as ReferralListRow[];
   const duplicateSourceRows = duplicateSources(referralRows);
   const normalizedPhones = Array.from(new Set(referralRows.map((referral: ReferralListRow) => normalizeE164Phone(referral.phone)).filter(Boolean)));
-  const smsConsentRows = normalizedPhones.length > 0
-    ? await prisma.smsConsentEnrollment.findMany({
+  const [smsConsentRows, opportunityLogs] = await Promise.all([
+    normalizedPhones.length > 0
+      ? prisma.smsConsentEnrollment.findMany({
         select: { normalizedPhone: true, status: true },
         where: { normalizedPhone: { in: normalizedPhones } },
       })
-    : [];
+      : Promise.resolve([]),
+    referralRows.length > 0
+      ? prisma.auditLog.findMany({
+          orderBy: { createdAt: "desc" },
+          select: { action: true, actorId: true, actorType: true, createdAt: true, entityId: true, metadataJson: true },
+          where: {
+            action: { in: ["opportunity_offered", "opportunity_accepted", "opportunity_declined", "opportunity_action_blocked"] },
+            entityId: { in: referralRows.map((referral: ReferralListRow) => referral.id) },
+            entityType: "PatientReferral",
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+  const opportunityStates = getOpportunityStatesByReferralId(opportunityLogs);
   const smsConsentByPhone = Object.fromEntries(smsConsentRows.map((row) => [row.normalizedPhone, row.status]));
   const qualityRows: ReferralListQualityRow[] = referralRows.map((referral: ReferralListRow) => {
     const smsConsentStatus = smsConsentByPhone[normalizeE164Phone(referral.phone)] || "none";
@@ -236,6 +257,7 @@ export default async function AdminReferralsPage({
         zip: referral.zip,
       }),
       intakeQuality,
+      opportunityState: opportunityStates.get(referral.id) || { state: "not_offered" },
       smsConsentStatus,
     };
   });
@@ -373,6 +395,9 @@ export default async function AdminReferralsPage({
                       {referral.intakeQuality.readinessLabel}
                     </span>
                     {referral.createVisitGate.allowed ? <p className="mt-1 text-xs font-semibold text-emerald-700">Ready for scheduling</p> : <p className="mt-1 text-xs text-slate-500">{referral.createVisitGate.reasons.slice(0, 2).join(" · ") || "Review checklist"}</p>}
+                    <span className={`mt-2 inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
+                      {opportunityStateLabel(referral.opportunityState.state)}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</td>
                   <td className="px-4 py-3 text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Not provided"}</td>

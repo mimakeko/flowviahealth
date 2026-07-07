@@ -34,6 +34,10 @@ import {
   type ReferralIntakeDuplicateSource,
   type ReferralIntakeQualityResult,
 } from "@/lib/pilot/referral-intake-quality";
+import {
+  getOpportunityStateFromAuditLogs,
+  opportunityAllowsVisitCreation,
+} from "@/lib/pilot/opportunity";
 import { normalizeE164Phone } from "@/lib/sms/compliance";
 
 export const metadata: Metadata = {
@@ -248,6 +252,40 @@ async function createVisitAction(formData: FormData) {
     });
     redirect(`/admin/visits/new?referralId=${encodeURIComponent(referralId)}&error=visit_create_blocked`);
   }
+  const [referralOpportunitySource, opportunityLogs] = await Promise.all([
+    prisma.patientReferral.findUnique({
+      select: { referralSource: true },
+      where: { id: referralId },
+    }),
+    prisma.auditLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      where: {
+        action: { in: ["opportunity_offered", "opportunity_accepted", "opportunity_declined", "opportunity_action_blocked"] },
+        entityId: referralId,
+        entityType: "PatientReferral",
+      },
+    }),
+  ]);
+  if (!referralOpportunitySource) notFound();
+  const opportunityState = getOpportunityStateFromAuditLogs(opportunityLogs);
+  if (!opportunityAllowsVisitCreation({ opportunityState: opportunityState.state, referralSource: referralOpportunitySource.referralSource })) {
+    await prisma.auditLog.create({
+      data: {
+        actorType: "pilot_admin",
+        action: "visit_create_blocked",
+        entityType: "PatientReferral",
+        entityId: referralId,
+        metadataJson: {
+          reason: "Therapist opportunity acceptance required",
+          route: "/admin/visits/new",
+          severity: "caution",
+          source: "guided_visit_creation",
+        },
+      },
+    });
+    redirect(`/admin/visits/new?referralId=${encodeURIComponent(referralId)}&error=visit_create_blocked`);
+  }
 
   const visit = await prisma.visit.create({
     data: {
@@ -433,6 +471,22 @@ export default async function NewVisitPage({
         zip: selectedReferral.zip,
       })
     : null;
+  const selectedOpportunityLogs = selectedReferral
+    ? await prisma.auditLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        where: {
+          action: { in: ["opportunity_offered", "opportunity_accepted", "opportunity_declined", "opportunity_action_blocked"] },
+          entityId: selectedReferral.id,
+          entityType: "PatientReferral",
+        },
+      })
+    : [];
+  const selectedOpportunityState = getOpportunityStateFromAuditLogs(selectedOpportunityLogs);
+  const opportunityAllowsCreateVisit = selectedReferral
+    ? opportunityAllowsVisitCreation({ opportunityState: selectedOpportunityState.state, referralSource: selectedReferral.referralSource })
+    : true;
+  const effectiveCreateVisitAllowed = Boolean(createVisitGate?.allowed && opportunityAllowsCreateVisit);
   const therapistFit = selectedReferral
     ? getTherapistFit({
         active: selectedReferral.assignedTherapist?.active ?? false,
@@ -468,12 +522,12 @@ export default async function NewVisitPage({
 
       {selectedReferral && createVisitGate ? (
         <section
-          data-testid={createVisitGate.allowed ? "ready-referral-selected-panel" : "blocked-referral-selected-panel"}
-          className={`mt-6 rounded-lg border p-5 ${gateToneClassName(createVisitGate.allowed)}`}
+          data-testid={effectiveCreateVisitAllowed ? "ready-referral-selected-panel" : "blocked-referral-selected-panel"}
+          className={`mt-6 rounded-lg border p-5 ${gateToneClassName(effectiveCreateVisitAllowed)}`}
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="eyebrow">{createVisitGate.allowed ? "Ready referral selected" : "Referral is not ready for visit creation"}</p>
+              <p className="eyebrow">{effectiveCreateVisitAllowed ? "Ready referral selected" : "Referral is not ready for visit creation"}</p>
               <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">{selectedReferral.patientName}</h2>
               <p className="mt-2 text-sm leading-6">
                 Safe operational summary only. No full address, phone number, raw SMS, provider payload, clinical details, or PHI is shown.
@@ -500,14 +554,14 @@ export default async function NewVisitPage({
             </div>
             <div className="rounded-lg bg-white/70 p-3 md:col-span-3">
               <dt className="font-semibold text-ink">Readiness state</dt>
-              <dd className="mt-1">{createVisitGate.allowed ? "Ready for guided manual visit creation" : `Blocked: ${createVisitGate.reasons.join(" · ") || "Review required"}`}</dd>
+              <dd className="mt-1">{effectiveCreateVisitAllowed ? "Ready for guided manual visit creation" : `Blocked: ${!opportunityAllowsCreateVisit ? "Therapist opportunity acceptance required" : createVisitGate.reasons.join(" · ") || "Review required"}`}</dd>
             </div>
           </dl>
-          {!createVisitGate.allowed ? (
+          {!effectiveCreateVisitAllowed ? (
             <div className="mt-4 rounded-lg bg-white/70 p-4 text-sm leading-6">
               <p className="font-semibold text-ink">Deterministic blockers</p>
               <ul className="mt-2 list-disc space-y-1 pl-5">
-                {createVisitGate.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                {(!opportunityAllowsCreateVisit ? ["Therapist opportunity acceptance required"] : createVisitGate.reasons).map((reason) => <li key={reason}>{reason}</li>)}
               </ul>
             </div>
           ) : null}
@@ -538,10 +592,10 @@ export default async function NewVisitPage({
               <p className="font-semibold text-ink">Referral intake quality: {intakeQuality.readinessLabel}</p>
               <p className="mt-1">Deterministic local checks only. This panel does not auto-create visits, assign therapists, send SMS, or call external duplicate APIs.</p>
             </div>
-            <span className="inline-flex w-fit rounded-md bg-white/70 px-2.5 py-1 text-xs font-semibold ring-1 ring-current">{createVisitGate?.allowed ? "create-ready" : "review-only"}</span>
+            <span className="inline-flex w-fit rounded-md bg-white/70 px-2.5 py-1 text-xs font-semibold ring-1 ring-current">{effectiveCreateVisitAllowed ? "create-ready" : "review-only"}</span>
           </div>
-          {createVisitGate && !createVisitGate.allowed ? (
-            <p className="mt-3 rounded-md bg-white/70 p-2 font-semibold">Create visit blocked: <span className="font-normal">{createVisitGate.reasons.join(" · ")}</span></p>
+          {createVisitGate && !effectiveCreateVisitAllowed ? (
+            <p className="mt-3 rounded-md bg-white/70 p-2 font-semibold">Create visit blocked: <span className="font-normal">{!opportunityAllowsCreateVisit ? "Therapist opportunity acceptance required" : createVisitGate.reasons.join(" · ")}</span></p>
           ) : null}
           {intakeQuality.warnings.length > 0 ? (
             <div className="mt-3 grid gap-2">
@@ -561,7 +615,7 @@ export default async function NewVisitPage({
         <label className="text-sm font-semibold text-ink">Scheduling timezone<span className="field flex items-center text-slate-500">{FLOWVIA_OPERATIONS_TIME_ZONE}</span></label>
         <label className="text-sm font-semibold text-ink md:col-span-2">Operational note <span className="font-normal text-slate-400">(optional, no PHI or clinical detail)</span><textarea className="field min-h-28" name="notes" /></label>
         <div className="md:col-span-2">
-          {createVisitGate && !createVisitGate.allowed ? (
+          {createVisitGate && !effectiveCreateVisitAllowed ? (
             <button data-testid="visit-create-submit" className="btn-secondary cursor-not-allowed opacity-70" type="submit" disabled><Save size={18} />Review referral first</button>
           ) : (
             <button data-testid="visit-create-submit" className="btn-primary" type="submit"><Save size={18} />Create visit</button>

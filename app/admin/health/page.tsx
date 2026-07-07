@@ -17,6 +17,7 @@ import { getTelnyxConfigStatus } from "@/lib/sms/telnyx";
 import { getSchedulingIntelligenceStatus } from "@/lib/pilot/scheduling-intelligence";
 import { getTherapistFieldWorkflowStatus } from "@/lib/pilot/therapist-field-workflow";
 import { getReferralIntakeQualityStatus } from "@/lib/pilot/referral-intake-quality";
+import { getOpportunityStatus } from "@/lib/pilot/opportunity";
 
 export const metadata: Metadata = {
   title: "Cloud Pilot Health",
@@ -138,6 +139,7 @@ export default async function AdminHealthPage() {
   const schedulingStatus = getSchedulingIntelligenceStatus();
   const therapistFieldWorkflow = getTherapistFieldWorkflowStatus();
   const referralIntakeQuality = getReferralIntakeQualityStatus();
+  const opportunityStatus = getOpportunityStatus();
   const demoResetStatus = getPilotDemoResetStatus();
   const activitySnapshot = await getActivitySnapshot();
   const databaseStorageMode = process.env.DATABASE_URL ? "Postgres" : smsStore.label;
@@ -194,6 +196,16 @@ export default async function AdminHealthPage() {
     { icon: ShieldCheck, metric: { label: "Visit-create ready gate", value: referralIntakeQuality.visitCreateReadyGateEnforced ? "Enabled" : "Disabled", tone: referralIntakeQuality.visitCreateReadyGateEnforced ? "good" : "warn" } },
     { icon: ShieldCheck, metric: { label: "Blocked create audit", value: referralIntakeQuality.visitCreateBlockedAuditEnabled ? "Enabled" : "Disabled", tone: referralIntakeQuality.visitCreateBlockedAuditEnabled ? "good" : "warn" } },
     { icon: ShieldCheck, metric: { label: "Browser smoke coverage", value: referralIntakeQuality.visitCreateBrowserSmokeCoverageEnabled ? "Enabled" : "Disabled", tone: referralIntakeQuality.visitCreateBrowserSmokeCoverageEnabled ? "good" : "warn" } },
+    { icon: BriefcaseMedical, metric: { label: "Therapist opportunity workflow", value: opportunityStatus.enabled ? "Enabled" : "Disabled", tone: opportunityStatus.enabled ? "good" : "warn" } },
+    { icon: BriefcaseMedical, metric: { label: "Opportunity source", value: opportunityStatus.deterministicManualSource ? "deterministic/manual" : "Unknown", tone: opportunityStatus.deterministicManualSource ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Opportunity auto-assignment", value: opportunityStatus.autoAssignmentEnabled ? "Enabled" : "Disabled", tone: opportunityStatus.autoAssignmentEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "Opportunity auto-acceptance", value: opportunityStatus.autoAcceptanceEnabled ? "Enabled" : "Disabled", tone: opportunityStatus.autoAcceptanceEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "SMS from opportunity workflow", value: opportunityStatus.smsSendingEnabled ? "Enabled" : "Disabled", tone: opportunityStatus.smsSendingEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "External matching APIs", value: opportunityStatus.externalMatchingApisEnabled ? "Enabled" : "Disabled", tone: opportunityStatus.externalMatchingApisEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "Opportunity maps/geocoding/travel-time", value: opportunityStatus.mapsGeocodingTravelTimeApisEnabled ? "Enabled" : "Disabled", tone: opportunityStatus.mapsGeocodingTravelTimeApisEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "AI opportunity decisions", value: opportunityStatus.aiOpportunityDecisionsEnabled ? "Enabled" : "Disabled", tone: opportunityStatus.aiOpportunityDecisionsEnabled ? "warn" : "good" } },
+    { icon: ShieldCheck, metric: { label: "Manual accept/decline", value: opportunityStatus.manualAcceptDeclineEnabled ? "Enabled" : "Disabled", tone: opportunityStatus.manualAcceptDeclineEnabled ? "good" : "warn" } },
+    { icon: ShieldCheck, metric: { label: "Opportunity safe audit", value: opportunityStatus.safeAuditEnabled ? "Enabled" : "Disabled", tone: opportunityStatus.safeAuditEnabled ? "good" : "warn" } },
     { icon: ShieldCheck, metric: { label: "Scheduling manual override", value: "Disabled", tone: "good" } },
     { icon: ShieldCheck, metric: { label: "Referral auto-assignment", value: referralIntakeQuality.autoAssignmentEnabled ? "Enabled" : "Disabled", tone: referralIntakeQuality.autoAssignmentEnabled ? "warn" : "good" } },
     { icon: ShieldCheck, metric: { label: "Auto visit creation from referral", value: referralIntakeQuality.autoVisitCreationEnabled ? "Enabled" : "Disabled", tone: referralIntakeQuality.autoVisitCreationEnabled ? "warn" : "good" } },

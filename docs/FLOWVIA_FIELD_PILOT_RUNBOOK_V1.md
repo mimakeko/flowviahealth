@@ -49,16 +49,16 @@ Internal dashboard/admin/workspace routes:
 - `/dashboard`: Prisma-backed pilot operations overview.
 - `/admin/referrals`: admin referral operations queue.
 - `/admin/referrals/new`: manual fake-data referral intake for pilot testing.
-- `/admin/referrals/[id]`: admin referral decision workspace with assignment, safe visit history, audit view, readiness blockers, safety guarantees, and gated manual create-visit link.
+- `/admin/referrals/[id]`: admin referral decision workspace with assignment, safe visit history, audit view, readiness blockers, therapist opportunity offer panel, safety guarantees, and gated manual create-visit link.
 - `/admin/visits`: admin visit operations queue.
 - `/admin/visits/new`: guided manual fake-data visit creation. When opened from a ready referral, it preselects the referral and assigned therapist, shows deterministic business-day windows, and still requires explicit manual submit.
 - `/admin/visits/[id]`: visit lifecycle detail, safe created-success banner, referral/visit operations links, and audit view.
-- `/admin/scheduling`: admin-only deterministic scheduling intelligence.
+- `/admin/scheduling`: admin-only deterministic scheduling intelligence with accepted, awaiting-therapist-acceptance, and review-only referral lanes.
 - `/admin/messages`: read-only SMS consent/message ledger.
 - `/admin/health`: admin-only cloud pilot health center.
 - `/admin/audit`: admin-only audit trail with safe metadata summaries.
 - `/admin/data`: admin-only data stewardship for fake/personal-number pilot data.
-- `/my-work`: therapist demo worklist.
+- `/my-work`: therapist demo worklist with assigned visits, assigned referrals, and manual referral opportunity accept/decline cards.
 
 Internal routes use the shared dashboard shell and sidebar after pilot login. Public pages use the public website header/footer.
 
@@ -186,6 +186,13 @@ Guided visit creation smoke:
 - It confirms a ready referral can reach the guided flow, blocked referrals remain blocked, an existing open/future visit prevents duplicate creation, `visit_create_blocked` audit metadata exists, and no SMS/maps/geocoding/travel-time/external AI/API path is introduced.
 - The browser auth smoke covers the read-only UI path: ready `Create visit` links open `/admin/visits/new?referralId=...`, the ready selected panel appears, referral and therapist fields are preselected, `Use this window` only fills `scheduledAt`, blocked referrals show the blocked panel, and no submit is clicked.
 
+Therapist opportunity workflow smoke:
+
+- `pnpm opportunity:workflow-smoke` verifies deterministic opportunity state from safe audit events.
+- It confirms only safe assigned active referrals can be offered, blocked referrals cannot be offered, therapist accept requires the exact offered therapist, decline requires a fixed safe reason, accepted opportunities can pass scheduling readiness only when the existing ready gate passes, and declined opportunities suppress `Create visit`.
+- It also verifies safe audit metadata, no SMS writes, no external AI/API/maps/geocoding/travel-time calls, and source coverage for `/admin/referrals`, `/admin/scheduling`, `/admin/visits/new`, `/my-work`, `/admin/health`, `/admin/audit`, and browser smoke.
+- Browser auth smoke remains read-only: it checks opportunity badges, the referral detail opportunity panel, scheduling accepted/awaiting distinctions, Health Center safety cards, and optional therapist `/my-work` opportunity cards without clicking offer, accept, decline, or visit submit actions.
+
 Protected routes:
 
 - `/dashboard`
@@ -222,6 +229,7 @@ Run:
 pnpm db:generate
 pnpm auth:smoke
 pnpm visits:ready-create-smoke
+pnpm opportunity:workflow-smoke
 pnpm test:telnyx
 pnpm ops:guardrail-smoke
 pnpm lint

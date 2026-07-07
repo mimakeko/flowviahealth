@@ -8,6 +8,8 @@ Product boundary: Flowvia is a therapist-first operational intelligence workspac
 
 Guided visit creation boundary: ready referrals may open `/admin/visits/new?referralId=...`, but visit creation remains manual-only. The ready gate is enforced server-side, blocked attempts are audited, suggested windows only fill a datetime field, and no SMS, maps/geocoding/travel-time, external AI/API, auto-assignment, or auto-visit creation is enabled.
 
+Therapist opportunity boundary: admins may manually offer safe assigned fake/demo referrals, and therapists may manually accept or decline with fixed safe reasons. Opportunity state is audit-derived and deterministic; it must not send SMS, auto-assign, auto-accept, auto-create visits, call external matching/AI/maps/geocoding/travel-time APIs, or become EMR/billing/OASIS/claims functionality.
+
 ## Tomorrow Checklist
 
 1. Review git status.
@@ -23,6 +25,7 @@ Guided visit creation boundary: ready referrals may open `/admin/visits/new?refe
    pnpm notes:classification-smoke
    pnpm ops:guardrail-smoke
    pnpm visits:ready-create-smoke
+   pnpm opportunity:workflow-smoke
    pnpm browser:auth-smoke
    FLOWVIA_ALLOW_REAL_SMS_TEST=false FLOWVIA_SMS_STORE_MODE=test pnpm test:telnyx
    pnpm cloud:readiness
@@ -47,16 +50,16 @@ Guided visit creation boundary: ready referrals may open `/admin/visits/new?refe
    FLOWVIA_ALLOW_REAL_SMS_TEST=false FLOWVIA_SMS_STORE_MODE=test pnpm sms-consent:route-smoke
    FLOWVIA_ALLOW_REAL_SMS_TEST=false FLOWVIA_SMS_STORE_MODE=test pnpm telnyx:webhook-smoke
    FLOWVIA_ALLOW_REAL_SMS_TEST=false FLOWVIA_SMS_STORE_MODE=test \
-     FLOWVIA_AUTH_SMOKE_EMAIL='support@flowviahealth.com' \
-     FLOWVIA_AUTH_SMOKE_PASSWORD='FlowviaTest123!' \
-     FLOWVIA_AUTH_SMOKE_THERAPIST_EMAIL='demo.north.dallas@flowviahealth.test' \
-     FLOWVIA_AUTH_SMOKE_THERAPIST_PASSWORD='FlowviaTherapist123!' \
+     FLOWVIA_AUTH_SMOKE_EMAIL="$FLOWVIA_AUTH_SMOKE_EMAIL" \
+     FLOWVIA_AUTH_SMOKE_PASSWORD="$FLOWVIA_AUTH_SMOKE_PASSWORD" \
+     FLOWVIA_AUTH_SMOKE_THERAPIST_EMAIL="$FLOWVIA_AUTH_SMOKE_THERAPIST_EMAIL" \
+     FLOWVIA_AUTH_SMOKE_THERAPIST_PASSWORD="$FLOWVIA_AUTH_SMOKE_THERAPIST_PASSWORD" \
      pnpm auth:route-smoke
    FLOWVIA_ALLOW_REAL_SMS_TEST=false FLOWVIA_SMS_STORE_MODE=test \
-     FLOWVIA_BROWSER_SMOKE_ADMIN_EMAIL='support@flowviahealth.com' \
-     FLOWVIA_BROWSER_SMOKE_ADMIN_PASSWORD='FlowviaTest123!' \
-     FLOWVIA_BROWSER_SMOKE_THERAPIST_EMAIL='demo.north.dallas@flowviahealth.test' \
-     FLOWVIA_BROWSER_SMOKE_THERAPIST_PASSWORD='FlowviaTherapist123!' \
+     FLOWVIA_BROWSER_SMOKE_ADMIN_EMAIL="$FLOWVIA_BROWSER_SMOKE_ADMIN_EMAIL" \
+     FLOWVIA_BROWSER_SMOKE_ADMIN_PASSWORD="$FLOWVIA_BROWSER_SMOKE_ADMIN_PASSWORD" \
+     FLOWVIA_BROWSER_SMOKE_THERAPIST_EMAIL="$FLOWVIA_BROWSER_SMOKE_THERAPIST_EMAIL" \
+     FLOWVIA_BROWSER_SMOKE_THERAPIST_PASSWORD="$FLOWVIA_BROWSER_SMOKE_THERAPIST_PASSWORD" \
      pnpm browser:auth-smoke
    ```
 
@@ -217,14 +220,15 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 3. Open `/admin/referrals`, filter for `New`, `Contacted`, or `Needs scheduling`, then update assignment and visit scheduling only with fake pilot data.
 4. Open `/admin/visits`, filter for `Upcoming`, `Needs scheduling`, or in-progress visits, then update lifecycle status and no-PHI operational notes.
 5. Have therapists review `/my-work`; therapist actions stay limited to operational status and note updates, with no assignment, SMS send, or bulk controls. Confirm calm empty states, compact next action, no horizontal overflow on phone/iPad, safe one-time banners, and terminal-state locks.
-6. Open `/admin/audit` and confirm recent status, assignment, visit, SMS consent, and permission events look expected with safe metadata only.
-7. Open `/admin/data` only for fake-data stewardship; verify it shows audit-preserving cleanup and does not expose full phone numbers, raw SMS bodies, secrets, or provider payloads.
-8. Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
-9. Confirm Vercel logs show no 500s on `/dashboard`, `/admin/referrals`, `/admin/visits`, `/admin/messages`, `/admin/health`, `/admin/audit`, or `/admin/data`.
-10. Confirm no `EMAXCONNSESSION` errors are present.
-11. Confirm no TLS or certificate errors are present.
-12. Confirm data mode remains `personal_test` or `phi_blocked`; never enable PHI for the pilot.
-13. Remind operators that notes must not include diagnosis, symptoms, treatment details, medication, emergency details, wound details, therapy plans, pain scores, full addresses, or clinical narratives.
+6. Confirm `/my-work` shows only referral opportunities offered to the selected/logged-in therapist; accept/decline stays manual, no-PHI, and no-SMS.
+7. Open `/admin/audit` and confirm recent status, assignment, visit, opportunity, SMS consent, and permission events look expected with safe metadata only.
+8. Open `/admin/data` only for fake-data stewardship; verify it shows audit-preserving cleanup and does not expose full phone numbers, raw SMS bodies, secrets, or provider payloads.
+9. Confirm Real SMS gate is Off except during an explicit controlled personal-phone test window.
+10. Confirm Vercel logs show no 500s on `/dashboard`, `/admin/referrals`, `/admin/visits`, `/admin/messages`, `/admin/health`, `/admin/audit`, or `/admin/data`.
+11. Confirm no `EMAXCONNSESSION` errors are present.
+12. Confirm no TLS or certificate errors are present.
+13. Confirm data mode remains `personal_test` or `phi_blocked`; never enable PHI for the pilot.
+14. Remind operators that notes must not include diagnosis, symptoms, treatment details, medication, emergency details, wound details, therapy plans, pain scores, full addresses, or clinical narratives.
 
 ## Pilot Data Stewardship Policy
 
@@ -251,10 +255,22 @@ If a staging check fails, stop the cutover and keep Telnyx pointed away from the
 - Suggested windows are business-day only for the next 5 operations business days, using 9:00 AM, 11:00 AM, 1:00 PM, and 3:00 PM local slots.
 - `Use this window` fills the manual visit form scheduled datetime field only; it must not submit, create a visit, send SMS, or bypass human review.
 - `/admin/scheduling` must show `Create visit` only for referrals that pass the deterministic create-visit gate. Duplicate-review, opted-out/non-SMS, missing intake, missing therapist, terminal, archived, and explicit smoke/test rows are review-only.
+- Demo/opportunity rows must also require an accepted therapist opportunity before `Create visit` appears. Ready but unaccepted rows should remain reviewable in an awaiting-therapist-acceptance lane.
 - Suggested windows are operational suggestions only; humans must create or update visits manually.
 - No autonomous scheduling, SMS sending, therapist assignment, or record mutation is allowed from scheduling suggestions.
 - No PHI, full street addresses, raw SMS bodies, secrets, diagnosis, treatment details, or clinical guidance should appear in scheduling intelligence.
 - Before/after deploy, confirm `/admin/health` reports scheduling intelligence enabled, source deterministic, business-day-only windows, external APIs disabled, maps/geocoding disabled, travel-time APIs disabled, external AI disabled, autonomous scheduling disabled, and no-PHI enforcement on.
+
+## Therapist Opportunity Acceptance Policy
+
+- Therapist opportunities are fake/demo operational staffing signals only, not patient acceptance, clinical documentation, billing, claims, OASIS, or EMR workflow.
+- `/admin/referrals/[id]` may offer an opportunity only when the referral is active/contacted enough for review, assigned to a therapist, not terminal, not archived, not smoke/test, not duplicate-blocked, not opted out/non-SMS, and free of intake blockers.
+- Opportunity state is derived from safe audit events and must not require schema or hidden mutable state: `opportunity_offered`, `opportunity_accepted`, `opportunity_declined`, and `opportunity_action_blocked`.
+- `/my-work` should show only opportunities offered to the selected/logged-in therapist. Accept and decline actions are manual, therapist-scoped, safe-audited, and do not create visits or reassign work.
+- Decline requires a fixed safe reason and optional no-PHI note classification; raw unsafe note bodies, full phone numbers, full addresses, raw SMS bodies, provider payloads, secrets, and PHI must not be displayed.
+- The workflow must not send SMS, call external matching/AI/maps/geocoding/travel-time APIs, auto-assign, auto-accept, auto-create visits, or bypass existing create-visit gates.
+- `/admin/health` should show Therapist opportunity workflow enabled, deterministic/manual source, auto-assignment disabled, auto-acceptance disabled, SMS from opportunity workflow disabled, external matching APIs disabled, maps/geocoding/travel-time APIs disabled, AI opportunity decisions disabled, manual accept/decline enabled, and safe audit enabled.
+- Run `pnpm opportunity:workflow-smoke` after changes to opportunity gates, audit metadata, scheduling readiness, `/my-work`, `/admin/referrals`, `/admin/visits/new`, `/admin/health`, `/admin/audit`, or browser smoke coverage.
 
 ## Referral Intake Quality Policy
 

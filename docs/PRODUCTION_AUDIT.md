@@ -38,3 +38,10 @@ Project: Flowvia Health
 - Fix/add the `www.flowviahealth.com` Vercel domain certificate or redirect strategy.
 - Deploy to Vercel and run real Resend dashboard/inbox verification.
 - Add branded Open Graph image assets.
+
+## Pilot Workflow Addendum
+
+- Therapist Opportunity Acceptance is implemented as a fake/demo-data operational workflow, not clinical acceptance or EMR documentation.
+- State is derived from safe audit events: `opportunity_offered`, `opportunity_accepted`, `opportunity_declined`, and `opportunity_action_blocked`.
+- Admin offer, therapist accept, and therapist decline are manual-only. The workflow sends no SMS, performs no auto-assignment or auto-acceptance, creates no visits automatically, and calls no external AI, matching, maps, geocoding, or travel-time APIs.
+- Validation command: `pnpm opportunity:workflow-smoke`.

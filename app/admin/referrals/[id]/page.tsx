@@ -39,6 +39,13 @@ import {
   type ReferralIntakeDuplicateSource,
   type ReferralIntakeQualityResult,
 } from "@/lib/pilot/referral-intake-quality";
+import {
+  canOfferReferralOpportunity,
+  getOpportunityStateFromAuditLogs,
+  opportunityAllowsVisitCreation,
+  opportunityBadgeClassName,
+  opportunityStateLabel,
+} from "@/lib/pilot/opportunity";
 import { normalizeE164Phone } from "@/lib/sms/compliance";
 import { getTelnyxConfigStatus } from "@/lib/sms/telnyx";
 
@@ -66,8 +73,11 @@ type ReferralDetailVisit = {
 type AuditLogListItem = {
   id: string;
   action: string;
+  actorId: string | null;
   actorType: string;
   createdAt: Date | string;
+  entityId: string | null;
+  metadataJson: unknown;
 };
 
 type DuplicateReferralRow = {
@@ -497,6 +507,73 @@ async function saveVisitAction(formData: FormData) {
   redirect(`/admin/referrals/${referralId}`);
 }
 
+async function offerOpportunityAction(formData: FormData) {
+  "use server";
+
+  requirePilotOperationsAccess();
+  const session = await requirePilotSession(["admin"], "/admin/referrals");
+
+  const prisma = getPrismaClient();
+  const referralId = textField(formData.get("referralId"), 80);
+  if (!referralId) notFound();
+
+  const [referral, existingOpportunityLogs] = await Promise.all([
+    prisma.patientReferral.findUnique({
+      select: { assignedTherapistId: true },
+      where: { id: referralId },
+    }),
+    prisma.auditLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      where: {
+        action: { in: ["opportunity_offered", "opportunity_accepted", "opportunity_declined", "opportunity_action_blocked"] },
+        entityId: referralId,
+        entityType: "PatientReferral",
+      },
+    }),
+  ]);
+  if (!referral) notFound();
+
+  const createVisitGate = await getCreateVisitGateForReferral(prisma, referralId);
+  const opportunityState = getOpportunityStateFromAuditLogs(existingOpportunityLogs).state;
+  const allowed = Boolean(createVisitGate?.allowed && referral.assignedTherapistId && (opportunityState === "not_offered" || opportunityState === "declined"));
+
+  if (!allowed) {
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.email,
+        actorType: "pilot_admin",
+        action: "opportunity_action_blocked",
+        entityType: "PatientReferral",
+        entityId: referralId,
+        metadataJson: {
+          attemptedAction: "offer",
+          reason: createVisitGate?.reasons.slice(0, 5).join(",") || "not_offer_ready",
+          route: `/admin/referrals/${referralId}`,
+          therapistId: referral.assignedTherapistId || null,
+        },
+      },
+    });
+    redirect(`/admin/referrals/${referralId}?error=opportunity_offer_blocked`);
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      actorId: session.email,
+      actorType: "pilot_admin",
+      action: "opportunity_offered",
+      entityType: "PatientReferral",
+      entityId: referralId,
+      metadataJson: {
+        source: "deterministic_manual",
+        therapistId: referral.assignedTherapistId,
+      },
+    },
+  });
+
+  redirect(`/admin/referrals/${referralId}`);
+}
+
 export default async function ReferralDetailPage({
   params,
   searchParams,
@@ -570,6 +647,7 @@ export default async function ReferralDetailPage({
     prisma.patientReferral.count({ where: activeWorkflowWhereClause({ id: referral.id }) }),
   ]);
   const referralAuditLogs = auditLogs as AuditLogListItem[];
+  const opportunityState = getOpportunityStateFromAuditLogs(referralAuditLogs);
   const intakeAuditLogs = referralAuditLogs.filter((log: AuditLogListItem) => INTAKE_AUDIT_ACTIONS.has(log.action));
   const smsReadiness = smsConsent?.status || "none";
   const futureOpenVisitCount = referralVisits.filter((visit: ReferralDetailVisit) => ["scheduled", "in_progress"].includes(visit.status)).length;
@@ -615,6 +693,18 @@ export default async function ReferralDetailPage({
     smsConsentStatus: smsReadiness,
     status: referral.status,
     zip: referral.zip,
+  });
+  const opportunityOfferGate = canOfferReferralOpportunity({
+    activeWorkflowVisible: activeWorkflowVisible > 0,
+    assignedTherapistId: referral.assignedTherapistId,
+    createVisitGate,
+    intakeQuality,
+    opportunityState: opportunityState.state,
+    status: referral.status,
+  });
+  const opportunityAllowsCreateVisit = opportunityAllowsVisitCreation({
+    opportunityState: opportunityState.state,
+    referralSource: referral.referralSource,
   });
   const referralDecision = getReferralDecision({ createVisitGate, intakeQuality, smsReadiness });
   const decisionReasons = uniqueStrings([
@@ -741,6 +831,12 @@ export default async function ReferralDetailPage({
             </section>
           ) : null}
 
+          {query?.error === "opportunity_offer_blocked" ? (
+            <section className="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-950">
+              Opportunity offer was blocked by deterministic safety checks. Review therapist assignment and readiness before offering.
+            </section>
+          ) : null}
+
           <section className="mt-5 rounded-lg border border-line bg-white p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -756,13 +852,13 @@ export default async function ReferralDetailPage({
             <div className={`mt-4 rounded-lg border p-4 text-sm leading-6 ${createVisitGate.allowed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
               <p className="font-semibold">Next manual admin step</p>
               <p className="mt-1">{referralDecision.nextStep}</p>
-              {createVisitGate.allowed ? (
+              {createVisitGate.allowed && opportunityAllowsCreateVisit ? (
                 <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-primary mt-3">
                   <CalendarPlus size={18} />
                   Create visit
                 </Link>
               ) : (
-                <p className="mt-3 rounded-md bg-white/70 p-2 font-semibold">Create visit is suppressed until review blockers are resolved.</p>
+                <p className="mt-3 rounded-md bg-white/70 p-2 font-semibold">{createVisitGate.allowed ? "Create visit is suppressed until therapist acceptance is recorded." : "Create visit is suppressed until review blockers are resolved."}</p>
               )}
             </div>
 
@@ -852,6 +948,40 @@ export default async function ReferralDetailPage({
             </div>
           </section>
 
+          <section data-testid="therapist-opportunity-panel" className="mt-5 rounded-lg border border-line bg-white p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="eyebrow">Therapist opportunity</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">{opportunityStateLabel(opportunityState.state)}</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Manual staffing opportunity review only. This does not create a visit, send SMS, auto-assign, auto-accept, or call external matching services.
+                </p>
+              </div>
+              <span className={`inline-flex w-fit rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(opportunityState.state)}`}>
+                {opportunityStateLabel(opportunityState.state)}
+              </span>
+            </div>
+            <dl className="mt-5 grid gap-3 text-sm md:grid-cols-3">
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Assigned therapist</dt><dd className="mt-1 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</dd></div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Offer readiness</dt><dd className="mt-1 text-slate-600">{opportunityOfferGate.allowed ? "Safe to offer" : "Review required"}</dd></div>
+              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Source</dt><dd className="mt-1 text-slate-600">deterministic/manual</dd></div>
+            </dl>
+            {opportunityOfferGate.allowed ? (
+              <form action={offerOpportunityAction} className="mt-4">
+                <input type="hidden" name="referralId" value={referral.id} />
+                <button className="btn-primary" type="submit">Offer to assigned therapist</button>
+              </form>
+            ) : (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+                <p className="font-semibold">Cannot offer yet</p>
+                <p className="mt-1">{opportunityOfferGate.reasons.join(" · ") || "Already offered or accepted."}</p>
+              </div>
+            )}
+            <div className="mt-4 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600">
+              Safety guarantees: no PHI fields, no full address, no SMS send, no auto scheduling, no automatic therapist matching, no EMR/billing/OASIS/claims workflow.
+            </div>
+          </section>
+
           <div className="mt-5">
             <OperationsAssistantPanel
               cards={assistantCards}
@@ -868,7 +998,7 @@ export default async function ReferralDetailPage({
               summary="Referral scheduling readiness uses fake pilot status, therapist assignment, SMS consent state, and existing future visits. Suggested windows require manual review."
               windows={suggestedWindows}
             />
-            {createVisitGate.allowed ? (
+            {createVisitGate.allowed && opportunityAllowsCreateVisit ? (
               <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-secondary mt-4">
                 <CalendarPlus size={18} />
                 Open Create visit flow
@@ -939,14 +1069,14 @@ export default async function ReferralDetailPage({
         </div>
 
         <div className="mt-6 border-t border-line pt-6">
-          {createVisitGate.allowed ? (
+          {createVisitGate.allowed && opportunityAllowsCreateVisit ? (
             <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-primary">
               <CalendarPlus size={18} />
               Create visit
             </Link>
           ) : (
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-950">
-              Create visit is review-only from this referral. Resolve the decision panel blockers before opening the manual visit creation flow.
+              {createVisitGate.allowed ? "Create visit is suppressed until therapist acceptance is recorded." : "Create visit is review-only from this referral. Resolve the decision panel blockers before opening the manual visit creation flow."}
             </p>
           )}
         </div>

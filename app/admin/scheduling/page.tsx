@@ -14,6 +14,13 @@ import {
   type ReferralIntakeQualityResult,
 } from "@/lib/pilot/referral-intake-quality";
 import {
+  getOpportunityStatesByReferralId,
+  opportunityAllowsVisitCreation,
+  opportunityBadgeClassName,
+  opportunityStateLabel,
+  type OpportunityStateResult,
+} from "@/lib/pilot/opportunity";
+import {
   detectVisitConflicts,
   getSchedulingQueueCards,
   getSchedulingReadiness,
@@ -52,6 +59,7 @@ type SchedulingReferralRow = {
 type SchedulingQualityReferralRow = SchedulingReferralRow & {
   createVisitGate: CreateVisitGateResult;
   intakeQuality: ReferralIntakeQualityResult;
+  opportunityState: OpportunityStateResult;
   smsConsentStatus: string;
 };
 
@@ -156,12 +164,26 @@ export default async function AdminSchedulingPage() {
   const referralRows = schedulingReferrals as SchedulingReferralRow[];
   const duplicateSourceRows = duplicateSources(referralRows);
   const normalizedPhones = Array.from(new Set(referralRows.map((referral: SchedulingReferralRow) => normalizeE164Phone(referral.phone)).filter(Boolean)));
-  const smsConsentRows = normalizedPhones.length > 0
-    ? await prisma.smsConsentEnrollment.findMany({
+  const [smsConsentRows, opportunityLogs] = await Promise.all([
+    normalizedPhones.length > 0
+      ? prisma.smsConsentEnrollment.findMany({
         select: { normalizedPhone: true, status: true },
         where: { normalizedPhone: { in: normalizedPhones } },
       })
-    : [];
+      : Promise.resolve([]),
+    referralRows.length > 0
+      ? prisma.auditLog.findMany({
+          orderBy: { createdAt: "desc" },
+          select: { action: true, actorId: true, actorType: true, createdAt: true, entityId: true, metadataJson: true },
+          where: {
+            action: { in: ["opportunity_offered", "opportunity_accepted", "opportunity_declined", "opportunity_action_blocked"] },
+            entityId: { in: referralRows.map((referral: SchedulingReferralRow) => referral.id) },
+            entityType: "PatientReferral",
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+  const opportunityStates = getOpportunityStatesByReferralId(opportunityLogs);
   const smsConsentByPhone = Object.fromEntries(smsConsentRows.map((row) => [row.normalizedPhone, row.status]));
   const qualityRows: SchedulingQualityReferralRow[] = referralRows.map((referral: SchedulingReferralRow) => {
     const smsConsentStatus = smsConsentByPhone[normalizeE164Phone(referral.phone)] || "none";
@@ -205,10 +227,12 @@ export default async function AdminSchedulingPage() {
         zip: referral.zip,
       }),
       intakeQuality,
+      opportunityState: opportunityStates.get(referral.id) || { state: "not_offered" },
       smsConsentStatus,
     };
   });
-  const readyToCreateRows = qualityRows.filter((referral: SchedulingQualityReferralRow) => referral.createVisitGate.allowed);
+  const readyToCreateRows = qualityRows.filter((referral: SchedulingQualityReferralRow) => referral.createVisitGate.allowed && opportunityAllowsVisitCreation({ opportunityState: referral.opportunityState.state, referralSource: referral.referralSource }));
+  const awaitingAcceptanceRows = qualityRows.filter((referral: SchedulingQualityReferralRow) => referral.createVisitGate.allowed && !opportunityAllowsVisitCreation({ opportunityState: referral.opportunityState.state, referralSource: referral.referralSource }));
   const needsReviewRows = qualityRows.filter((referral: SchedulingQualityReferralRow) => !referral.createVisitGate.allowed);
   const visitRows = upcomingVisits as SchedulingVisitRow[];
   const pastOpenVisits = visitRows.filter((visit: SchedulingVisitRow) => visit.scheduledAt && visit.scheduledAt < now).length;
@@ -275,6 +299,7 @@ export default async function AdminSchedulingPage() {
                       <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>{statusLabel(referral.status)}</span>
                     </div>
                     <p className="mt-1 text-sm text-slate-600">{referral.intakeQuality.readinessLabel} · {readiness.readiness.replaceAll("_", " ")} · {fit.label.replaceAll("_", " ")} · {referral.assignedTherapist?.name || "Unassigned"}</p>
+                    <span className={`mt-2 inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>{opportunityStateLabel(referral.opportunityState.state)}</span>
                     <p className="mt-1 text-xs text-slate-500">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -285,6 +310,23 @@ export default async function AdminSchedulingPage() {
               );
             })}
             {readyToCreateRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No create-ready referrals found.</p> : null}
+          </div>
+
+          <h2 className="mb-3 mt-6 text-xl font-semibold tracking-[-.02em] text-ink">Awaiting therapist acceptance</h2>
+          <div data-testid="scheduling-awaiting-opportunity-acceptance" className="overflow-hidden rounded-lg border border-line bg-white">
+            {awaitingAcceptanceRows.map((referral: SchedulingQualityReferralRow) => (
+              <div key={referral.id} className="grid gap-3 border-b border-line p-4 last:border-b-0 md:grid-cols-[1fr_auto] md:items-center">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-ink">{referral.patientName}</p>
+                    <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>{opportunityStateLabel(referral.opportunityState.state)}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">Ready gate passed, but therapist acceptance is required before Create visit is shown for this demo/opportunity row.</p>
+                </div>
+                <Link href={`/admin/referrals/${referral.id}`} className="font-semibold text-blue underline">Open</Link>
+              </div>
+            ))}
+            {awaitingAcceptanceRows.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No ready referrals are awaiting therapist acceptance.</p> : null}
           </div>
 
           <h2 className="mb-3 mt-6 text-xl font-semibold tracking-[-.02em] text-ink">Needs review before scheduling</h2>

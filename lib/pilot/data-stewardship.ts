@@ -423,7 +423,7 @@ async function seedDemoScenariosInTransaction(
   }
 
   if (selected.has("ready_to_schedule")) {
-    await trackReferral(createDemoReferral(tx, {
+    const readyReferral = await trackReferral(createDemoReferral(tx, {
       assignedTherapistId: northDallas.id,
       careType: "Demo mobility visit",
       city: "Dallas",
@@ -432,6 +432,74 @@ async function seedDemoScenariosInTransaction(
       phone: "+15550102101",
       status: "contacted",
       zip: "75230",
+    }));
+    await tx.auditLog.create({
+      data: {
+        actorType: "pilot_admin",
+        action: "opportunity_accepted",
+        entityType: "PatientReferral",
+        entityId: readyReferral.id,
+        metadataJson: {
+          source: "demo_scenario_seed",
+          therapistId: northDallas.id,
+        },
+      },
+    });
+    const offeredReferral = await trackReferral(createDemoReferral(tx, {
+      assignedTherapistId: planoFrisco.id,
+      careType: "Demo opportunity awaiting response",
+      city: "Frisco",
+      emailSlug: "demo.opportunity.offered",
+      patientName: "Demo Scenario Opportunity Offered",
+      phone: "+15550102109",
+      status: "contacted",
+      zip: "75035",
+    }));
+    await tx.auditLog.create({
+      data: {
+        actorType: "pilot_admin",
+        action: "opportunity_offered",
+        entityType: "PatientReferral",
+        entityId: offeredReferral.id,
+        metadataJson: {
+          source: "demo_scenario_seed",
+          therapistId: planoFrisco.id,
+        },
+      },
+    });
+    const declinedReferral = await trackReferral(createDemoReferral(tx, {
+      assignedTherapistId: mckinneyAllen.id,
+      careType: "Demo declined opportunity",
+      city: "McKinney",
+      emailSlug: "demo.opportunity.declined",
+      patientName: "Demo Scenario Opportunity Declined",
+      phone: "+15550102110",
+      status: "contacted",
+      zip: "75071",
+    }));
+    await tx.auditLog.create({
+      data: {
+        actorType: "therapist_pilot",
+        action: "opportunity_declined",
+        entityType: "PatientReferral",
+        entityId: declinedReferral.id,
+        metadataJson: {
+          declineReason: "outside_territory",
+          noteAdded: false,
+          source: "demo_scenario_seed",
+          therapistId: mckinneyAllen.id,
+        },
+      },
+    });
+    await trackReferral(createDemoReferral(tx, {
+      assignedTherapistId: northDallas.id,
+      careType: "Demo ready not offered",
+      city: "Carrollton",
+      emailSlug: "demo.opportunity.not.offered",
+      patientName: "Demo Scenario Opportunity Not Offered",
+      phone: "+15550102111",
+      status: "contacted",
+      zip: "75007",
     }));
   }
 
