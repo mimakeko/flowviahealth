@@ -38,6 +38,17 @@ button, input, textarea { font: inherit; }
   .field { @apply mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-[15px] text-ink outline-none transition placeholder:text-slate-400 focus:border-blue focus:ring-4 focus:ring-blue/10; }
 }
 
+@media (max-width: 1023px) {
+  #main-content > .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #main-content .grid > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
 .route-line { position: absolute; pointer-events: none; opacity: .68; }
 .route-line path { stroke-dasharray: 7 8; }
 .concept-label { @apply inline-flex items-center gap-1.5 rounded-md bg-ice px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-blue; }

@@ -96,8 +96,8 @@ export default async function AdminMessagesPage() {
           </div>
         </div>
 
-        <section className="mt-4 rounded-lg border border-line bg-white p-5">
-          <div className="text-sm font-semibold text-slate-600">Cloud staging status</div>
+        <details className="mt-4 rounded-lg border border-line bg-white p-5">
+          <summary className="cursor-pointer text-sm font-semibold text-ink">Cloud staging and policy detail</summary>
           <dl className="mt-3 grid gap-2 text-sm md:grid-cols-2 xl:grid-cols-4">
             <div className="flex justify-between gap-3"><dt>Deploy target</dt><dd className="font-semibold text-ink">{deployTarget}</dd></div>
             <div className="flex justify-between gap-3"><dt>Data mode</dt><dd className="font-semibold text-ink">{dataMode.safeLabel}</dd></div>
@@ -112,7 +112,7 @@ export default async function AdminMessagesPage() {
             <div className="flex justify-between gap-3"><dt>Last inbound SMS</dt><dd className="font-semibold text-ink">{formatTimestamp(latestInboundMessage?.timestamp)}</dd></div>
             <div className="flex justify-between gap-3"><dt>Last outbound SMS</dt><dd className="font-semibold text-ink">{formatTimestamp(latestOutboundMessage?.timestamp)}</dd></div>
           </dl>
-        </section>
+        </details>
 
         {warnings.length > 0 ? (
           <section className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-950">
@@ -208,8 +208,8 @@ export default async function AdminMessagesPage() {
           </div>
         </section>
 
-        <section className="mt-8">
-          <h2 className="mb-4 text-xl font-semibold tracking-[-.02em] text-ink">Recent webhook events</h2>
+        <details className="mt-8 rounded-lg border border-line bg-white p-4">
+          <summary className="cursor-pointer text-xl font-semibold tracking-[-.02em] text-ink">Recent webhook events ({(snapshot.webhookEvents ?? []).length})</summary>
           <div className="overflow-x-auto rounded-lg border border-line bg-white">
             <table className="min-w-full divide-y divide-line text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
@@ -235,7 +235,7 @@ export default async function AdminMessagesPage() {
               </tbody>
             </table>
           </div>
-        </section>
+        </details>
     </div>
   );
 }

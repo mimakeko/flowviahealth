@@ -70,6 +70,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
   const dataMode = getFlowviaDataModeStatus();
   const isAdmin = section === "admin";
   const isWorkspace = section === "workspace";
+  const isContentFirst = isAdmin || isWorkspace || section === "dashboard";
   const renderNavigation = () => (
     <nav aria-label="Internal workspace navigation" className="grid gap-1">
       {navItems.map((item) => {
@@ -158,28 +159,14 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
         </div>
       </header>
 
-      <div className="container-page grid gap-5 py-4 sm:py-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:py-8">
-        <aside className={`${isWorkspace ? "order-2 border-0 bg-transparent p-0 shadow-none lg:order-1 lg:rounded-lg lg:border lg:border-line lg:bg-white lg:p-3 lg:shadow-[0_10px_30px_rgba(10,37,64,0.05)]" : "rounded-lg border border-line bg-white p-3 shadow-[0_10px_30px_rgba(10,37,64,0.05)]"} h-fit lg:sticky lg:top-6`}>
-          {isWorkspace ? (
+      <div className="container-page grid grid-cols-[minmax(0,1fr)] gap-5 py-4 sm:py-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:py-8">
+        <aside className={`${isContentFirst ? "order-2 border-0 bg-transparent p-0 shadow-none lg:order-1 lg:rounded-lg lg:border lg:border-line lg:bg-white lg:p-3 lg:shadow-[0_10px_30px_rgba(10,37,64,0.05)]" : "rounded-lg border border-line bg-white p-3 shadow-[0_10px_30px_rgba(10,37,64,0.05)]"} h-fit lg:sticky lg:top-6`}>
+          {isContentFirst ? (
             <>
               <details className="rounded-lg border border-line bg-white lg:hidden">
                 <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
-                  <span>Menu</span>
-                  <span className="text-xs font-semibold text-blue">Field workspace</span>
-                </summary>
-                <div className="border-t border-line p-3">
-                  {renderNavigation()}
-                </div>
-              </details>
-              <div className="hidden lg:block">
-                {renderNavigation()}
-              </div>
-            </>
-          ) : isAdmin ? (
-            <>
-              <details className="rounded-lg border border-line bg-white lg:hidden">
-                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
-                  <span>Admin menu</span>
+                  <span>{isAdmin ? "Admin menu" : "Menu"}</span>
+                  <span className="text-xs font-semibold text-blue">{isWorkspace ? "Field workspace" : "Workspace navigation"}</span>
                 </summary>
                 <div className="border-t border-line p-3">
                   {renderNavigation()}
@@ -204,7 +191,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             </div>
           </details>
 
-          <div className={`${isWorkspace || isAdmin ? "hidden lg:block" : ""} mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950`}>
+          <div className="mt-5 hidden rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 lg:block">
             <div className="flex items-center gap-2 font-semibold">
               <ShieldAlert size={17} />
               {dataMode.warningLabel}
@@ -212,7 +199,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             <p className="mt-2 text-xs leading-5">Real patient use remains blocked until auth/RBAC, PHI policy, retention, backups, and incident response are approved.</p>
           </div>
 
-          <div className={`${isWorkspace || isAdmin ? "hidden lg:block" : ""} mt-3 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600`}>
+          <div className="mt-3 hidden rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600 lg:block">
             <div className="flex items-center gap-2 font-semibold text-ink">
               <LockKeyhole size={16} />
               Access boundary
@@ -220,7 +207,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             <p className="mt-2">Signed pilot sessions enforce admin and therapist route access. This is still not final enterprise auth.</p>
           </div>
 
-          <div className={`${isWorkspace || isAdmin ? "hidden lg:block" : ""} mt-3 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600`}>
+          <div className="mt-3 hidden rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600 lg:block">
             <div className="flex items-center gap-2 font-semibold text-ink">
               <Database size={16} />
               Cloud data
@@ -229,7 +216,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
           </div>
         </aside>
 
-        <main id="main-content" className={`${isWorkspace ? "order-1 lg:order-2" : ""} min-w-0 pb-10`}>
+        <main id="main-content" className={`${isContentFirst ? "order-1 lg:order-2" : ""} min-w-0 pb-10`}>
           {children}
         </main>
       </div>

@@ -25,8 +25,8 @@ type SchedulingIntelligencePanelProps = Readonly<{
 function fitClassName(label: TherapistFitResult["label"]) {
   if (label === "best_fit") return "bg-emerald-50 text-emerald-900 ring-emerald-200";
   if (label === "good_fit") return "bg-blue-50 text-blue-900 ring-blue-200";
-  if (label === "weak_fit") return "bg-amber-50 text-amber-950 ring-amber-200";
-  return "bg-rose-50 text-rose-950 ring-rose-200";
+  if (label === "possible_fit") return "bg-amber-50 text-amber-950 ring-amber-200";
+  return "bg-slate-50 text-slate-700 ring-slate-200";
 }
 
 export function SchedulingIntelligencePanel({
@@ -69,7 +69,7 @@ export function SchedulingIntelligencePanel({
         {fit ? (
           <div className={`rounded-lg px-3 py-3 ring-1 ${fitClassName(fit.label)}`}>
             <dt className="font-semibold">Therapist fit</dt>
-            <dd className="mt-1">{fit.label.replaceAll("_", " ")} · score {fit.score}</dd>
+            <dd className="mt-1">{fit.fitLabel} · {fit.uncertainty} uncertainty</dd>
           </div>
         ) : null}
         {conflict ? (

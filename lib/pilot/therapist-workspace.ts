@@ -5,8 +5,10 @@ export type FieldVisitQueue = "today" | "upcoming" | "completed";
 export type FieldWorkspaceEmptyStateKey = FieldVisitQueue | "referrals";
 
 export const THERAPIST_WORKSPACE_THERAPIST_SELECT = {
+  active: true,
   id: true,
   name: true,
+  serviceAreaNotes: true,
 } satisfies Prisma.TherapistSelect;
 
 export const THERAPIST_WORKSPACE_REFERRAL_SELECT = {

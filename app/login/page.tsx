@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogIn, ShieldAlert } from "lucide-react";
+import { LoginForm } from "@/components/login-form";
 import { LogoLockup } from "@/components/logo";
 import { getCurrentPilotSession, getPilotAuthConfigStatus, sanitizeInternalNextPath } from "@/lib/pilot/auth";
 
@@ -65,21 +66,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
             </div>
           ) : null}
 
-          <form action="/api/pilot-auth/login" method="post" className="mt-7 grid gap-5">
-            <input type="hidden" name="next" value={nextPath} />
-            <label className="text-sm font-semibold text-ink">
-              Email
-              <input className="field" name="email" type="email" autoComplete="username" required disabled={!config.configured} />
-            </label>
-            <label className="text-sm font-semibold text-ink">
-              Password
-              <input className="field" name="password" type="password" autoComplete="current-password" required disabled={!config.configured} />
-            </label>
-            <button className="btn-primary w-full" type="submit" disabled={!config.configured}>
-              <LogIn size={18} />
-              Sign in
-            </button>
-          </form>
+          <LoginForm configured={config.configured} loggedOut={Boolean(params?.logged_out)} nextPath={nextPath} />
         </section>
       </div>
     </main>

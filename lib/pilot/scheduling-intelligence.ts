@@ -3,9 +3,10 @@ import {
   formatOperationsDateTimeLocalInput,
   parseOperationsDateTimeLocal,
 } from "./time.ts";
+import { recommendTherapists, type TherapistFitLevel } from "./therapist-recommendation.ts";
 
 export type SchedulingPriority = "info" | "caution" | "blocker";
-export type TherapistFitLabel = "best_fit" | "good_fit" | "weak_fit" | "not_ready";
+export type TherapistFitLabel = TherapistFitLevel;
 export type SchedulingReadiness = "ready_to_schedule" | "needs_contact" | "needs_assignment" | "already_scheduled" | "blocked" | "archive_candidate";
 export type ConflictLevel = "none" | "caution" | "blocker";
 
@@ -18,19 +19,30 @@ export type SchedulingCard = Readonly<{
 }>;
 
 export type TherapistFitInput = Readonly<{
+  acceptedUnscheduledCount?: number;
   active: boolean;
+  careType?: string | null;
   currentOpenVisitCount: number;
+  hasOpenVisit?: boolean;
+  intakeReadiness?: "ready" | "needs_review" | "blocked" | "unknown";
+  knownConflictCount?: number;
   referralCity?: string | null;
+  referralStatus?: string;
   referralZip?: string | null;
+  reviewedWindowProvided?: boolean;
   serviceAreaNotes?: string | null;
+  therapistId?: string | null;
   therapistName?: string | null;
 }>;
 
 export type TherapistFitResult = Readonly<{
+  eligible: boolean;
   explanation: string;
+  fitLabel: string;
   label: TherapistFitLabel;
   reason: string;
   score: number;
+  uncertainty: "low" | "medium" | "high";
 }>;
 
 export type ScheduledVisitForConflict = Readonly<{
@@ -103,7 +115,6 @@ export type SuggestedSchedulingWindow = Readonly<{
   source: "deterministic";
 }>;
 
-const PILOT_AREA_TERMS = ["dallas", "north dallas", "plano", "frisco", "mckinney", "allen"] as const;
 const SUGGESTED_HOURS = [9, 11, 13, 15] as const;
 const DEFAULT_DURATION_MINUTES = 60;
 const CONFLICT_WINDOW_MINUTES = 90;
@@ -135,23 +146,6 @@ export function getSchedulingWindowActionPolicy(): SchedulingWindowActionPolicy 
   };
 }
 
-function normalized(value: string | null | undefined) {
-  return (value || "").trim().toLowerCase();
-}
-
-function zipFamily(value: string | null | undefined) {
-  const digits = (value || "").replace(/\D/g, "");
-  return digits.slice(0, 3);
-}
-
-function containsAny(haystack: string, values: readonly string[]) {
-  return values.some((value) => haystack.includes(value));
-}
-
-function clampScore(score: number) {
-  return Math.max(0, Math.min(100, score));
-}
-
 function maxConflictLevel(cards: readonly SchedulingCard[]): ConflictLevel {
   if (cards.some((item) => item.level === "blocker")) return "blocker";
   if (cards.some((item) => item.level === "caution")) return "caution";
@@ -174,56 +168,33 @@ function overlapsKnownVisit(candidate: Date, existing: ScheduledVisitForConflict
 }
 
 export function getTherapistFit(input: TherapistFitInput): TherapistFitResult {
-  if (!input.therapistName) {
-    return {
-      explanation: "No therapist is selected for fit review.",
-      label: "not_ready",
-      reason: "unassigned",
-      score: 0,
-    };
-  }
+  const recommendation = recommendTherapists({
+    careType: input.careType,
+    city: input.referralCity,
+    hasOpenVisit: input.hasOpenVisit,
+    intakeReadiness: input.intakeReadiness,
+    referralStatus: input.referralStatus || "contacted",
+    reviewedWindowProvided: input.reviewedWindowProvided,
+    zip: input.referralZip,
+  }, [{
+    acceptedUnscheduledCount: input.acceptedUnscheduledCount,
+    active: Boolean(input.therapistName) && input.active,
+    id: input.therapistId || input.therapistName || "unassigned",
+    knownConflictCount: input.knownConflictCount,
+    name: input.therapistName || "Unassigned",
+    openVisitCount: input.currentOpenVisitCount,
+    serviceAreaNotes: input.serviceAreaNotes,
+  }])[0];
 
-  if (!input.active) {
-    return {
-      explanation: "This therapist is inactive and should not receive new pilot assignments.",
-      label: "not_ready",
-      reason: "inactive therapist",
-      score: 0,
-    };
-  }
-
-  const city = normalized(input.referralCity);
-  const serviceArea = normalized(`${input.therapistName || ""} ${input.serviceAreaNotes || ""}`);
-  const referralZipFamily = zipFamily(input.referralZip);
-  let score = 40;
-  let reason = "nearby pilot area";
-  let label: TherapistFitLabel = "weak_fit";
-
-  if (city && serviceArea.includes(city)) {
-    score = 90;
-    reason = "same city";
-    label = "best_fit";
-  } else if (referralZipFamily && serviceArea.includes(referralZipFamily)) {
-    score = 82;
-    reason = "same zip family";
-    label = "good_fit";
-  } else if (city && containsAny(serviceArea, PILOT_AREA_TERMS) && PILOT_AREA_TERMS.includes(city as (typeof PILOT_AREA_TERMS)[number])) {
-    score = 68;
-    reason = "nearby pilot area";
-    label = "good_fit";
-  }
-
-  if (input.currentOpenVisitCount >= 6) {
-    score -= 25;
-    reason = "overloaded therapist";
-    label = score >= 60 ? "good_fit" : "weak_fit";
-  }
-
+  const reason = recommendation.eligibility.reasons[0] || recommendation.explanation[0] || "Insufficient information";
   return {
-    explanation: `${input.therapistName} fit is based on fake pilot city, ZIP family, service-area notes, active status, and current open visit count.`,
-    label,
+    eligible: recommendation.eligibility.eligible,
+    explanation: [...recommendation.explanation, ...recommendation.uncertainty.reasons].join(". "),
+    fitLabel: recommendation.eligibility.eligible ? recommendation.fitLabel : "Not Eligible",
+    label: recommendation.fitLevel,
     reason,
-    score: clampScore(score),
+    score: recommendation.score,
+    uncertainty: recommendation.uncertainty.level,
   };
 }
 

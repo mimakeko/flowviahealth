@@ -445,11 +445,13 @@ try {
   assert.match(referralDetailSource, /therapist-opportunity-panel/);
   assert.match(referralDetailSource, /Opportunity timeline/);
   assert.match(referralDetailSource, /offerOpportunityAction/);
-  assert.match(referralListSource, /opportunityBadgeClassName/);
-  assert.match(referralListSource, /opportunitySchedulingContext/);
+  assert.match(referralListSource, /getReferralWorkflowState/);
+  assert.match(referralListSource, /ReferralWorkflowStatus/);
+  assert.match(referralListSource, /workflowState\.canCreateVisit/);
   assert.match(schedulingSource, /scheduling-awaiting-opportunity-acceptance/);
   assert.match(schedulingSource, /scheduling-declined-opportunities/);
-  assert.match(schedulingSource, /opportunityAllowsVisitCreation/);
+  assert.match(schedulingSource, /getReferralWorkflowState/);
+  assert.match(schedulingSource, /workflowState\.canCreateVisit/);
   assert.match(newVisitSource, /Therapist opportunity acceptance required/);
   assert.match(myWorkSource, /therapist-referral-opportunities/);
   assert.match(myWorkSource, /opportunityState\.offeredTherapistId === therapistId/);

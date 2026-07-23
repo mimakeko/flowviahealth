@@ -1,5 +1,7 @@
 import { getPrismaClient } from "@/lib/db/prisma";
 import { activeWorkflowVisitWhere, activeWorkflowWhereClause, smokeOperationalReferralWhere } from "@/lib/pilot/data-stewardship";
+import { getOpportunityStatesByReferralId } from "@/lib/pilot/opportunity";
+import { getReferralWorkflowState, type ReferralWorkflowState } from "@/lib/pilot/referral-workflow-state";
 
 const recentAuditWindowDays = 7;
 
@@ -31,10 +33,13 @@ type DashboardTherapistSummary = {
 type PilotDashboardRecentReferral = {
   id: string;
   assignedTherapist: DashboardTherapistSummary | null;
+  assignedTherapistId: string | null;
   city: string | null;
   patientName: string;
+  referralSource: string | null;
   status: string;
   visits: DashboardVisitSummary[];
+  workflowState: ReferralWorkflowState;
   zip: string | null;
 };
 
@@ -73,8 +78,10 @@ type TherapistDashboardRecentReferral = {
   id: string;
   city: string | null;
   patientName: string;
+  referralSource: string | null;
   status: string;
   visits: DashboardVisitSummary[];
+  workflowState: ReferralWorkflowState;
   zip: string | null;
 };
 
@@ -148,6 +155,7 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
     recentReferrals,
     recentAuditEvents,
     recentSmsMessages,
+    opportunityLogs,
   ] = await Promise.all([
     prisma.patientReferral.groupBy({
       by: ["status"],
@@ -258,6 +266,15 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
       },
       take: 6,
     }),
+    prisma.auditLog.findMany({
+      orderBy: { createdAt: "desc" },
+      select: { action: true, actorId: true, actorType: true, createdAt: true, entityId: true, metadataJson: true },
+      take: 500,
+      where: {
+        action: { in: ["opportunity_offered", "opportunity_accepted", "opportunity_declined", "opportunity_action_blocked"] },
+        entityType: "PatientReferral",
+      },
+    }),
   ]);
 
   const referralCounts = {
@@ -279,6 +296,17 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
     inbound: smsDirectionRows.find((group: SmsDirectionGroup) => group.direction === "inbound")?._count._all ?? 0,
     outbound: smsDirectionRows.find((group: SmsDirectionGroup) => group.direction === "outbound")?._count._all ?? 0,
   };
+  const opportunityStates = getOpportunityStatesByReferralId(opportunityLogs);
+  const recentReferralStates = (recentReferrals as Omit<PilotDashboardRecentReferral, "workflowState">[]).map((referral) => ({
+    ...referral,
+    workflowState: getReferralWorkflowState({
+      assignedTherapistId: referral.assignedTherapistId,
+      openVisitStatuses: referral.visits.map((visit) => visit.status),
+      opportunityState: opportunityStates.get(referral.id)?.state,
+      referralSource: referral.referralSource,
+      status: referral.status,
+    }),
+  }));
 
   return {
     activeTherapists,
@@ -290,7 +318,7 @@ export async function getPilotDashboardSnapshot(): Promise<PilotDashboardSnapsho
     recentAuditEvents,
     recentAuditActivity,
     recentAuditWindowDays,
-    recentReferrals,
+    recentReferrals: recentReferralStates,
     recentSmsActivitySummary,
     recentSmsMessages,
     referralCounts,
@@ -391,7 +419,7 @@ export async function getTherapistDashboardSnapshot(email: string): Promise<Ther
   ]);
   const assignedReferralIdRows = assignedReferralIds as AssignedReferralIdRow[];
 
-  const recentAuditEvents = await prisma.auditLog.findMany({
+  const [recentAuditEvents, opportunityLogs] = await Promise.all([prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
       select: {
         action: true,
@@ -412,7 +440,26 @@ export async function getTherapistDashboardSnapshot(email: string): Promise<Ther
           },
         ],
       },
-    });
+    }), prisma.auditLog.findMany({
+      orderBy: { createdAt: "desc" },
+      select: { action: true, actorId: true, actorType: true, createdAt: true, entityId: true, metadataJson: true },
+      where: {
+        action: { in: ["opportunity_offered", "opportunity_accepted", "opportunity_declined", "opportunity_action_blocked"] },
+        entityId: { in: assignedReferralIdRows.map((item: AssignedReferralIdRow) => item.id) },
+        entityType: "PatientReferral",
+      },
+    })]);
+  const opportunityStates = getOpportunityStatesByReferralId(opportunityLogs);
+  const recentReferralStates = (recentReferrals as Array<Omit<TherapistDashboardRecentReferral, "workflowState"> & { assignedTherapistId?: string | null }>).map((referral) => ({
+    ...referral,
+    workflowState: getReferralWorkflowState({
+      assignedTherapistId: therapist.id,
+      openVisitStatuses: referral.visits.map((visit) => visit.status),
+      opportunityState: opportunityStates.get(referral.id)?.state,
+      referralSource: referral.referralSource,
+      status: referral.status,
+    }),
+  }));
 
   return {
     assignedReferrals,
@@ -421,7 +468,7 @@ export async function getTherapistDashboardSnapshot(email: string): Promise<Ther
     readyToSchedule,
     recentlyCompleted,
     recentAuditEvents,
-    recentReferrals,
+    recentReferrals: recentReferralStates,
     upcomingVisits,
     therapist,
   };

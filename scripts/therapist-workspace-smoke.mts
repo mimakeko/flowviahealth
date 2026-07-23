@@ -37,7 +37,7 @@ assert.match(myWorkPage, /FieldWorkspaceEmptyState/, "My Work must render centra
 assert.match(myWorkPage, /TransientActionBanner/, "Action banners should clear transient query params after rendering.");
 assert.match(myWorkPage, /PendingSubmitButton/, "Manual action forms should prevent accidental double submits while pending.");
 assert.match(dashboardShell, /<details className="rounded-lg border border-line bg-white lg:hidden">/, "Workspace mobile navigation should collapse behind a compact disclosure.");
-assert.match(dashboardShell, /<span>Menu<\/span>/, "Workspace mobile navigation disclosure should use a short Menu label.");
+assert.match(dashboardShell, /isAdmin \? "Admin menu" : "Menu"/, "Content-first mobile navigation should use compact role-aware labels.");
 assert.match(dashboardShell, /hidden lg:block/, "Workspace desktop navigation should remain visible at desktop breakpoints.");
 assert.match(myWorkLoading, /Loading the field workspace/, "My Work should provide a calm loading state.");
 assert.match(myWorkError, /Field workspace unavailable/, "My Work should provide a safe operational error state.");

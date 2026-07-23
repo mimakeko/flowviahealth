@@ -19,7 +19,7 @@ const sameCityFit = scheduling.getTherapistFit({
   therapistName: "Demo Therapist Plano/Frisco",
 });
 assert.equal(sameCityFit.label, "best_fit");
-assert.ok(sameCityFit.score >= 85);
+assert.ok(sameCityFit.score >= 75);
 
 const inactiveFit = scheduling.getTherapistFit({
   active: false,
@@ -27,8 +27,8 @@ const inactiveFit = scheduling.getTherapistFit({
   referralCity: "Plano",
   therapistName: "Inactive Therapist",
 });
-assert.equal(inactiveFit.label, "not_ready");
-assert.equal(inactiveFit.reason, "inactive therapist");
+assert.equal(inactiveFit.eligible, false);
+assert.equal(inactiveFit.reason, "Therapist is inactive");
 
 const needsAssignment = scheduling.getSchedulingReadiness({
   assignedTherapistId: null,

@@ -13,6 +13,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { ReferralWorkflowStatus } from "@/components/referral-workflow-status";
 import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
 import {
   getOperationsAssistantV2Status,
@@ -123,6 +124,8 @@ async function TherapistDashboard({ email }: { email: string }) {
 
           <OperationsAssistantPanel
             cards={assistantCards}
+            mobileCollapsed
+            mobileSummaryLabel="Operational checks"
             status={assistantStatus}
             summary="Your next best operational step is deterministic, scoped to your assigned fake pilot work, and requires human review."
             title="Operations Assistant"
@@ -130,6 +133,8 @@ async function TherapistDashboard({ email }: { email: string }) {
 
           <SchedulingIntelligencePanel
             cards={schedulingCards}
+            mobileCollapsed
+            mobileSummaryLabel="Scheduling checks"
             summary="Therapist-scoped scheduling guidance from assigned fake pilot work only. Admin-only controls and SMS internals remain hidden."
           />
 
@@ -147,6 +152,7 @@ async function TherapistDashboard({ email }: { email: string }) {
                       <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>{statusLabel(referral.status)}</span>
                     </div>
                     <p className="mt-1 text-sm text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
+                    <div className="mt-2"><ReferralWorkflowStatus compact state={referral.workflowState} /></div>
                   </div>
                   <p className="text-sm text-slate-500">{formatDateTime(referral.visits[0]?.scheduledAt)}</p>
                 </div>
@@ -250,6 +256,8 @@ export default async function DashboardPage() {
 
       <OperationsAssistantPanel
         cards={assistantCards}
+        mobileCollapsed
+        mobileSummaryLabel="Operational checks"
         status={assistantStatus}
         summary="Queue-level risk signals are generated from safe counts only. No autonomous action, messaging, or clinical guidance is enabled."
         title="Operations Assistant"
@@ -257,6 +265,8 @@ export default async function DashboardPage() {
 
       <SchedulingIntelligencePanel
         cards={schedulingCards}
+        mobileCollapsed
+        mobileSummaryLabel="Scheduling checks"
         summary="Deterministic scheduling summary from safe queue counts. No maps, geocoding, travel-time calculation, or autonomous scheduling."
       />
 
@@ -275,6 +285,7 @@ export default async function DashboardPage() {
                     <span className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>{statusLabel(referral.status)}</span>
                   </div>
                   <p className="mt-1 text-sm text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"} · {referral.assignedTherapist?.name || "Unassigned"}</p>
+                  <div className="mt-2"><ReferralWorkflowStatus compact state={referral.workflowState} /></div>
                 </div>
                 <p className="text-sm text-slate-500">{formatDateTime(referral.visits[0]?.scheduledAt)}</p>
               </Link>

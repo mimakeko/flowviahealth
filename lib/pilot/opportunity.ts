@@ -278,6 +278,15 @@ export function getOpportunityStatesByReferralId(logs: readonly OpportunityAudit
   return states;
 }
 
+export function getAcceptedOpportunityCountsByTherapistId(logs: readonly OpportunityAuditLog[]) {
+  const counts = new Map<string, number>();
+  for (const opportunity of getOpportunityStatesByReferralId(logs).values()) {
+    if (opportunity.state !== "accepted" || !opportunity.offeredTherapistId) continue;
+    counts.set(opportunity.offeredTherapistId, (counts.get(opportunity.offeredTherapistId) || 0) + 1);
+  }
+  return counts;
+}
+
 export function canOfferReferralOpportunity(input: OfferGateInput): OfferGateResult {
   const reasons: string[] = [];
   const gateReasons = input.createVisitGate.reasons.join(" | ");

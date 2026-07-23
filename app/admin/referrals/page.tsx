@@ -3,7 +3,9 @@ import Link from "next/link";
 import { ClipboardList, Plus } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { OperationsAssistantPanel } from "@/components/operations-assistant-panel";
+import { ReferralWorkflowStatus } from "@/components/referral-workflow-status";
 import { SchedulingIntelligencePanel } from "@/components/scheduling-intelligence-panel";
+import { TherapistRecommendationBadge } from "@/components/therapist-recommendation-card";
 import { getOperationsAssistantV2Status, getQueueAssistantCards } from "@/lib/ai/operations-assistant-v2";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { activeWorkflowVisitWhere, activeWorkflowWhereClause, smokeOperationalReferralWhere } from "@/lib/pilot/data-stewardship";
@@ -17,15 +19,12 @@ import {
   type ReferralIntakeQualityResult,
 } from "@/lib/pilot/referral-intake-quality";
 import {
+  getAcceptedOpportunityCountsByTherapistId,
   getOpportunityStatesByReferralId,
-  opportunityBadgeClassName,
-  opportunityCreateVisitBlockerMessage,
-  opportunityDeclineReasonLabel,
-  opportunitySchedulingContext,
-  opportunityVisitCreationReadinessLabel,
-  opportunityStateLabel,
   type OpportunityStateResult,
 } from "@/lib/pilot/opportunity";
+import { getReferralWorkflowState, type ReferralWorkflowState } from "@/lib/pilot/referral-workflow-state";
+import { recommendTherapists, type TherapistRecommendation } from "@/lib/pilot/therapist-recommendation";
 import {
   formatDate,
   REFERRAL_STATUSES,
@@ -45,7 +44,12 @@ export const dynamic = "force-dynamic";
 
 type ReferralListRow = {
   id: string;
-  assignedTherapist: { name: string } | null;
+  assignedTherapist: {
+    active: boolean;
+    name: string;
+    serviceAreaNotes: string | null;
+    visits: { id: string }[];
+  } | null;
   assignedTherapistId: string | null;
   careType: string | null;
   city: string | null;
@@ -68,7 +72,9 @@ type ReferralListQualityRow = ReferralListRow & {
   createVisitGate: CreateVisitGateResult;
   intakeQuality: ReferralIntakeQualityResult;
   opportunityState: OpportunityStateResult;
+  recommendation?: TherapistRecommendation;
   smsConsentStatus: string;
+  workflowState: ReferralWorkflowState;
 };
 
 function duplicateSources(rows: ReferralListRow[]): ReferralIntakeDuplicateSource[] {
@@ -96,25 +102,6 @@ function intakeSummary(referral: ReferralListQualityRow) {
   if (referral.intakeQuality.readinessLevel === "ready") return "Intake ready for scheduling review";
   if (referral.intakeQuality.readinessLevel === "blocked") return "Blocked";
   return referral.createVisitGate.reasons.slice(0, 2).join(" · ") || "Review checklist";
-}
-
-function schedulingSummary(referral: ReferralListQualityRow) {
-  const label = opportunityVisitCreationReadinessLabel({
-    createVisitGateAllowed: referral.createVisitGate.allowed,
-    declinedReason: referral.opportunityState.declinedReason,
-    opportunityState: referral.opportunityState.state,
-    referralSource: referral.referralSource,
-  });
-
-  if (label === "Ready for visit creation") return label;
-  if (label === "Needs reassignment/review") return label;
-  if (label === "Review-only") return "Review-only. Create visit suppressed until gates pass.";
-  if (label === "Create visit suppressed until therapist acceptance is recorded") return label;
-  return opportunityCreateVisitBlockerMessage({
-    createVisitGateReasons: referral.createVisitGate.reasons,
-    declinedReason: referral.opportunityState.declinedReason,
-    opportunityState: referral.opportunityState.state,
-  });
 }
 
 function hasReferralReviewSignal(referral: ReferralListQualityRow) {
@@ -204,7 +191,17 @@ export default async function AdminReferralsPage({
     prisma.patientReferral.findMany({
       orderBy: { createdAt: "desc" },
       select: {
-        assignedTherapist: { select: { name: true } },
+        assignedTherapist: {
+          select: {
+            active: true,
+            name: true,
+            serviceAreaNotes: true,
+            visits: {
+              select: { id: true },
+              where: { status: { in: ["scheduled", "in_progress"] } },
+            },
+          },
+        },
         assignedTherapistId: true,
         careType: true,
         city: true,
@@ -300,6 +297,7 @@ export default async function AdminReferralsPage({
       : Promise.resolve([]),
   ]);
   const opportunityStates = getOpportunityStatesByReferralId(opportunityLogs);
+  const acceptedOpportunityCounts = getAcceptedOpportunityCountsByTherapistId(opportunityLogs);
   const smsConsentByPhone = Object.fromEntries(smsConsentRows.map((row) => [row.normalizedPhone, row.status]));
   const qualityRows: ReferralListQualityRow[] = referralRows.map((referral: ReferralListRow) => {
     const smsConsentStatus = smsConsentByPhone[normalizeE164Phone(referral.phone)] || "none";
@@ -323,9 +321,7 @@ export default async function AdminReferralsPage({
       status: referral.status,
       zip: referral.zip,
     });
-    return {
-      ...referral,
-      createVisitGate: canCreateVisitForReferral({
+    const createVisitGate = canCreateVisitForReferral({
         activeWorkflowVisible: true,
         assignedTherapistId: referral.assignedTherapistId,
         assignedTherapistName: referral.assignedTherapist?.name,
@@ -341,14 +337,48 @@ export default async function AdminReferralsPage({
         smsConsentStatus,
         status: referral.status,
         zip: referral.zip,
-      }),
+      });
+    const opportunityState = opportunityStates.get(referral.id) || { state: "not_offered" as const };
+    const workflowState = getReferralWorkflowState({
+      activeWorkflowVisible: true,
+      assignedTherapistId: referral.assignedTherapistId,
+      createVisitGateAllowed: createVisitGate.allowed,
+      createVisitGateReasons: createVisitGate.reasons,
+      intakeReadiness: intakeQuality.readinessLevel,
+      openVisitStatuses: referral.visits.length > 0 ? ["scheduled"] : [],
+      opportunityState: opportunityState.state,
+      referralSource: referral.referralSource,
+      status: referral.status,
+    });
+    const recommendation = referral.assignedTherapist && referral.assignedTherapistId
+      ? recommendTherapists({
+          careType: referral.careType,
+          city: referral.city,
+          hasOpenVisit: referral.visits.length > 0,
+          intakeReadiness: intakeQuality.readinessLevel,
+          referralStatus: referral.status,
+          zip: referral.zip,
+        }, [{
+          acceptedUnscheduledCount: acceptedOpportunityCounts.get(referral.assignedTherapistId) || 0,
+          active: referral.assignedTherapist.active,
+          id: referral.assignedTherapistId,
+          name: referral.assignedTherapist.name,
+          openVisitCount: referral.assignedTherapist.visits.length,
+          serviceAreaNotes: referral.assignedTherapist.serviceAreaNotes,
+        }])[0]
+      : undefined;
+    return {
+      ...referral,
+      createVisitGate,
       intakeQuality,
-      opportunityState: opportunityStates.get(referral.id) || { state: "not_offered" },
+      opportunityState,
+      recommendation,
       smsConsentStatus,
+      workflowState,
     };
   });
   const displayedReferralRows = qualityRows.filter((referral: ReferralListQualityRow) => {
-    if (selectedGroup === "ready_scheduling") return referral.createVisitGate.allowed;
+    if (selectedGroup === "ready_scheduling") return referral.workflowState.canCreateVisit;
     if (selectedGroup === "needs_intake_review") return referral.intakeQuality.readinessLevel !== "ready";
     if (selectedGroup === "possible_duplicate") return referral.intakeQuality.duplicateCandidates.length > 0;
     if (selectedGroup === "missing_therapist") return !referral.assignedTherapistId;
@@ -363,7 +393,7 @@ export default async function AdminReferralsPage({
     optedOutContacts,
     possibleDuplicates: qualityRows.filter((referral: ReferralListQualityRow) => referral.intakeQuality.duplicateCandidates.length > 0).length,
     pastScheduledVisits,
-    readyForScheduling: qualityRows.filter((referral: ReferralListQualityRow) => referral.createVisitGate.allowed).length,
+    readyForScheduling: qualityRows.filter((referral: ReferralListQualityRow) => referral.workflowState.canCreateVisit).length,
     scheduledVisitsNextSevenDays,
     smokeTestRecords,
     unassignedReferrals,
@@ -377,12 +407,12 @@ export default async function AdminReferralsPage({
     intakeReviewNeeded: qualityRows.filter((referral: ReferralListQualityRow) => !referral.createVisitGate.allowed).length,
     optedOutContacts,
     possibleDuplicates: qualityRows.filter((referral: ReferralListQualityRow) => referral.intakeQuality.duplicateCandidates.length > 0).length,
-    readyToSchedule: qualityRows.filter((referral: ReferralListQualityRow) => referral.createVisitGate.allowed).length,
+    readyToSchedule: qualityRows.filter((referral: ReferralListQualityRow) => referral.workflowState.canCreateVisit).length,
     unassignedReferrals,
     upcomingNextSevenDays: scheduledVisitsNextSevenDays,
   });
   const needsReviewCount = qualityRows.filter((referral: ReferralListQualityRow) => referral.intakeQuality.readinessLevel !== "ready").length;
-  const readyForSchedulingCount = qualityRows.filter((referral: ReferralListQualityRow) => referral.createVisitGate.allowed).length;
+  const readyForSchedulingCount = qualityRows.filter((referral: ReferralListQualityRow) => referral.workflowState.canCreateVisit).length;
   const waitingContactCount = qualityRows.filter((referral: ReferralListQualityRow) => referral.status === "new").length;
   const blockedSafetyCount = qualityRows.filter((referral: ReferralListQualityRow) => (
     referral.intakeQuality.readinessLevel === "blocked" ||
@@ -442,13 +472,12 @@ export default async function AdminReferralsPage({
                     {statusLabel(referral.status)}
                   </span>
                 </div>
-                <p className="mt-2 text-sm font-semibold text-slate-700">{referral.intakeQuality.readinessLabel}</p>
-                <p className="mt-1 text-sm leading-6 text-slate-600">{intakeSummary(referral)}</p>
+                <div className="mt-3"><ReferralWorkflowStatus compact state={referral.workflowState} /></div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {referral.intakeQuality.duplicateCandidates.length > 0 ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Possible duplicate</span> : null}
                   {!referral.assignedTherapistId ? <span className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-200">Missing therapist</span> : null}
                   {referral.smsConsentStatus === "opted_out" ? <span className="rounded-md bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-900 ring-1 ring-rose-200">Non-SMS only</span> : null}
-                  {referral.createVisitGate.allowed ? <span className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200">Ready for scheduling</span> : null}
+                  {referral.recommendation ? <TherapistRecommendationBadge recommendation={referral.recommendation} /> : null}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                   <span>{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</span>
@@ -468,7 +497,7 @@ export default async function AdminReferralsPage({
                           {statusLabel(referral.status)}
                         </span>
                       </div>
-                      <p className="mt-2 text-sm text-slate-600">{intakeSummary(referral)}</p>
+                      <div className="mt-3"><ReferralWorkflowStatus compact state={referral.workflowState} /></div>
                       <p className="mt-2 text-xs text-slate-500">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
                     </Link>
                   ))}
@@ -519,14 +548,8 @@ export default async function AdminReferralsPage({
                         {referral.intakeQuality.readinessLabel}
                       </span>
                       <p className={`mt-1 text-xs ${referral.intakeQuality.readinessLevel === "ready" ? "font-semibold text-emerald-700" : "text-slate-500"}`}>Intake: {intakeSummary(referral)}</p>
-                      <span className={`mt-2 inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
-                        {opportunityStateLabel(referral.opportunityState.state)}
-                      </span>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Opportunity: {opportunitySchedulingContext({ createVisitGateAllowed: referral.createVisitGate.allowed, declinedReason: referral.opportunityState.declinedReason, opportunityState: referral.opportunityState.state })}
-                        {referral.opportunityState.state === "declined" ? ` · ${opportunityDeclineReasonLabel(referral.opportunityState.declinedReason)}` : ""}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">Scheduling: {schedulingSummary(referral)}</p>
+                      <div className="mt-2"><ReferralWorkflowStatus compact state={referral.workflowState} /></div>
+                      {referral.recommendation ? <div className="mt-2"><TherapistRecommendationBadge recommendation={referral.recommendation} /></div> : null}
                     </td>
                     <td className="px-4 py-3 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</td>
                     <td className="px-4 py-3 text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Not provided"}</td>

@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
+import { ReferralWorkflowStatus } from "@/components/referral-workflow-status";
+import { TherapistRecommendationBadge } from "@/components/therapist-recommendation-card";
 import { TransientActionBanner } from "@/components/transient-action-banner";
 import {
   buildBlockedNoteSearchParams,
@@ -23,6 +25,7 @@ import {
 import { getPrismaClient } from "@/lib/db/prisma";
 import { activeWorkflowVisitWhere, activeWorkflowWhereClause } from "@/lib/pilot/data-stewardship";
 import {
+  getAcceptedOpportunityCountsByTherapistId,
   getOpportunityStatesByReferralId,
   isOpportunityDeclineReason,
   OPPORTUNITY_DECLINE_REASONS,
@@ -31,6 +34,8 @@ import {
   opportunityStateLabel,
   type OpportunityStateResult,
 } from "@/lib/pilot/opportunity";
+import { getReferralWorkflowState, type ReferralWorkflowState } from "@/lib/pilot/referral-workflow-state";
+import { recommendTherapists, type TherapistRecommendation } from "@/lib/pilot/therapist-recommendation";
 import { requirePilotSession } from "@/lib/pilot/auth";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
 import {
@@ -91,8 +96,10 @@ const DISPLAY_LIMITS = {
 type TherapistAction = (typeof THERAPIST_ACTIONS)[number];
 
 type TherapistOption = {
+  active: boolean;
   id: string;
   name: string;
+  serviceAreaNotes: string | null;
 };
 
 type TherapistWorkVisit = {
@@ -112,11 +119,14 @@ type TherapistWorkReferral = {
   phone: string;
   status: string;
   visits: TherapistWorkVisit[];
+  workflowState?: ReferralWorkflowState;
   zip: string | null;
 };
 
 type TherapistOpportunityReferral = TherapistWorkReferral & {
   opportunityState: OpportunityStateResult;
+  recommendation: TherapistRecommendation;
+  workflowState: ReferralWorkflowState;
 };
 
 type TherapistFieldVisit = {
@@ -323,22 +333,6 @@ function opportunityPriorityLabel(referral: TherapistWorkReferral) {
   return "Priority: standard operational review";
 }
 
-function opportunityWhyFits(referral: TherapistWorkReferral, therapistName: string | undefined) {
-  return [
-    therapistName ? `Assigned to ${therapistName}` : "Assigned therapist selected",
-    referral.careType ? `${referral.careType} service area` : "Service type ready for review",
-    [referral.city, referral.zip].filter(Boolean).join(" / ") || "Operational area needs confirmation",
-  ];
-}
-
-function opportunityMissingItems(referral: TherapistWorkReferral) {
-  const items: string[] = [];
-  if (!referral.city || !referral.zip) items.push("City / ZIP");
-  if (!referral.careType) items.push("Discipline or service type");
-  if (referral.visits.length > 0) items.push("Existing visit review");
-  return items.length > 0 ? items : ["No missing operational card fields"];
-}
-
 function visitDomId(visitId: string) {
   return `visit-${visitId}`;
 }
@@ -503,16 +497,16 @@ function NextFieldActionPanel({ action }: { action: NextFieldAction }) {
   const detail = action.kind === "visit"
     ? `${formatDateTime(action.visit.scheduledAt)} · ${locationLabel(action.visit.referral.city, action.visit.referral.zip)}`
     : action.kind === "opportunity"
-      ? `${locationLabel(action.referral.city, action.referral.zip)} · ${action.referral.careType || "Service not provided"}`
+      ? action.referral.workflowState.nextAction
       : action.kind === "referral"
-        ? `${locationLabel(action.referral.city, action.referral.zip)} · ${referralWorkLabel(action.referral)}`
+        ? action.referral.workflowState?.nextAction || `${locationLabel(action.referral.city, action.referral.zip)} · ${referralWorkLabel(action.referral)}`
         : "You can review upcoming visits and lower-priority details below.";
   const status = action.kind === "visit"
     ? visitWorkLabel(action.visit)
     : action.kind === "opportunity"
-      ? "Awaiting acceptance"
+      ? action.referral.workflowState.label
       : action.kind === "referral"
-        ? referralWorkLabel(action.referral)
+        ? action.referral.workflowState?.label || referralWorkLabel(action.referral)
         : "Clear";
   const href = action.kind === "visit"
     ? `#${visitDomId(action.visit.id)}`
@@ -633,11 +627,9 @@ function FieldVisitSection({
 function OpportunityCard({
   referral,
   selectedTherapistId,
-  selectedTherapistName,
 }: {
   referral: TherapistOpportunityReferral;
   selectedTherapistId: string;
-  selectedTherapistName: string | undefined;
 }) {
   return (
     <article id={`opportunity-${referral.id}`} className="min-w-0 scroll-mt-6 rounded-lg border border-blue/20 bg-white p-4 sm:p-5">
@@ -656,16 +648,19 @@ function OpportunityCard({
         <div>
           <p className="text-sm font-semibold text-ink">Why this fits</p>
           <ul className="mt-2 grid gap-1 text-sm leading-6 text-slate-600">
-            {opportunityWhyFits(referral, selectedTherapistName).slice(0, 2).map((item) => <li key={item}>- {item}</li>)}
+            {referral.recommendation.explanation.slice(0, 2).map((item) => <li key={item}>- {item}</li>)}
           </ul>
         </div>
         <div>
-          <p className="text-sm font-semibold text-ink">What is missing</p>
+          <p className="text-sm font-semibold text-ink">Recommendation</p>
           <ul className="mt-2 grid gap-1 text-sm leading-6 text-slate-600">
-            {opportunityMissingItems(referral).slice(0, 2).map((item) => <li key={item}>- {item}</li>)}
+            <li><TherapistRecommendationBadge recommendation={referral.recommendation} /></li>
+            <li>Uncertainty: {referral.recommendation.uncertainty.level}</li>
           </ul>
         </div>
       </div>
+
+      <div className="mt-4"><ReferralWorkflowStatus compact state={referral.workflowState} /></div>
 
       <div className="mt-5 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-start">
         <form action={therapistOpportunityAction}>
@@ -730,6 +725,8 @@ function AssignedReferralCard({
           ) : null}
         </div>
       </details>
+
+      {referral.workflowState ? <div className="mt-4"><ReferralWorkflowStatus compact state={referral.workflowState} /></div> : null}
 
       <details className="mt-5 rounded-lg border border-line bg-slate-50">
         <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
@@ -1167,24 +1164,53 @@ export default async function MyWorkPage({
         }),
       ])
     : [[], []];
-  const assignedReferrals = referrals as TherapistWorkReferral[];
+  const rawAssignedReferrals = referrals as TherapistWorkReferral[];
   const assignedVisits = visits as TherapistFieldVisit[];
-  const opportunityLogs = assignedReferrals.length > 0
+  const opportunityLogs = rawAssignedReferrals.length > 0
     ? await prisma.auditLog.findMany({
         orderBy: { createdAt: "desc" },
         select: { action: true, actorId: true, actorType: true, createdAt: true, entityId: true, metadataJson: true },
         where: {
           action: { in: ["opportunity_offered", "opportunity_accepted", "opportunity_declined", "opportunity_action_blocked"] },
-          entityId: { in: assignedReferrals.map((referral: TherapistWorkReferral) => referral.id) },
+          entityId: { in: rawAssignedReferrals.map((referral: TherapistWorkReferral) => referral.id) },
           entityType: "PatientReferral",
         },
       })
     : [];
   const opportunityStates = getOpportunityStatesByReferralId(opportunityLogs);
-  const opportunityReferrals: TherapistOpportunityReferral[] = assignedReferrals.map((referral: TherapistWorkReferral) => ({
-    ...referral,
-    opportunityState: opportunityStates.get(referral.id) || { state: "not_offered" },
-  }));
+  const acceptedOpportunityCounts = getAcceptedOpportunityCountsByTherapistId(opportunityLogs);
+  const selectedTherapist = therapistOptions.find((therapist: TherapistOption) => therapist.id === selectedTherapistId);
+  const selectedTherapistOpenVisitCount = assignedVisits.filter((visit) => visit.status === "scheduled" || visit.status === "in_progress").length;
+  const opportunityReferrals: TherapistOpportunityReferral[] = selectedTherapistId && selectedTherapist
+    ? rawAssignedReferrals.map((referral: TherapistWorkReferral) => {
+        const opportunityState = opportunityStates.get(referral.id) || { state: "not_offered" as const };
+        const intakeReadiness = referral.city && referral.zip && referral.careType && ["contacted", "active"].includes(referral.status) ? "ready" as const : "needs_review" as const;
+        const workflowState = getReferralWorkflowState({
+          assignedTherapistId: selectedTherapistId,
+          intakeReadiness,
+          openVisitStatuses: referral.visits.map((visit) => visit.status),
+          opportunityState: opportunityState.state,
+          status: referral.status,
+        });
+        const recommendation = recommendTherapists({
+          careType: referral.careType,
+          city: referral.city,
+          hasOpenVisit: referral.visits.some((visit) => visit.status === "scheduled" || visit.status === "in_progress"),
+          intakeReadiness,
+          referralStatus: referral.status,
+          zip: referral.zip,
+        }, [{
+          acceptedUnscheduledCount: acceptedOpportunityCounts.get(selectedTherapistId) || 0,
+          active: selectedTherapist.active,
+          id: selectedTherapistId,
+          name: selectedTherapist.name,
+          openVisitCount: selectedTherapistOpenVisitCount,
+          serviceAreaNotes: selectedTherapist.serviceAreaNotes,
+        }])[0];
+        return { ...referral, opportunityState, recommendation, workflowState };
+      })
+    : [];
+  const assignedReferrals = opportunityReferrals;
   const availableOpportunities = opportunityReferrals.filter((referral: TherapistOpportunityReferral) => (
     referral.opportunityState.state === "offered" &&
     referral.opportunityState.offeredTherapistId === selectedTherapistId
@@ -1358,7 +1384,7 @@ export default async function MyWorkPage({
               ) : null}
             </div>
             {visibleOpportunities.map((referral: TherapistOpportunityReferral) => (
-              <OpportunityCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} selectedTherapistName={selectedTherapistName} />
+              <OpportunityCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} />
             ))}
             {hiddenOpportunities.length > 0 ? (
               <details className="rounded-lg border border-line bg-white">
@@ -1367,7 +1393,7 @@ export default async function MyWorkPage({
                 </summary>
                 <div className="grid gap-4 border-t border-line p-4">
                   {hiddenOpportunities.map((referral: TherapistOpportunityReferral) => (
-                    <OpportunityCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} selectedTherapistName={selectedTherapistName} />
+                    <OpportunityCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} />
                   ))}
                 </div>
               </details>

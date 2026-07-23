@@ -245,7 +245,7 @@ export default async function AdminAuditPage({
         id: true,
         metadataJson: true,
       },
-      take: 100,
+      take: 50,
       where: auditFilters.length > 0 ? { AND: auditFilters } : undefined,
     }),
     prisma.auditLog.findMany({
@@ -335,6 +335,7 @@ export default async function AdminAuditPage({
       </form>
 
       <div className="overflow-x-auto rounded-lg border border-line bg-white">
+        <p className="border-b border-line bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">Showing up to 50 most recent matching events. Use filters for historical detail.</p>
         <table className="min-w-full divide-y divide-line text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
             <tr>

@@ -282,7 +282,8 @@ try {
   assert.match(detailSource, /Visit creation gate/);
   assert.match(detailSource, /createVisitGate\.allowed/);
   assert.match(detailSource, /\/admin\/visits\/new\?referralId=\$\{referral\.id\}/);
-  assert.match(detailSource, /Create visit is suppressed until review blockers are resolved/);
+  assert.match(detailSource, /ReferralWorkflowStatus/);
+  assert.match(detailSource, /workflowState\.canCreateVisit/);
   assert.match(detailSource, /Safety guarantees/);
   assert.match(detailSource, /No SMS sent/);
   assert.match(detailSource, /No autonomous scheduling/);

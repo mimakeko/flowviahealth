@@ -81,6 +81,9 @@ async function gotoProtected(page: Page, route: string) {
   visitedRoutes.add(localPath(route));
   await expectNoDangerousVisibleText(page, route);
   await expectRawPageIsClean(page, route);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), {
+    message: `${route} should have zero horizontal overflow`,
+  }).toBe(true);
 }
 
 async function screenshot(page: Page, name: string) {
@@ -120,13 +123,15 @@ async function expectBlockedSchedulingRowHasNoCreateVisit(page: Page, label: str
 }
 
 async function firstPresentBlockedSchedulingReferralId(page: Page, labels: string[]) {
-  const reviewReferrals = page.getByTestId("scheduling-review-referrals");
+  const reviewReferrals = page.getByTestId((page.viewportSize()?.width || 1280) < 768 ? "scheduling-review-referrals-mobile" : "scheduling-review-referrals");
 
   for (const label of labels) {
     const row = reviewReferrals.locator("> div").filter({ hasText: new RegExp(label, "i") }).first();
     if ((await row.count()) === 0) continue;
 
-    const href = await row.getByRole("link", { name: /^Open$/i }).first().getAttribute("href");
+    const referralLinks = row.locator('a[href^="/admin/referrals/"]');
+    if ((await referralLinks.count()) === 0) continue;
+    const href = await referralLinks.first().getAttribute("href");
     const referralId = href?.match(/\/admin\/referrals\/([^/?#]+)/)?.[1];
     if (referralId) return referralId;
   }
@@ -143,18 +148,27 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     await login(page, adminEmail!, adminPassword!);
     await expect(page).toHaveURL(/\/dashboard/);
     const workspaceNav = page.getByRole("navigation", { name: /internal workspace navigation/i });
-    await expect(workspaceNav).toBeVisible();
-    await expect(workspaceNav.getByRole("link", { name: /Referral Operations/i })).toBeVisible();
+    if ((page.viewportSize()?.width || 1280) >= 1024) {
+      await expect(workspaceNav).toBeVisible();
+      await expect(workspaceNav.getByRole("link", { name: /Referral Operations/i })).toBeVisible();
+    } else {
+      await expect(page.locator("summary").filter({ hasText: /Workspace navigation/i })).toBeVisible();
+    }
 
     await gotoProtected(page, "/dashboard");
     await expectAnyText(page, [/Pilot operations overview/i, /Dashboard blocked by pilot gate/i], "/dashboard");
+    if ((page.viewportSize()?.width || 1280) < 1024) {
+      const mainTop = await page.locator("#main-content").evaluate((element) => element.getBoundingClientRect().top + window.scrollY);
+      expect(mainTop, "dashboard operational content should precede navigation on phone/tablet").toBeLessThan(450);
+    }
     await screenshot(page, "admin-dashboard.png");
 
     await gotoProtected(page, "/admin/referrals");
     await expect(page.getByRole("heading", { name: /Referral operations/i })).toBeVisible();
     await expectAnyText(page, [/Operations Assistant/i, /Scheduling Intelligence/i, /Intake ready/i, /Needs intake review/i], "/admin/referrals");
     if (await page.locator('tbody a[href^="/admin/referrals/"]').count()) {
-      await expectAnyText(page, [/Not offered/i, /Offered/i, /Accepted/i, /Declined/i], "/admin/referrals opportunity badges");
+      await expectAnyText(page, [/Needs contact/i, /Needs therapist assignment/i, /Ready to offer/i, /Awaiting therapist response/i, /Accepted.+ready to schedule/i, /Visit scheduled/i], "/admin/referrals canonical workflow state");
+      await expect(page.locator("[data-referral-workflow-stage]:visible").first()).toBeVisible();
     } else {
       console.log("Browser auth smoke note: no referral rows found; opportunity badge check skipped.");
     }
@@ -164,7 +178,7 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     await expectAnyText(page, [/no PHI/i, /manual referral/i, /patient/i], "/admin/referrals/new");
 
     await gotoProtected(page, "/admin/referrals");
-    const referralDetailLink = page.locator('tbody a[href^="/admin/referrals/"]').first();
+    const referralDetailLink = page.locator('a[href^="/admin/referrals/"]:not([href="/admin/referrals/new"]):visible').first();
     if (await referralDetailLink.count()) {
       await referralDetailLink.click();
       await page.waitForLoadState("networkidle");
@@ -173,6 +187,8 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
       await expectRawPageIsClean(page, "referral detail");
       await expectAnyText(page, [/Visit creation gate/i, /Scheduling readiness/i, /Safety guarantees/i], "referral detail");
       await expect(page.getByTestId("therapist-opportunity-panel")).toBeVisible();
+      await expect(page.getByTestId("therapist-recommendations")).toBeVisible();
+      await expect(page.locator("[data-referral-workflow-stage]:visible").first()).toBeVisible();
       await expectAnyText(page, [/Therapist opportunity/i, /deterministic\/manual/i, /no SMS send/i], "referral opportunity detail");
       const referralDetailText = await visibleBodyText(page);
       if (referralDetailText.includes("Create visit is suppressed until therapist acceptance is recorded.")) {
@@ -199,15 +215,24 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     await gotoProtected(page, "/admin/scheduling");
     await expect(page.getByRole("heading", { name: /Scheduling Intelligence/i })).toBeVisible();
     await expectAnyText(page, [/Accepted.+ready to schedule/i, /ready gate/i, /No maps/i, /No create-ready referrals/i], "/admin/scheduling");
+    const compactScheduling = (page.viewportSize()?.width || 1280) < 768;
     const readyReferrals = page.getByTestId("scheduling-ready-referrals");
-    const awaitingOpportunityAcceptance = page.getByTestId("scheduling-awaiting-opportunity-acceptance");
-    const declinedOpportunities = page.getByTestId("scheduling-declined-opportunities");
-    const reviewReferrals = page.getByTestId("scheduling-review-referrals");
+    const awaitingOpportunityAcceptance = page.getByTestId(compactScheduling ? "scheduling-awaiting-opportunity-acceptance-mobile" : "scheduling-awaiting-opportunity-acceptance");
+    const declinedOpportunities = page.getByTestId(compactScheduling ? "scheduling-declined-opportunities-mobile" : "scheduling-declined-opportunities");
+    const reviewReferrals = page.getByTestId(compactScheduling ? "scheduling-review-referrals-mobile" : "scheduling-review-referrals");
     const upcomingVisits = page.getByTestId("scheduling-upcoming-visits");
     await expect(readyReferrals).toBeVisible();
-    await expect(awaitingOpportunityAcceptance).toBeVisible();
-    await expect(declinedOpportunities).toBeVisible();
-    await expect(reviewReferrals).toBeVisible();
+    if (compactScheduling) {
+      await expect(page.locator("summary").filter({ hasText: /Awaiting response/i })).toBeVisible();
+      await expect(page.locator("summary").filter({ hasText: /Blocked \/ declined/i })).toBeVisible();
+      await expect(awaitingOpportunityAcceptance).toHaveCount(1);
+      await expect(declinedOpportunities).toHaveCount(1);
+      await expect(reviewReferrals).toHaveCount(1);
+    } else {
+      await expect(awaitingOpportunityAcceptance).toBeVisible();
+      await expect(declinedOpportunities).toBeVisible();
+      await expect(reviewReferrals).toBeVisible();
+    }
     await expect(upcomingVisits).toBeVisible();
 
     const readyCreateVisitLinks = readyReferrals.getByRole("link", { name: /Create visit/i });
@@ -301,11 +326,21 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
 
     if (therapistEmail && therapistPassword) {
       await logout(page);
+      await expect(page.getByLabel("Email")).toHaveValue("");
+      await expect(page.getByLabel("Password")).toHaveValue("");
+      await page.goBack();
+      await page.waitForLoadState("domcontentloaded");
+      await page.reload();
+      await expect(page).toHaveURL(/\/login/);
+      await expect(page.getByLabel("Password")).toHaveValue("");
       await login(page, therapistEmail, therapistPassword, "/my-work");
       await expect(page).toHaveURL(/\/my-work|\/dashboard/);
       await gotoProtected(page, "/my-work");
       await expectAnyText(page, [/My Work/i, /Field workspace/i, /No PHI/i, /masked/i], "therapist /my-work");
       await expect(page.getByTestId("therapist-referral-opportunities")).toBeVisible();
+      if (await page.locator("[data-therapist-recommendation]").count()) {
+        await expect(page.locator("[data-therapist-recommendation]").first()).toBeVisible();
+      }
       await expect(page.getByRole("link", { name: /Data Stewardship|Audit trail|Health Center/i })).toHaveCount(0);
       await expectNoForbiddenActionControls(page, "therapist /my-work", [...forbiddenActionControls, /^Offer to assigned therapist$/i]);
       await screenshot(page, "therapist-my-work.png");

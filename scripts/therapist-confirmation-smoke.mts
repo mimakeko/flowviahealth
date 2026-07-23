@@ -135,7 +135,7 @@ try {
   assert.match(myWorkPage, /action\.confirmLabel/, "Completion writes must render the configured confirmation submit label.");
   assert.match(fieldWorkflowSource, /Confirm complete/, "Completion writes must use a confirmation submit label.");
   assert.match(myWorkPage, /<details/, "Visit actions must open an inline confirmation disclosure.");
-  assert.match(myWorkPage, /Review visit action/, "Next field action panel must jump to the visit card.");
+  assert.match(myWorkPage, /Open details/, "Next field action panel must jump to the relevant work item.");
   assert.match(transientActionBanner, /role="status"/, "Successful visit actions must show a safe success banner.");
   assert.match(transientActionBanner, /role="alert"/, "Validation failures must show a safe error banner.");
   assert.match(myWorkPage, /getTherapistWorkspacePhoneDisplay\(visit\.referral\.phone\)/, "Visit phone display must stay masked.");
