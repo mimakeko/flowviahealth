@@ -410,7 +410,11 @@ test("therapist mobile field UI keeps decisions and navigation within reach", as
   await expect(captureDialog).toBeVisible();
   await expect(captureDialog.getByRole("link", { name: /Find a visit to add a note/i })).toBeVisible();
   await expect(captureDialog.getByRole("link", { name: /New referral/i })).toHaveCount(0);
-  await captureDialog.getByRole("button", { name: /Close add or capture/i }).click();
+  const captureCloseButton = captureDialog.getByRole("button", { name: /Close add or capture/i });
+  await expect(captureCloseButton).toBeVisible();
+  await captureCloseButton.press("Escape");
+  await expect(captureDialog).not.toBeVisible();
+  await expect(quickCapture).toBeFocused();
 
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), {
     message: "therapist mobile workspace should have zero horizontal overflow",

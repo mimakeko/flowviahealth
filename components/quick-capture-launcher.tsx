@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FilePlus2, Plus, StickyNote } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 type QuickCaptureLauncherProps = {
   role: "admin" | "therapist";
@@ -11,6 +11,15 @@ type QuickCaptureLauncherProps = {
 export function QuickCaptureLauncher({ role }: QuickCaptureLauncherProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const isAdmin = role === "admin";
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && dialogRef.current?.open) dialogRef.current.close();
+    };
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, []);
 
   return (
     <>
