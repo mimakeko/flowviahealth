@@ -460,10 +460,10 @@ export default async function AdminReferralsPage({
               <p className="eyebrow">Referral queue</p>
               <h2 className="mt-2 text-xl font-semibold tracking-[-.02em] text-ink">Referral queue ({displayedReferralRows.length})</h2>
             </div>
-            <p className="text-xs font-semibold text-slate-500 md:hidden">Showing review signals first on mobile.</p>
+            <p className="text-xs font-semibold text-slate-500 xl:hidden">Showing review signals first on smaller screens.</p>
           </div>
 
-          <div className="grid gap-3 md:hidden">
+          <div className="grid gap-3 xl:hidden">
             {initialMobileReferralRows.map((referral: ReferralListQualityRow) => (
               <Link key={referral.id} href={`/admin/referrals/${referral.id}`} className="rounded-lg border border-line bg-white p-4 transition hover:border-blue/40 hover:bg-slate-50">
                 <div className="flex flex-wrap items-center gap-2">
@@ -513,7 +513,7 @@ export default async function AdminReferralsPage({
             ) : null}
           </div>
 
-          <div className="hidden overflow-x-auto rounded-lg border border-line bg-white md:block">
+          <div className="hidden overflow-x-auto rounded-lg border border-line bg-white xl:block">
             <table className="min-w-full divide-y divide-line text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
                 <tr>
@@ -575,7 +575,7 @@ export default async function AdminReferralsPage({
           </div>
         </section>
 
-        <details className="rounded-lg border border-line bg-white p-4 md:hidden">
+        <details className="rounded-lg border border-line bg-white p-4 xl:hidden">
           <summary className="cursor-pointer text-sm font-semibold text-ink">Filters</summary>
           <form className="mt-4">
             <ReferralFilterFields
@@ -587,7 +587,7 @@ export default async function AdminReferralsPage({
           </form>
         </details>
 
-        <form className="hidden rounded-lg border border-line bg-white p-5 md:block">
+        <form className="hidden rounded-lg border border-line bg-white p-5 xl:block">
           <ReferralFilterFields
             selectedGroup={selectedGroup}
             selectedStatus={selectedStatus}
