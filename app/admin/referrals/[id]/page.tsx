@@ -45,7 +45,6 @@ import {
   getAcceptedOpportunityCountsByTherapistId,
   getOpportunityStateFromAuditLogs,
   getOpportunityTimelineFromAuditLogs,
-  opportunityAllowsVisitCreation,
   opportunityBadgeClassName,
   opportunityActionLabel,
   opportunityCreateVisitBlockerMessage,
@@ -647,10 +646,6 @@ export default async function ReferralDetailPage({
     opportunityState: opportunityState.state,
     status: referral.status,
   });
-  const opportunityAllowsCreateVisit = opportunityAllowsVisitCreation({
-    opportunityState: opportunityState.state,
-    referralSource: referral.referralSource,
-  });
   const workflowState = getReferralWorkflowState({
     activeWorkflowVisible: activeWorkflowVisible > 0,
     assignedTherapistId: referral.assignedTherapistId,
@@ -703,6 +698,43 @@ export default async function ReferralDetailPage({
   const assignedRecommendation = therapistRecommendations.find((recommendation) => recommendation.therapistId === referral.assignedTherapistId);
   const visibleRecommendations = therapistRecommendations.filter((recommendation) => recommendation.eligibility.eligible).slice(0, 3);
   const recommendationCards = visibleRecommendations.length > 0 ? visibleRecommendations : therapistRecommendations.slice(0, 3);
+  const opportunityStatusLabel = opportunityStateLabel(opportunityState.state);
+  const opportunityNextStep = workflowState.nextAction;
+  const opportunityPrimaryDetail = opportunityState.state === "declined"
+    ? "Assigned therapist declined this opportunity. Review the decline, then reassign or offer again manually."
+    : opportunitySchedulingContext({
+        createVisitGateAllowed: createVisitGate.allowed,
+        declinedReason: opportunityState.declinedReason,
+        opportunityState: opportunityState.state,
+      });
+  const opportunitySummaryItems = [
+    { label: "Status", value: opportunityStatusLabel },
+    { label: "Assigned therapist", value: referral.assignedTherapist?.name || "Unassigned" },
+    {
+      label: opportunityState.state === "declined" ? "Decline reason" : "Current state",
+      value: opportunityState.state === "declined"
+        ? opportunityDeclineReasonLabel(opportunityState.declinedReason)
+        : opportunityPrimaryDetail,
+    },
+    { label: "Next action", value: opportunityNextStep },
+  ];
+  const opportunityDetailItems = [
+    { label: "Offer readiness", value: opportunityOfferGate.allowed ? "Safe to offer" : "Review required" },
+    { label: "Source", value: "Deterministic/manual" },
+    {
+      label: "Visit creation",
+      value: opportunityVisitCreationReadinessLabel({
+        createVisitGateAllowed: createVisitGate.allowed,
+        declinedReason: opportunityState.declinedReason,
+        opportunityState: opportunityState.state,
+        referralSource: referral.referralSource,
+      }),
+    },
+    {
+      label: "Safe decline note",
+      value: opportunityState.noteAdded ? "Operational note recorded; raw text not displayed." : "Not recorded",
+    },
+  ];
   const schedulingReadiness = getSchedulingReadiness({
     assignedTherapistId: referral.assignedTherapistId,
     futureVisitCount: upcomingVisits.length,
@@ -742,12 +774,13 @@ export default async function ReferralDetailPage({
         Back to referrals
       </Link>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_.8fr]">
+      <div className="mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0">
         <div className="rounded-lg border border-line bg-white p-6">
           <p className="eyebrow">Referral detail</p>
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-semibold tracking-[-.03em] text-ink">{referral.patientName}</h1>
+            <div className="min-w-0">
+              <h1 className="break-words text-3xl font-semibold tracking-[-.03em] text-ink">{referral.patientName}</h1>
               <p className="mt-2 text-sm text-slate-600">{[referral.city, referral.zip].filter(Boolean).join(" / ") || "Location not provided"}</p>
             </div>
             <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(referral.status)}`}>
@@ -760,27 +793,13 @@ export default async function ReferralDetailPage({
           </div>
 
           <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
-            <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{redactPhone(referral.phone)}</dd></div>
-            <div><dt className="font-semibold text-ink">Email</dt><dd className="mt-1 text-slate-600">{referral.email || "Not provided"}</dd></div>
-            <div><dt className="font-semibold text-ink">Service area / workflow type</dt><dd className="mt-1 text-slate-600">{referral.careType || "Not provided"}</dd></div>
-            <div><dt className="font-semibold text-ink">Referral source</dt><dd className="mt-1 text-slate-600">{referral.referralSource || "Not provided"}</dd></div>
-            <div><dt className="font-semibold text-ink">Assigned therapist</dt><dd className="mt-1 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</dd></div>
-            <div><dt className="font-semibold text-ink">Created</dt><dd className="mt-1 text-slate-600">{formatDateTime(referral.createdAt)}</dd></div>
+            <div className="min-w-0"><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 break-words text-slate-600">{redactPhone(referral.phone)}</dd></div>
+            <div className="min-w-0"><dt className="font-semibold text-ink">Email</dt><dd className="mt-1 break-words text-slate-600">{referral.email || "Not provided"}</dd></div>
+            <div className="min-w-0"><dt className="font-semibold text-ink">Service area / workflow type</dt><dd className="mt-1 break-words text-slate-600">{referral.careType || "Not provided"}</dd></div>
+            <div className="min-w-0"><dt className="font-semibold text-ink">Referral source</dt><dd className="mt-1 break-words text-slate-600">{referral.referralSource || "Not provided"}</dd></div>
+            <div className="min-w-0"><dt className="font-semibold text-ink">Assigned therapist</dt><dd className="mt-1 break-words text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</dd></div>
+            <div className="min-w-0"><dt className="font-semibold text-ink">Created</dt><dd className="mt-1 break-words text-slate-600">{formatDateTime(referral.createdAt)}</dd></div>
           </dl>
-
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-line bg-slate-50 p-4 text-sm leading-6 text-slate-700">
-              <p className="font-semibold text-ink">Assignment and schedule</p>
-              <p className="mt-1">Therapist: {referral.assignedTherapist?.name || "Unassigned"}</p>
-              <p className="mt-1">Next visit: {upcomingVisits[0] ? `${formatDateTime(upcomingVisits[0].scheduledAt)} · ${upcomingVisits[0].therapist?.name || "Unassigned"}` : "Not scheduled"}</p>
-            </div>
-            <div className="rounded-lg border border-line bg-slate-50 p-4 text-sm leading-6 text-slate-700">
-              <p className="font-semibold text-ink">SMS consent readiness</p>
-              <p className="mt-1">Phone: {redactPhone(referral.phone)} · Consent: {statusLabel(smsReadiness)}</p>
-              <p className="mt-1">Template: safe transactional templates available · Real SMS gate: {telnyx.realSmsTestsEnabled ? "On" : "Off"}</p>
-              <p className="mt-1 text-xs text-slate-500">SMS send disabled in this workflow. Controlled SMS tests require `FLOWVIA_ALLOW_REAL_SMS_TEST=true`, personal-number-only testing, and no PHI.</p>
-            </div>
-          </div>
 
           <BlockedNoteAlert className="mt-5" searchParams={query} />
 
@@ -796,127 +815,123 @@ export default async function ReferralDetailPage({
             </section>
           ) : null}
 
-          <section className="mt-5 rounded-lg border border-line bg-white p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="eyebrow">Visit creation gate</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">{workflowState.label}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{workflowState.detail}</p>
-              </div>
-              <span className={`inline-flex w-fit rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ${workflowState.canCreateVisit ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-amber-50 text-amber-900 ring-amber-200"}`}>
-                {workflowState.canCreateVisit ? "ready for manual visit creation" : "review only"}
-              </span>
-            </div>
-
-            <div className={`mt-4 rounded-lg border p-4 text-sm leading-6 ${workflowState.canCreateVisit ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
-              <p className="font-semibold">Next manual admin step</p>
-              <p className="mt-1">{workflowState.nextAction}</p>
-              {workflowState.canCreateVisit ? (
-                <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-primary mt-3">
-                  <CalendarPlus size={18} />
-                  Create visit
-                </Link>
-              ) : (
-                <p className="mt-3 rounded-md bg-white/70 p-2 font-semibold">{workflowState.detail}</p>
-              )}
-            </div>
-
-            <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
-              <div className="rounded-lg border border-line bg-slate-50 p-4">
-                <p className="font-semibold text-ink">Deterministic blockers and reasons</p>
-                <div className="mt-3 grid gap-2">
-                  {decisionReasons.length > 0 ? decisionReasons.map((reason) => (
-                    <p key={reason} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-line">{reason}</p>
-                  )) : (
-                    <p className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200">No readiness blockers found.</p>
-                  )}
+          <details className="mt-5 rounded-lg border border-line bg-slate-50">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-5 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+              <span>Decision details</span>
+              <span className="text-xs font-semibold text-blue">Open</span>
+            </summary>
+            <div className="grid gap-4 border-t border-line p-5">
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-lg border border-line bg-white p-4 text-sm leading-6 text-slate-700">
+                  <p className="font-semibold text-ink">Assignment and schedule</p>
+                  <p className="mt-1">Therapist: {referral.assignedTherapist?.name || "Unassigned"}</p>
+                  <p className="mt-1">Next visit: {upcomingVisits[0] ? `${formatDateTime(upcomingVisits[0].scheduledAt)} · ${upcomingVisits[0].therapist?.name || "Unassigned"}` : "Not scheduled"}</p>
+                </div>
+                <div className="rounded-lg border border-line bg-white p-4 text-sm leading-6 text-slate-700">
+                  <p className="font-semibold text-ink">SMS consent readiness</p>
+                  <p className="mt-1">Phone: {redactPhone(referral.phone)} · Consent: {statusLabel(smsReadiness)}</p>
+                  <p className="mt-1">Template: safe transactional templates available · Real SMS gate: {telnyx.realSmsTestsEnabled ? "On" : "Off"}</p>
+                  <p className="mt-1 text-xs text-slate-500">SMS send disabled in this workflow. Controlled SMS tests require `FLOWVIA_ALLOW_REAL_SMS_TEST=true`, personal-number-only testing, and no PHI.</p>
                 </div>
               </div>
 
-              <div className="rounded-lg border border-line bg-slate-50 p-4">
-                <p className="font-semibold text-ink">Safe referral signals</p>
-                <dl className="mt-3 grid gap-3 text-sm">
-                  <div><dt className="font-semibold text-ink">Masked phone</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.maskedPhone}</dd></div>
-                  <div><dt className="font-semibold text-ink">Therapist</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.therapistLabel}</dd></div>
-                  <div><dt className="font-semibold text-ink">City / ZIP</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.city} / {intakeQuality.safeDisplay.zip}</dd></div>
-                  <div><dt className="font-semibold text-ink">SMS consent</dt><dd className="mt-1 text-slate-600">{statusLabel(smsReadiness)}{smsReadiness === "opted_out" ? " · Use non-SMS operational follow-up only" : " · No SMS controls here"}</dd></div>
-                </dl>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {Object.entries(intakeQuality.checklist).map(([key, value]) => (
-                <p key={key} className={`rounded-md px-3 py-2 text-sm font-semibold ring-1 ${value ? "bg-emerald-50 text-emerald-900 ring-emerald-200" : "bg-amber-50 text-amber-950 ring-amber-200"}`}>
-                  {value ? "Ready" : "Review"} · {key.replace(/([A-Z])/g, " $1").replace(/^has /, "").replace(/^status /, "status ").toLowerCase()}
-                </p>
-              ))}
-            </div>
-
-            {missingItems.length > 0 ? (
-              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-                <p className="font-semibold">Missing intake checklist</p>
-                <div className="mt-3 grid gap-2">
-                  {missingItems.map((item) => (
-                    <p key={item.code} className="rounded-md bg-white/70 p-2"><span className="font-semibold">{item.label}:</span> {item.nextAction}</p>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {intakeQuality.warnings.length > 0 ? (
-              <div className="mt-4 grid gap-2">
-                {intakeQuality.warnings.map((item) => (
-                  <div key={item.code} className={`rounded-lg border p-3 text-sm leading-6 ${item.level === "blocker" ? "border-rose-200 bg-rose-50 text-rose-950" : item.level === "warning" ? "border-amber-200 bg-amber-50 text-amber-950" : "border-line bg-slate-50 text-slate-700"}`}>
-                    <p className="font-semibold">{item.label}</p>
-                    <p className="mt-1">{item.nextAction}</p>
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-lg border border-line bg-white p-4">
+                  <p className="font-semibold text-ink">Deterministic blockers and reasons</p>
+                  <div className="mt-3 grid gap-2">
+                    {decisionReasons.length > 0 ? decisionReasons.map((reason) => (
+                      <p key={reason} className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-line">{reason}</p>
+                    )) : (
+                      <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200">No readiness blockers found.</p>
+                    )}
                   </div>
+                </div>
+
+                <div className="rounded-lg border border-line bg-white p-4">
+                  <p className="font-semibold text-ink">Safe referral signals</p>
+                  <dl className="mt-3 grid gap-3 text-sm">
+                    <div><dt className="font-semibold text-ink">Masked phone</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.maskedPhone}</dd></div>
+                    <div><dt className="font-semibold text-ink">Therapist</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.therapistLabel}</dd></div>
+                    <div><dt className="font-semibold text-ink">City / ZIP</dt><dd className="mt-1 text-slate-600">{intakeQuality.safeDisplay.city} / {intakeQuality.safeDisplay.zip}</dd></div>
+                    <div><dt className="font-semibold text-ink">SMS consent</dt><dd className="mt-1 text-slate-600">{statusLabel(smsReadiness)}{smsReadiness === "opted_out" ? " · Use non-SMS operational follow-up only" : " · No SMS controls here"}</dd></div>
+                  </dl>
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {Object.entries(intakeQuality.checklist).map(([key, value]) => (
+                  <p key={key} className={`rounded-md px-3 py-2 text-sm font-semibold ring-1 ${value ? "bg-emerald-50 text-emerald-900 ring-emerald-200" : "bg-amber-50 text-amber-950 ring-amber-200"}`}>
+                    {value ? "Ready" : "Review"} · {key.replace(/([A-Z])/g, " $1").replace(/^has /, "").replace(/^status /, "status ").toLowerCase()}
+                  </p>
                 ))}
               </div>
-            ) : null}
 
-            {duplicateCandidates.length > 0 ? (
-              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-                <p className="font-semibold">Possible duplicate referrals</p>
-                <div className="mt-3 grid gap-2">
-                  {duplicateCandidates.map((candidate) => (
-                    <div key={candidate.id} className="rounded-md bg-white/70 p-3">
-                      <p className="font-semibold">Score: {candidate.score} · Status: {statusLabel(candidate.status)} · Therapist: {candidate.therapistLabel}</p>
-                      <p className="mt-1 text-xs">Signals: {candidate.reasons.join(", ")}</p>
-                      <Link href={`/admin/referrals/${candidate.id}`} className="mt-2 inline-flex font-semibold text-blue underline">Review safe referral record</Link>
+              {missingItems.length > 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+                  <p className="font-semibold">Missing intake checklist</p>
+                  <div className="mt-3 grid gap-2">
+                    {missingItems.map((item) => (
+                      <p key={item.code} className="rounded-md bg-white/70 p-2"><span className="font-semibold">{item.label}:</span> {item.nextAction}</p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {intakeQuality.warnings.length > 0 ? (
+                <div className="grid gap-2">
+                  {intakeQuality.warnings.map((item) => (
+                    <div key={item.code} className={`rounded-lg border p-3 text-sm leading-6 ${item.level === "blocker" ? "border-rose-200 bg-rose-50 text-rose-950" : item.level === "warning" ? "border-amber-200 bg-amber-50 text-amber-950" : "border-line bg-white text-slate-700"}`}>
+                      <p className="font-semibold">{item.label}</p>
+                      <p className="mt-1">{item.nextAction}</p>
                     </div>
                   ))}
                 </div>
-              </div>
-            ) : null}
+              ) : null}
 
-            <details className="mt-4 rounded-lg border border-line bg-slate-50 p-4 text-sm leading-6 text-slate-700">
-              <summary className="cursor-pointer font-semibold text-ink">Safety guarantees</summary>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {[
-                  "Deterministic/local data only",
-                  "No SMS sent",
-                  "No autonomous scheduling",
-                  "No external duplicate API",
-                  "No maps/geocoding/travel-time API",
-                  "No PHI storage in notes",
-                  "Manual admin review required",
-                ].map((item) => (
-                  <p key={item} className="rounded-md bg-white px-3 py-2 font-semibold ring-1 ring-line">{item}</p>
-                ))}
-              </div>
-            </details>
-          </section>
+              {duplicateCandidates.length > 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+                  <p className="font-semibold">Possible duplicate referrals</p>
+                  <div className="mt-3 grid gap-2">
+                    {duplicateCandidates.map((candidate) => (
+                      <div key={candidate.id} className="rounded-md bg-white/70 p-3">
+                        <p className="font-semibold">Score: {candidate.score} · Status: {statusLabel(candidate.status)} · Therapist: {candidate.therapistLabel}</p>
+                        <p className="mt-1 text-xs">Signals: {candidate.reasons.join(", ")}</p>
+                        <Link href={`/admin/referrals/${candidate.id}`} className="mt-2 inline-flex font-semibold text-blue underline">Review safe referral record</Link>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
-          <section data-testid="therapist-recommendations" className="mt-5 rounded-lg border border-line bg-slate-50 p-5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="eyebrow">Therapist recommendations</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">Explainable staffing support</h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Existing city, ZIP, service-area notes, active status, open workload, accepted-unscheduled work, intake readiness, and known conflicts only.</p>
-              </div>
-              <span className="inline-flex w-fit rounded-md bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">Human review required</span>
+              <details className="rounded-lg border border-line bg-white p-4 text-sm leading-6 text-slate-700">
+                <summary className="cursor-pointer font-semibold text-ink">Safety guarantees</summary>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {[
+                    "Deterministic/local data only",
+                    "No SMS sent",
+                    "No autonomous scheduling",
+                    "No external duplicate API",
+                    "No maps/geocoding/travel-time API",
+                    "No PHI storage in notes",
+                    "Manual admin review required",
+                  ].map((item) => (
+                    <p key={item} className="rounded-md bg-slate-50 px-3 py-2 font-semibold ring-1 ring-line">{item}</p>
+                  ))}
+                </div>
+              </details>
             </div>
-            <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          </details>
+
+          <section data-testid="therapist-recommendations" className="mt-5 rounded-lg border border-line bg-white p-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="eyebrow">Therapist recommendations</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">Recommended therapists</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Use these as staffing suggestions only. The assigned therapist, fit label, and short reason stay visible; supporting detail is tucked behind “Why this fits.”</p>
+              </div>
+              <span className="inline-flex w-fit rounded-md bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">Manual staffing review</span>
+            </div>
+            <div className="mt-4 grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
               {recommendationCards.map((recommendation) => <TherapistRecommendationCard key={recommendation.therapistId} recommendation={recommendation} />)}
             </div>
             {recommendationCards.length === 0 ? <p className="mt-4 rounded-lg bg-white p-4 text-sm text-slate-600 ring-1 ring-line">No therapist candidates are available.</p> : null}
@@ -924,25 +939,22 @@ export default async function ReferralDetailPage({
 
           <section data-testid="therapist-opportunity-panel" className="mt-5 rounded-lg border border-line bg-white p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
+              <div className="min-w-0">
                 <p className="eyebrow">Therapist opportunity</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">{opportunityStateLabel(opportunityState.state)}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Manual staffing opportunity review only. This does not create a visit, send SMS, auto-assign, auto-accept, or call external matching services.
-                </p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">{opportunityStatusLabel}</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{opportunityPrimaryDetail}</p>
               </div>
               <span className={`inline-flex w-fit rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(opportunityState.state)}`}>
-                {opportunityStateLabel(opportunityState.state)}
+                {opportunityStatusLabel}
               </span>
             </div>
-            <dl className="mt-5 grid gap-3 text-sm md:grid-cols-3">
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Assigned therapist</dt><dd className="mt-1 text-slate-600">{referral.assignedTherapist?.name || "Unassigned"}</dd></div>
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Offer readiness</dt><dd className="mt-1 text-slate-600">{opportunityOfferGate.allowed ? "Safe to offer" : "Review required"}</dd></div>
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Source</dt><dd className="mt-1 text-slate-600">deterministic/manual</dd></div>
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Therapist opportunity</dt><dd className="mt-1 text-slate-600">{opportunitySchedulingContext({ createVisitGateAllowed: createVisitGate.allowed, declinedReason: opportunityState.declinedReason, opportunityState: opportunityState.state })}</dd></div>
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Decline reason</dt><dd className="mt-1 text-slate-600">{opportunityDeclineReasonLabel(opportunityState.declinedReason)}</dd></div>
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Visit creation gate</dt><dd className="mt-1 text-slate-600">{opportunityVisitCreationReadinessLabel({ createVisitGateAllowed: createVisitGate.allowed, declinedReason: opportunityState.declinedReason, opportunityState: opportunityState.state, referralSource: referral.referralSource })}</dd></div>
-              <div className="rounded-lg border border-line bg-slate-50 p-3"><dt className="font-semibold text-ink">Safe decline note</dt><dd className="mt-1 text-slate-600">{opportunityState.noteAdded ? "Operational note recorded; raw text not displayed." : "Not recorded"}</dd></div>
+            <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+              {opportunitySummaryItems.map((item) => (
+                <div key={item.label} className="min-w-0 rounded-lg border border-line bg-slate-50 p-3">
+                  <dt className="font-semibold text-ink">{item.label}</dt>
+                  <dd className="mt-1 break-words text-slate-600">{item.value}</dd>
+                </div>
+              ))}
             </dl>
             {opportunityOfferGate.allowed ? (
               <form action={offerOpportunityAction} className="mt-4">
@@ -951,104 +963,120 @@ export default async function ReferralDetailPage({
               </form>
             ) : (
               <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-                <p className="font-semibold">Cannot offer yet</p>
-                <p className="mt-1">{opportunityOfferGate.reasons.join(" · ") || "Already offered or accepted."}</p>
+                <p className="font-semibold">{workflowState.label}</p>
+                <p className="mt-1">{opportunityCreateVisitBlockerMessage({ createVisitGateReasons: createVisitGate.reasons, declinedReason: opportunityState.declinedReason, opportunityState: opportunityState.state })}</p>
               </div>
             )}
-            <div className="mt-4 rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600">
-              Safety guarantees: no PHI fields, no full address, no SMS sent, no visit auto-created, manual action only, no automatic therapist matching, no EMR/billing/OASIS/claims workflow.
-            </div>
-            <details className="mt-4 rounded-lg border border-line bg-slate-50 p-4">
-              <summary className="cursor-pointer text-sm font-semibold text-ink">Opportunity timeline ({opportunityTimeline.length})</summary>
-              <div className="mt-3 grid gap-2">
-                {opportunityTimeline.map((item) => (
-                  <div key={`${item.action}-${new Date(item.createdAt).getTime()}-${item.actorId || "system"}`} className="rounded-md bg-white p-3 text-sm leading-6 ring-1 ring-line">
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                      <p className="font-semibold text-ink">{opportunityActionLabel(item.action)}</p>
-                      <p className="text-xs text-slate-500">{formatDateTime(item.createdAt)}</p>
+            <details className="mt-4 rounded-lg border border-line bg-slate-50">
+              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                <span>Details</span>
+                <span className="text-xs font-semibold text-blue">Open</span>
+              </summary>
+              <div className="grid gap-4 border-t border-line p-4">
+                <dl className="grid gap-3 text-sm md:grid-cols-2">
+                  {opportunityDetailItems.map((item) => (
+                    <div key={item.label} className="min-w-0 rounded-lg border border-line bg-white p-3">
+                      <dt className="font-semibold text-ink">{item.label}</dt>
+                      <dd className="mt-1 break-words text-slate-600">{item.value}</dd>
                     </div>
-                    <p className="mt-1 text-slate-600">Actor/source: {item.actorType}{item.source ? ` / ${item.source}` : ""}</p>
-                    {item.declinedReason ? <p className="mt-1 text-slate-600">Decline reason: {opportunityDeclineReasonLabel(item.declinedReason)}</p> : null}
-                    {item.blockerReason ? <p className="mt-1 text-slate-600">Blocked reason: {item.blockerReason}</p> : null}
-                    {item.noteAdded ? <p className="mt-1 font-semibold text-slate-700">Safe operational note recorded; raw text is not displayed.</p> : null}
-                  </div>
-                ))}
-                {opportunityTimeline.length === 0 ? <p className="rounded-md bg-white p-3 text-sm text-slate-500 ring-1 ring-line">No opportunity events recorded yet.</p> : null}
+                  ))}
+                </dl>
+                <div className="rounded-lg border border-line bg-white p-4 text-xs leading-5 text-slate-600">
+                  Safety guarantees: no PHI fields, no full address, no SMS sent, no visit auto-created, manual action only, no automatic therapist matching, no EMR/billing/OASIS/claims workflow.
+                </div>
+                <div className="grid gap-2">
+                  <p className="text-sm font-semibold text-ink">Opportunity history</p>
+                  {opportunityTimeline.map((item) => (
+                    <div key={`${item.action}-${new Date(item.createdAt).getTime()}-${item.actorId || "system"}`} className="rounded-md bg-white p-3 text-sm leading-6 ring-1 ring-line">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                        <p className="font-semibold text-ink">{opportunityActionLabel(item.action)}</p>
+                        <p className="text-xs text-slate-500">{formatDateTime(item.createdAt)}</p>
+                      </div>
+                      <p className="mt-1 text-slate-600">Actor/source: {item.actorType}{item.source ? ` / ${item.source}` : ""}</p>
+                      {item.declinedReason ? <p className="mt-1 text-slate-600">Decline reason: {opportunityDeclineReasonLabel(item.declinedReason)}</p> : null}
+                      {item.blockerReason ? <p className="mt-1 text-slate-600">Blocked reason: {item.blockerReason}</p> : null}
+                      {item.noteAdded ? <p className="mt-1 font-semibold text-slate-700">Safe operational note recorded; raw text is not displayed.</p> : null}
+                    </div>
+                  ))}
+                  {opportunityTimeline.length === 0 ? <p className="rounded-md bg-white p-3 text-sm text-slate-500 ring-1 ring-line">No opportunity events recorded yet.</p> : null}
+                </div>
               </div>
             </details>
-            {!opportunityAllowsCreateVisit ? (
-              <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
-                {opportunityCreateVisitBlockerMessage({ createVisitGateReasons: createVisitGate.reasons, declinedReason: opportunityState.declinedReason, opportunityState: opportunityState.state })}
-              </p>
-            ) : null}
           </section>
 
-          <div className="mt-5">
-            <OperationsAssistantPanel
-              cards={assistantCards}
-              status={assistantStatus}
-              summary="Referral guidance is deterministic and limited to operational workflow state. It does not send messages or make autonomous changes."
-              title="Operations Assistant"
-            />
-          </div>
+          <section className="mt-5 rounded-lg border border-line bg-white p-5">
+            <p className="eyebrow">Update referral</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">Status, therapist, and note</h2>
+            <form action={updateReferralAction} className="mt-5 grid gap-5 md:grid-cols-2">
+              <input type="hidden" name="referralId" value={referral.id} />
+              <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue={referral.status}>{REFERRAL_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
+              <label className="text-sm font-semibold text-ink">Assigned therapist<select className="field" name="assignedTherapistId" defaultValue={referral.assignedTherapistId || ""}><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
+              <label className="text-sm font-semibold text-ink md:col-span-2">Internal operational note <span className="font-normal text-slate-400">(no PHI or clinical detail)</span><textarea className="field min-h-32" name="notes" defaultValue={referral.notes || ""} /></label>
+              <div className="md:col-span-2"><button className="btn-primary" type="submit"><Save size={18} />Save referral</button></div>
+            </form>
+          </section>
 
-          <div className="mt-5">
-            <SchedulingIntelligencePanel
-              fit={therapistFit}
-              readiness={schedulingReadiness}
-              summary="Referral scheduling readiness uses fake pilot status, therapist assignment, SMS consent state, and existing future visits. Suggested windows require manual review."
-              windows={suggestedWindows}
-            />
-            {workflowState.canCreateVisit ? (
-              <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-secondary mt-4">
-                <CalendarPlus size={18} />
-                Open Create visit flow
-              </Link>
-            ) : null}
-          </div>
-
-          {referral.address ? (
-            <p className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-900">
-              A full address is stored for this fake referral, but it is not displayed broadly. Keep pilot data fake and non-PHI.
-            </p>
-          ) : null}
-
-          <form action={updateReferralAction} className="mt-8 grid gap-5 border-t border-line pt-6 md:grid-cols-2">
-            <input type="hidden" name="referralId" value={referral.id} />
-            <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue={referral.status}>{REFERRAL_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
-            <label className="text-sm font-semibold text-ink">Assigned therapist<select className="field" name="assignedTherapistId" defaultValue={referral.assignedTherapistId || ""}><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
-            <label className="text-sm font-semibold text-ink md:col-span-2">Internal operational note <span className="font-normal text-slate-400">(no PHI or clinical detail)</span><textarea className="field min-h-32" name="notes" defaultValue={referral.notes || ""} /></label>
-            <div className="md:col-span-2"><button className="btn-primary" type="submit"><Save size={18} />Save referral</button></div>
-          </form>
+          <details className="mt-5 rounded-lg border border-line bg-slate-50">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-5 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+              <span>More guidance and diagnostics</span>
+              <span className="text-xs font-semibold text-blue">Open</span>
+            </summary>
+            <div className="grid gap-5 border-t border-line p-5">
+              <OperationsAssistantPanel
+                cards={assistantCards}
+                status={assistantStatus}
+                summary="Referral guidance is deterministic and limited to operational workflow state. It does not send messages or make autonomous changes."
+                title="Operations Assistant"
+              />
+              <SchedulingIntelligencePanel
+                fit={therapistFit}
+                readiness={schedulingReadiness}
+                summary="Referral scheduling readiness uses fake pilot status, therapist assignment, SMS consent state, and existing future visits. Suggested windows require manual review."
+                windows={suggestedWindows}
+              />
+              {workflowState.canCreateVisit ? (
+                <Link href={`/admin/visits/new?referralId=${referral.id}`} className="btn-secondary w-fit">
+                  <CalendarPlus size={18} />
+                  Open Create visit flow
+                </Link>
+              ) : null}
+              {referral.address ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-900">
+                  A full address is stored for this fake referral, but it is not displayed broadly. Keep pilot data fake and non-PHI.
+                </p>
+              ) : null}
+            </div>
+          </details>
+        </div>
         </div>
 
-        <aside className="grid gap-5">
-        <section className="rounded-lg border border-line bg-white p-6">
-          <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Intake history</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Audit-safe intake events only. Raw blocked note text, full phones, raw SMS bodies, and provider payloads are not shown.</p>
-          <div className="mt-5 space-y-3">
-            {intakeAuditLogs.map((log: AuditLogListItem) => (
-              <div key={log.id} className="rounded-lg border border-line p-3 text-sm">
-                <p className="font-semibold text-ink">{log.action}</p>
-                <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {log.actorType}</p>
-              </div>
-            ))}
-            {intakeAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No intake events recorded yet.</p> : null}
-          </div>
-        </section>
+        <aside className="grid gap-5 xl:grid-cols-2 2xl:sticky 2xl:top-6 2xl:grid-cols-1">
+          <section className="rounded-lg border border-line bg-white p-6">
+            <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Intake history</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Audit-safe intake events only. Raw blocked note text, full phones, raw SMS bodies, and provider payloads are not shown.</p>
+            <div className="mt-5 space-y-3">
+              {intakeAuditLogs.map((log: AuditLogListItem) => (
+                <div key={log.id} className="rounded-lg border border-line p-3 text-sm">
+                  <p className="font-semibold text-ink">{log.action}</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {log.actorType}</p>
+                </div>
+              ))}
+              {intakeAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No intake events recorded yet.</p> : null}
+            </div>
+          </section>
 
-        <section className="rounded-lg border border-line bg-white p-6">
-          <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Audit trail</h2>
-          <div className="mt-5 space-y-3">
-            {referralAuditLogs.map((log: AuditLogListItem) => (
-              <div key={log.id} className="rounded-lg border border-line p-3 text-sm">
-                <p className="font-semibold text-ink">{log.action}</p>
-                <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {log.actorType}</p>
-              </div>
-            ))}
-            {referralAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No audit events recorded for this referral yet.</p> : null}
-          </div>
-        </section>
+          <section className="rounded-lg border border-line bg-white p-6">
+            <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Audit trail</h2>
+            <div className="mt-5 space-y-3">
+              {referralAuditLogs.map((log: AuditLogListItem) => (
+                <div key={log.id} className="rounded-lg border border-line p-3 text-sm">
+                  <p className="font-semibold text-ink">{log.action}</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)} · {log.actorType}</p>
+                </div>
+              ))}
+              {referralAuditLogs.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No audit events recorded for this referral yet.</p> : null}
+            </div>
+          </section>
         </aside>
       </div>
 

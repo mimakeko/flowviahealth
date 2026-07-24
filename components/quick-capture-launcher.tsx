@@ -11,6 +11,7 @@ type QuickCaptureLauncherProps = {
 export function QuickCaptureLauncher({ role }: QuickCaptureLauncherProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const isAdmin = role === "admin";
+  const launcherOffsetClass = isAdmin ? "bottom-5" : "bottom-20";
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -26,7 +27,7 @@ export function QuickCaptureLauncher({ role }: QuickCaptureLauncherProps) {
       <button
         aria-haspopup="dialog"
         aria-label="Add or capture"
-        className="fixed bottom-20 right-5 z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-teal text-white shadow-[0_12px_28px_rgba(0,178,169,0.32)] transition hover:bg-[#009b94] focus:outline-none focus:ring-4 focus:ring-teal/25 motion-reduce:transition-none lg:hidden"
+        className={`fixed ${launcherOffsetClass} right-5 z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-teal text-white shadow-[0_12px_28px_rgba(0,178,169,0.32)] transition hover:bg-[#009b94] focus:outline-none focus:ring-4 focus:ring-teal/25 motion-reduce:transition-none lg:hidden`}
         data-testid="quick-capture-launcher"
         onClick={() => dialogRef.current?.showModal()}
         type="button"
