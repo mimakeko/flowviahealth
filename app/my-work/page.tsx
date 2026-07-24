@@ -545,7 +545,6 @@ function FieldWorkspaceEmptyState({ stateKey }: { stateKey: FieldWorkspaceEmptyS
   return (
     <div className="rounded-lg border border-line bg-white p-5 text-sm leading-6 text-slate-600">
       <p className="font-semibold text-ink">{emptyState.title}</p>
-      <p className="mt-1">{emptyState.detail}</p>
       <p className="mt-3 font-semibold text-blue">{emptyState.action}</p>
     </div>
   );
