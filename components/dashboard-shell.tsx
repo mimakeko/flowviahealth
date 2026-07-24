@@ -109,7 +109,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
           <Link href="/dashboard" aria-label="Flowvia internal dashboard" className="inline-flex w-fit">
             <LogoLockup compact />
           </Link>
-          <div className={`${isFieldTherapist ? "hidden lg:flex" : "flex"} flex-wrap items-center gap-2`}>
+          <div className={`${isFieldTherapist ? "hidden" : "flex"} flex-wrap items-center gap-2`}>
             <span className={`min-h-9 items-center rounded-lg border border-line bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 ${isAdmin ? "hidden sm:inline-flex" : "inline-flex"}`}>
               {roleLabel(session.role)} · {session.email}
             </span>
@@ -153,7 +153,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             ) : null}
           </div>
         </div>
-        <div className={`${isWorkspace ? "hidden lg:block" : ""} border-t border-amber-200 bg-amber-50`}>
+        <div className={`${isFieldTherapist ? "hidden" : isWorkspace ? "hidden lg:block" : ""} border-t border-amber-200 bg-amber-50`}>
           <div className={`container-page flex flex-wrap items-center gap-2 py-2 text-xs font-semibold text-amber-950 ${isAdmin ? "min-h-9 sm:min-h-11" : "min-h-11"}`}>
             <ShieldAlert size={16} />
             <span className={isAdmin ? "sm:hidden" : ""}>{isAdmin ? "Pilot mode" : dataMode.warningLabel}</span>
@@ -163,8 +163,8 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
         </div>
       </header>
 
-      <div className="container-page grid grid-cols-[minmax(0,1fr)] gap-5 py-4 sm:py-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:py-8">
-        <aside className={`${isTherapist ? "hidden lg:block" : ""} ${isContentFirst ? "order-2 border-0 bg-transparent p-0 shadow-none lg:order-1 lg:rounded-lg lg:border lg:border-line lg:bg-white lg:p-3 lg:shadow-[0_10px_30px_rgba(10,37,64,0.05)]" : "rounded-lg border border-line bg-white p-3 shadow-[0_10px_30px_rgba(10,37,64,0.05)]"} h-fit lg:sticky lg:top-6`}>
+      <div className={`container-page grid grid-cols-[minmax(0,1fr)] gap-5 py-4 sm:py-6 lg:gap-6 lg:py-8 ${isFieldTherapist ? "" : "lg:grid-cols-[260px_minmax(0,1fr)]"}`}>
+        <aside className={`${isFieldTherapist ? "hidden" : isTherapist ? "hidden lg:block" : ""} ${isContentFirst ? "order-2 border-0 bg-transparent p-0 shadow-none lg:order-1 lg:rounded-lg lg:border lg:border-line lg:bg-white lg:p-3 lg:shadow-[0_10px_30px_rgba(10,37,64,0.05)]" : "rounded-lg border border-line bg-white p-3 shadow-[0_10px_30px_rgba(10,37,64,0.05)]"} h-fit lg:sticky lg:top-6`}>
           {isContentFirst ? (
             <>
               <details className="rounded-lg border border-line bg-white lg:hidden">
@@ -220,7 +220,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
           </div>
         </aside>
 
-        <main id="main-content" className={`${isContentFirst ? "order-1 lg:order-2" : ""} min-w-0 pb-24 lg:pb-10`}>
+        <main id="main-content" className={`${isContentFirst && !isFieldTherapist ? "order-1 lg:order-2" : ""} min-w-0 pb-24 lg:pb-10`}>
           {children}
         </main>
       </div>
