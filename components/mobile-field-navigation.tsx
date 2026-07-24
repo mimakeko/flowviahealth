@@ -27,7 +27,7 @@ export function MobileFieldNavigation() {
       <div className="mx-auto grid max-w-lg grid-cols-4">
         {items.map((item) => {
           const Icon = item.icon;
-          const isActive = item.href === "/my-work" ? hash === "" : item.href.endsWith(hash);
+          const isActive = hash === "" ? item.href === "/my-work" : item.href.endsWith(hash);
           return (
             <Link
               key={item.label}
