@@ -19,15 +19,15 @@ const myWorkLayout = await readFile(new URL("../app/my-work/layout.tsx", import.
 const dashboardShell = await readFile(new URL("../components/dashboard-shell.tsx", import.meta.url), "utf8");
 
 assert.match(myWorkPage, /data-therapist-field-workspace="phone-ipad"/, "My Work must expose the phone/iPad workspace marker.");
-assert.match(myWorkPage, /Next field action/, "My Work must show a near-top next field action panel.");
-assert.match(myWorkPage, /Therapist field workspace/, "My Work must identify the therapist field workspace.");
-assert.match(myWorkPage, /Today&apos;s field focus/, "My Work should lead with today's field focus.");
+assert.match(myWorkPage, /Next up/, "My Work must show a near-top next field action panel.");
+assert.match(myWorkPage, /data-therapist-field-workspace/, "My Work must identify the therapist field workspace.");
+assert.match(myWorkPage, /Today/, "My Work should lead with today's field focus.");
 assert.match(myWorkPage, /getNextFieldAction/, "My Work should derive one prioritized next field action.");
-assert.match(myWorkPage, /New referral opportunities/, "My Work should separate new opportunities from assigned work.");
+assert.match(myWorkPage, /New work/, "My Work should separate new opportunities from assigned work.");
 assert.match(myWorkPage, /Needs attention/, "My Work should include a compact attention section.");
-assert.match(myWorkPage, /Update status \/ note/, "Assigned work update controls should stay behind a compact disclosure.");
+assert.match(myWorkPage, /Update visit/, "Assigned work update controls should stay behind a compact disclosure.");
 assert.match(myWorkPage, /Add no-PHI note/, "Assigned work note copy should stay therapist-friendly and no-PHI.");
-assert.match(myWorkPage, /Lower-priority details/, "My Work should demote completed and lower-priority details.");
+assert.match(myWorkPage, /More/, "My Work should demote completed and lower-priority details.");
 assert.doesNotMatch(myWorkPage, /xl:grid-cols-\[minmax\(0,1fr\)_390px\]/, "My Work should not keep the old dashboard rail layout.");
 assert.match(myWorkPage, /min-h-14/, "Field action buttons should be thumb-friendly.");
 assert.match(myWorkPage, /sm:grid-cols-2 2xl:grid-cols-4/, "Field action buttons should adapt from phone to tablet/desktop.");
@@ -50,7 +50,7 @@ assert.match(transientActionBanner, /role="alert"/, "Validation failures should 
 assert.match(myWorkPage, /getTherapistWorkspacePhoneDisplay\(visit\.referral\.phone\)/, "Visit phone display must stay masked.");
 assert.match(myWorkPage, /getTherapistWorkspacePhoneDisplay\(referral\.phone\)/, "Referral phone display must stay masked.");
 assert.match(myWorkPage, /No PHI in notes/, "No-PHI guidance must remain close to visit note inputs.");
-assert.match(myWorkPage, /notes stay no[- ]PHI/i, "Workspace copy must remind users notes are no-PHI.");
+assert.match(myWorkPage, /No PHI in notes/i, "Workspace copy must remind users notes are no-PHI.");
 assert.doesNotMatch(myWorkPage, /SchedulingIntelligencePanel/, "Scheduling intelligence panel should not dominate My Work.");
 assert.doesNotMatch(myWorkPage, /OperationsAssistantPanel/, "Operations Assistant panel should not dominate My Work.");
 assert.doesNotMatch(myWorkPage, /deterministic, therapist-scoped guidance/i, "My Work should not lead with system-style assistant copy.");

@@ -156,7 +156,7 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     }
 
     await gotoProtected(page, "/dashboard");
-    await expectAnyText(page, [/Pilot operations overview/i, /Dashboard blocked by pilot gate/i], "/dashboard");
+    await expectAnyText(page, [/Operations/i, /Dashboard unavailable/i], "/dashboard");
     if ((page.viewportSize()?.width || 1280) < 1024) {
       const mainTop = await page.locator("#main-content").evaluate((element) => element.getBoundingClientRect().top + window.scrollY);
       expect(mainTop, "dashboard operational content should precede navigation on phone/tablet").toBeLessThan(450);
@@ -176,6 +176,8 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
 
     await gotoProtected(page, "/admin/referrals/new");
     await expectAnyText(page, [/no PHI/i, /manual referral/i, /patient/i], "/admin/referrals/new");
+    await expect(page.getByTestId("staged-referral-form")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Who and where?", exact: true })).toBeVisible();
 
     await gotoProtected(page, "/admin/referrals");
     const referralDetailLink = page.locator('a[href^="/admin/referrals/"]:not([href="/admin/referrals/new"]):visible').first();
@@ -319,7 +321,7 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     await screenshot(page, "admin-audit.png");
 
     await gotoProtected(page, "/my-work");
-    await expectAnyText(page, [/My Work/i, /Field workspace/i, /No PHI/i, /masked/i], "/my-work");
+    await expectAnyText(page, [/Today/i, /Next up/i, /New work/i], "/my-work");
     await expect(page.getByTestId("therapist-referral-opportunities")).toBeVisible();
     await expectNoForbiddenActionControls(page, "/my-work", forbiddenActionControls);
     await screenshot(page, "my-work.png");
@@ -336,7 +338,7 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
       await login(page, therapistEmail, therapistPassword, "/my-work");
       await expect(page).toHaveURL(/\/my-work|\/dashboard/);
       await gotoProtected(page, "/my-work");
-      await expectAnyText(page, [/My Work/i, /Field workspace/i, /No PHI/i, /masked/i], "therapist /my-work");
+      await expectAnyText(page, [/Today/i, /Next up/i, /New work/i], "therapist /my-work");
       await expect(page.getByTestId("therapist-referral-opportunities")).toBeVisible();
       if (await page.locator("[data-therapist-recommendation]").count()) {
         await expect(page.locator("[data-therapist-recommendation]").first()).toBeVisible();
@@ -382,4 +384,35 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
     ].join(" "));
     throw error;
   }
+});
+
+test("therapist mobile field UI keeps decisions and navigation within reach", async ({ page }) => {
+  test.skip(!therapistEmail || !therapistPassword, "missing therapist browser smoke credentials");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page, therapistEmail!, therapistPassword!, "/my-work");
+  await gotoProtected(page, "/my-work");
+
+  const fieldNavigation = page.getByRole("navigation", { name: /field navigation/i });
+  await expect(fieldNavigation).toBeVisible();
+  for (const label of ["Home", "Opportunities", "Schedule", "More"]) {
+    await expect(fieldNavigation.getByRole("link", { name: label, exact: true })).toBeVisible();
+  }
+
+  const quickCapture = page.getByTestId("quick-capture-launcher");
+  await expect(quickCapture).toBeVisible();
+  const quickCaptureBox = await quickCapture.boundingBox();
+  expect(quickCaptureBox?.width || 0, "quick capture needs a 44px touch target").toBeGreaterThanOrEqual(44);
+  expect(quickCaptureBox?.height || 0, "quick capture needs a 44px touch target").toBeGreaterThanOrEqual(44);
+
+  await quickCapture.click();
+  const captureDialog = page.getByRole("dialog", { name: /Add or capture/i });
+  await expect(captureDialog).toBeVisible();
+  await expect(captureDialog.getByRole("link", { name: /Find a visit to add a note/i })).toBeVisible();
+  await expect(captureDialog.getByRole("link", { name: /New referral/i })).toHaveCount(0);
+  await captureDialog.getByRole("button", { name: /Close add or capture/i }).click();
+
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), {
+    message: "therapist mobile workspace should have zero horizontal overflow",
+  }).toBe(true);
 });

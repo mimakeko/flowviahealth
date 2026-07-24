@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, CircleAlert, Save, ShieldAlert } from "lucide-react";
+import { ArrowLeft, CircleAlert, ShieldAlert } from "lucide-react";
 import { BlockedNoteAlert } from "@/components/blocked-note-alert";
+import { StagedReferralForm } from "@/components/staged-referral-form";
 import { getPrismaClient } from "@/lib/db/prisma";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
 import { requirePilotSession } from "@/lib/pilot/auth";
-import { optionalTextField, referralStatusField, REFERRAL_STATUSES, requirePilotOperationsAccess, statusLabel, textField } from "@/lib/pilot/ops";
+import { optionalTextField, referralStatusField, requirePilotOperationsAccess, textField } from "@/lib/pilot/ops";
 import {
   evaluateReferralIntakeQuality,
   getReferralDuplicateCandidates,
@@ -272,31 +273,7 @@ export default async function NewReferralPage({
         </div>
       ) : null}
 
-      <form action={createReferralAction} className="mt-6 grid gap-5 rounded-lg border border-line bg-white p-4 sm:p-6 md:grid-cols-2">
-        <div className="md:col-span-2">
-          <h2 className="text-lg font-semibold tracking-[-.02em] text-ink">Referral form</h2>
-          <p className="mt-1 text-sm font-semibold text-slate-600">Manual review required.</p>
-        </div>
-        <label className="text-sm font-semibold text-ink">Patient name<input className="field" name="patientName" required /></label>
-        <label className="text-sm font-semibold text-ink">Phone<input className="field" name="phone" required inputMode="tel" /></label>
-        <label className="text-sm font-semibold text-ink">Email <span className="font-normal text-slate-400">(optional)</span><input className="field" name="email" type="email" /></label>
-        <label className="text-sm font-semibold text-ink">Target city <span className="font-normal text-slate-400">(optional)</span><input className="field" name="city" /></label>
-        <label className="text-sm font-semibold text-ink">Target ZIP <span className="font-normal text-slate-400">(optional)</span><input className="field" name="zip" inputMode="numeric" /></label>
-        <label className="text-sm font-semibold text-ink">Service area / workflow type <span className="font-normal text-slate-400">(optional)</span><input className="field" name="careType" placeholder="Example: demo mobility visit" /></label>
-        <label className="text-sm font-semibold text-ink md:col-span-2">Address <span className="font-normal text-slate-400">(optional, restricted)</span><input className="field" name="address" /></label>
-        <label className="text-sm font-semibold text-ink">Referral source <span className="font-normal text-slate-400">(optional)</span><input className="field" name="referralSource" /></label>
-        <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue="new">{REFERRAL_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
-        <label className="text-sm font-semibold text-ink md:col-span-2">Assigned therapist<select className="field" name="assignedTherapistId" defaultValue=""><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
-        <details className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 md:col-span-2">
-          <summary className="cursor-pointer list-none font-semibold [&::-webkit-details-marker]:hidden">Manual review required</summary>
-          <p className="mt-2">No PHI in intake notes. Use scheduling, access, assignment, or status wording only; no diagnosis, treatment, symptoms, medications, clinical measurements, addresses, or clinical details.</p>
-        </details>
-        <label className="text-sm font-semibold text-ink md:col-span-2">Internal operational note <span className="font-normal text-slate-400">(optional, no PHI or clinical detail)</span><textarea className="field min-h-32" name="notes" placeholder="Fake scheduling/admin note only" /></label>
-        <label className="text-sm font-semibold text-ink md:col-span-2">Duplicate override reason <span className="font-normal text-slate-400">(only if the duplicate guard warns)</span><textarea className="field min-h-24" name="duplicateOverrideReason" placeholder="Example: Separate fake pilot test case; reviewed existing referral." /></label>
-        <div className="md:col-span-2">
-          <button className="btn-primary w-full justify-center sm:w-auto" type="submit"><Save size={18} />Create referral</button>
-        </div>
-      </form>
+      <StagedReferralForm action={createReferralAction} therapists={therapistOptions} />
 
       <details className="mt-4 rounded-lg border border-line bg-white p-4 sm:mt-6 sm:p-5">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">

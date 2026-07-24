@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { logoutAction } from "@/app/logout/actions";
 import { LogoLockup } from "@/components/logo";
+import { MobileFieldNavigation } from "@/components/mobile-field-navigation";
+import { QuickCaptureLauncher } from "@/components/quick-capture-launcher";
 import { getFlowviaDataModeStatus } from "@/lib/compliance/data-mode";
 import { getAdminMessagesAccessState, getPilotOperationsAccessState } from "@/lib/pilot/access";
 import type { PilotRole, PilotSession } from "@/lib/pilot/session";
@@ -70,6 +72,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
   const dataMode = getFlowviaDataModeStatus();
   const isAdmin = section === "admin";
   const isWorkspace = section === "workspace";
+  const isTherapist = session.role === "therapist";
   const isContentFirst = isAdmin || isWorkspace || section === "dashboard";
   const renderNavigation = () => (
     <nav aria-label="Internal workspace navigation" className="grid gap-1">
@@ -160,7 +163,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
       </header>
 
       <div className="container-page grid grid-cols-[minmax(0,1fr)] gap-5 py-4 sm:py-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:py-8">
-        <aside className={`${isContentFirst ? "order-2 border-0 bg-transparent p-0 shadow-none lg:order-1 lg:rounded-lg lg:border lg:border-line lg:bg-white lg:p-3 lg:shadow-[0_10px_30px_rgba(10,37,64,0.05)]" : "rounded-lg border border-line bg-white p-3 shadow-[0_10px_30px_rgba(10,37,64,0.05)]"} h-fit lg:sticky lg:top-6`}>
+        <aside className={`${isTherapist ? "hidden lg:block" : ""} ${isContentFirst ? "order-2 border-0 bg-transparent p-0 shadow-none lg:order-1 lg:rounded-lg lg:border lg:border-line lg:bg-white lg:p-3 lg:shadow-[0_10px_30px_rgba(10,37,64,0.05)]" : "rounded-lg border border-line bg-white p-3 shadow-[0_10px_30px_rgba(10,37,64,0.05)]"} h-fit lg:sticky lg:top-6`}>
           {isContentFirst ? (
             <>
               <details className="rounded-lg border border-line bg-white lg:hidden">
@@ -216,10 +219,12 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
           </div>
         </aside>
 
-        <main id="main-content" className={`${isContentFirst ? "order-1 lg:order-2" : ""} min-w-0 pb-10`}>
+        <main id="main-content" className={`${isContentFirst ? "order-1 lg:order-2" : ""} min-w-0 pb-24 lg:pb-10`}>
           {children}
         </main>
       </div>
+      <QuickCaptureLauncher role={session.role} />
+      {isTherapist ? <MobileFieldNavigation /> : null}
     </div>
   );
 }

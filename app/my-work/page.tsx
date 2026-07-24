@@ -29,7 +29,6 @@ import {
   getOpportunityStatesByReferralId,
   isOpportunityDeclineReason,
   OPPORTUNITY_DECLINE_REASONS,
-  opportunityBadgeClassName,
   opportunityDeclineReasonLabel,
   opportunityStateLabel,
   type OpportunityStateResult,
@@ -457,26 +456,17 @@ function FieldVisitCard({
     <article id={visitDomId(visit.id)} className="scroll-mt-4 min-w-0 rounded-lg border border-line bg-white p-4 sm:scroll-mt-6 sm:p-5" data-field-visit-card="true">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Visit</p>
           <h3 className="break-words text-lg font-semibold tracking-[-.02em] text-ink">{visit.referral.patientName}</h3>
           <p className="mt-1 break-words text-sm leading-6 text-slate-600">{formatDateTime(visit.scheduledAt)} · {locationLabel(visit.referral.city, visit.referral.zip)}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <span className="inline-flex w-fit rounded-md bg-ice px-2 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">{visitWorkLabel(visit)}</span>
-          <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(visit.status)}`}>{statusLabel(visit.status)}</span>
-        </div>
+        <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${statusClassName(visit.status)}`}>{statusLabel(visit.status)}</span>
       </div>
-
-      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-        <div><dt className="font-semibold text-ink">Phone</dt><dd className="mt-1 text-slate-600">{getTherapistWorkspacePhoneDisplay(visit.referral.phone)}</dd></div>
-        <div><dt className="font-semibold text-ink">Status</dt><dd className="mt-1 text-slate-600">{statusLabel(visit.status)}</dd></div>
-      </dl>
 
       <VisitWarnings smsConsentStatus={smsConsentStatus} visit={visit} />
       <details className="mt-4 rounded-lg border border-line bg-slate-50">
         <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
-          <span>Update status / note</span>
-          <span className="text-xs font-semibold text-blue">Manual action</span>
+          <span>Update visit</span>
+          <span className="text-xs font-semibold text-blue">Add note or status</span>
         </summary>
         <div className="border-t border-line bg-white p-4">
           <VisitActionForm selectedTherapistId={selectedTherapistId} visit={visit} />
@@ -514,21 +504,21 @@ function NextFieldActionPanel({ action }: { action: NextFieldAction }) {
       ? `#opportunity-${action.referral.id}`
       : action.kind === "referral"
         ? `#referral-${action.referral.id}`
-        : "#lower-priority-details";
+        : "#more";
 
   return (
     <section id="next-field-action" className="min-w-0 rounded-lg border border-blue/20 bg-white p-4 shadow-[0_14px_34px_rgba(10,37,64,0.08)] sm:p-5" data-field-next-action="true">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="eyebrow">Next field action</p>
-          <h2 className="mt-2 break-words text-xl font-semibold tracking-[-.02em] text-ink">{title}</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{detail}</p>
+          <p className="text-sm font-semibold text-teal">Next up</p>
+          <h2 className="mt-1 break-words text-xl font-semibold tracking-[-.02em] text-ink">{title}</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-600">{detail}</p>
         </div>
         <span className="inline-flex w-fit rounded-md bg-ice px-2.5 py-1 text-xs font-semibold text-blue ring-1 ring-blue/15">{status}</span>
       </div>
 
       <a href={href} className={action.kind === "none" ? "btn-secondary mt-4 min-h-14 w-full justify-center text-base sm:text-sm" : "btn-primary mt-4 min-h-14 w-full justify-center text-base sm:text-sm"}>
-        {action.kind === "none" ? "Review later" : "Open details"}
+        {action.kind === "none" ? "Review later" : action.kind === "visit" ? "Open next visit" : "Open work"}
       </a>
     </section>
   );
@@ -632,37 +622,17 @@ function OpportunityCard({
   selectedTherapistId: string;
 }) {
   return (
-    <article id={`opportunity-${referral.id}`} className="min-w-0 scroll-mt-6 rounded-lg border border-blue/20 bg-white p-4 sm:p-5">
+    <article id={`opportunity-${referral.id}`} className="min-w-0 scroll-mt-6 border-b border-line bg-white py-4 last:border-b-0 sm:py-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">New opportunity</p>
-          <h3 className="break-words text-xl font-semibold tracking-[-.02em] text-ink">{referral.patientName}</h3>
-          <p className="mt-1 break-words text-sm text-slate-600">{locationLabel(referral.city, referral.zip)} · {referral.careType || "Service not provided"}</p>
+          <h3 className="break-words text-lg font-semibold tracking-[-.02em] text-ink">{referral.careType || "Service not provided"}</h3>
+          <p className="mt-1 break-words text-sm text-slate-600">{locationLabel(referral.city, referral.zip)}</p>
+          <div className="mt-2"><TherapistRecommendationBadge recommendation={referral.recommendation} /></div>
         </div>
-        <span className={`inline-flex w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${opportunityBadgeClassName(referral.opportunityState.state)}`}>
-          {opportunityStateLabel(referral.opportunityState.state)}
-        </span>
+        <p className="text-xs font-semibold text-slate-500">{opportunityStateLabel(referral.opportunityState.state)}</p>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div>
-          <p className="text-sm font-semibold text-ink">Why this fits</p>
-          <ul className="mt-2 grid gap-1 text-sm leading-6 text-slate-600">
-            {referral.recommendation.explanation.slice(0, 2).map((item) => <li key={item}>- {item}</li>)}
-          </ul>
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-ink">Recommendation</p>
-          <ul className="mt-2 grid gap-1 text-sm leading-6 text-slate-600">
-            <li><TherapistRecommendationBadge recommendation={referral.recommendation} /></li>
-            <li>Uncertainty: {referral.recommendation.uncertainty.level}</li>
-          </ul>
-        </div>
-      </div>
-
-      <div className="mt-4"><ReferralWorkflowStatus compact state={referral.workflowState} /></div>
-
-      <div className="mt-5 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-start">
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <form action={therapistOpportunityAction}>
           <input type="hidden" name="therapistId" value={selectedTherapistId} />
           <input type="hidden" name="referralId" value={referral.id} />
@@ -681,11 +651,13 @@ function OpportunityCard({
           </form>
         </details>
         <details className="rounded-lg border border-line bg-white sm:min-w-64">
-          <summary className="flex min-h-12 cursor-pointer list-none items-center px-4 text-sm font-semibold text-blue [&::-webkit-details-marker]:hidden">Open details</summary>
-          <dl className="grid gap-2 border-t border-line p-4 text-sm">
-            <div><dt className="font-semibold text-ink">Age</dt><dd className="mt-1 text-slate-600">{referralAgeLabel(referral.createdAt)}</dd></div>
-            <div><dt className="font-semibold text-ink">Readiness</dt><dd className="mt-1 text-slate-600">{opportunityPriorityLabel(referral).replace("Priority: ", "")}</dd></div>
-          </dl>
+          <summary className="flex min-h-12 cursor-pointer list-none items-center px-4 text-sm font-semibold text-blue [&::-webkit-details-marker]:hidden">Why this fits</summary>
+          <div className="grid gap-3 border-t border-line p-4 text-sm leading-6 text-slate-600">
+            <p>{referral.recommendation.explanation[0] || "No positive service-area evidence is available."}</p>
+            <p>Response needed: {referralAgeLabel(referral.createdAt)}.</p>
+            <p>{opportunityPriorityLabel(referral).replace("Priority: ", "")}</p>
+            <p className="text-xs">Fit detail is advisory only. Acceptance remains a manual decision.</p>
+          </div>
         </details>
       </div>
     </article>
@@ -1272,11 +1244,8 @@ export default async function MyWorkPage({
   return (
     <div>
       <div className="border-b border-line pb-4 sm:pb-6">
-        <p className="eyebrow">Therapist field workspace</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-[-.03em] text-ink sm:mt-3 sm:text-4xl">My work</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:mt-3">
-          Phones stay masked. Notes stay no-PHI.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-[-.03em] text-ink sm:text-4xl">Today</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Your next visit, new work, and only the items that need attention.</p>
       </div>
 
       <BlockedNoteAlert searchParams={params} />
@@ -1307,12 +1276,11 @@ export default async function MyWorkPage({
 
       {selectedTherapistId ? (
         <div className="mt-4 grid min-w-0 gap-4 sm:mt-8 sm:gap-5" data-therapist-field-workspace="phone-ipad">
-          <section className="grid min-w-0 gap-3 rounded-lg border border-line bg-white p-3 sm:gap-4 sm:p-5">
+          <section className="grid min-w-0 gap-3 border-b border-line pb-4 sm:gap-4 sm:pb-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
-                <p className="eyebrow">Today&apos;s field focus</p>
-                <h2 className="mt-1 text-xl font-semibold tracking-[-.03em] text-ink sm:mt-2 sm:text-2xl">{todayLabel}</h2>
-                <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600 sm:mt-2 sm:leading-6">{workdaySummary}</p>
+                <p className="text-sm font-semibold text-teal">{todayLabel}</p>
+                <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600 sm:leading-6">{workdaySummary}</p>
               </div>
 
               {session.role === "admin" ? (
@@ -1335,25 +1303,9 @@ export default async function MyWorkPage({
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-2 border-t border-line pt-2 text-center text-xs sm:gap-3 sm:pt-4 sm:text-left sm:text-sm">
-              <div className="rounded-lg bg-slate-50 p-2 sm:bg-transparent sm:p-0"><p className="font-semibold text-ink">{assignedVisitCount}</p><p className="mt-1 text-slate-600">Visits</p></div>
-              <div className="rounded-lg bg-slate-50 p-2 sm:bg-transparent sm:p-0"><p className="font-semibold text-ink">{availableOpportunities.length}</p><p className="mt-1 text-slate-600">New</p></div>
-              <div className="rounded-lg bg-slate-50 p-2 sm:bg-transparent sm:p-0"><p className="font-semibold text-ink">{needsAttentionItems.length}</p><p className="mt-1 text-slate-600">Attention</p></div>
-            </div>
           </section>
 
           <NextFieldActionPanel action={nextAction} />
-
-          <nav aria-label="My Work quick links" className="grid grid-cols-4 gap-2 text-xs font-semibold sm:hidden">
-            <a className="rounded-lg border border-line bg-white px-2 py-3 text-center text-blue" href="#next-field-action">Next</a>
-            <a className="rounded-lg border border-line bg-white px-2 py-3 text-center text-blue" href="#today">Today</a>
-            {needsAttentionItems.length > 0 ? (
-              <a className="rounded-lg border border-line bg-white px-2 py-3 text-center text-blue" href="#attention">Attention</a>
-            ) : (
-              <span className="rounded-lg border border-line bg-white px-2 py-3 text-center text-slate-400">Attention</span>
-            )}
-            <a className="rounded-lg border border-line bg-white px-2 py-3 text-center text-blue" href="#assigned">Assigned</a>
-          </nav>
 
           {session.role === "admin" ? (
             <details className="rounded-lg border border-line bg-slate-50 text-sm sm:hidden">
@@ -1373,11 +1325,11 @@ export default async function MyWorkPage({
             </details>
           ) : null}
 
-          <section data-testid="therapist-referral-opportunities" className="grid min-w-0 gap-4">
+          <section id="opportunities" data-testid="therapist-referral-opportunities" className="grid min-w-0 gap-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-center gap-2">
                 <BriefcaseMedical size={18} className="text-blue" />
-                <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">New referral opportunities</h2>
+                <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">New work</h2>
               </div>
               {availableOpportunities.length > 0 ? (
                 <p className="text-sm text-slate-500">Showing {visibleOpportunities.length} of {availableOpportunities.length}</p>
@@ -1403,6 +1355,7 @@ export default async function MyWorkPage({
             ) : null}
           </section>
 
+          <section id="schedule" className="grid gap-5">
           {hasScheduledVisits ? (
             <>
               <FieldVisitSection
@@ -1432,6 +1385,7 @@ export default async function MyWorkPage({
           ) : (
             <NoScheduledVisitsState />
           )}
+          </section>
 
           {needsAttentionItems.length > 0 ? (
             <section id="attention" className="grid min-w-0 gap-3 sm:gap-4">
@@ -1496,10 +1450,10 @@ export default async function MyWorkPage({
             </section>
           )}
 
-          <section id="lower-priority-details" className="grid min-w-0 gap-4">
+          <section id="more" className="grid min-w-0 gap-4">
             <div className="flex items-center gap-2">
               <CheckCircle2 size={18} className="text-blue" />
-              <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Lower-priority details</h2>
+              <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">More</h2>
             </div>
             <details className="rounded-lg border border-line bg-white">
               <summary className="cursor-pointer list-none p-4 font-semibold text-ink [&::-webkit-details-marker]:hidden">
