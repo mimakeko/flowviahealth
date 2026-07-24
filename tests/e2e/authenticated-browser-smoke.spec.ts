@@ -415,6 +415,18 @@ test("therapist mobile field UI keeps decisions and navigation within reach", as
   await expect(page.getByRole("heading", { name: "New work", exact: true })).toBeVisible();
   await expect(page.getByTestId("next-field-action")).toHaveCount(0);
 
+  await fieldNavigation.getByRole("link", { name: "Schedule", exact: true }).click();
+  await expect(page).toHaveURL(/\/my-work\?view=schedule/);
+  await expect(fieldNavigation.getByRole("link", { name: "Schedule", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "Schedule", exact: true })).toBeVisible();
+  await expect(page.getByTestId("next-field-action")).toHaveCount(0);
+
+  await fieldNavigation.getByRole("link", { name: "More", exact: true }).click();
+  await expect(page).toHaveURL(/\/my-work\?view=more/);
+  await expect(fieldNavigation.getByRole("link", { name: "More", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "More", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Logout", exact: true })).toBeVisible();
+
   const quickCapture = page.getByTestId("quick-capture-launcher");
   await expect(quickCapture).toBeVisible();
   const quickCaptureBox = await quickCapture.boundingBox();

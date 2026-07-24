@@ -1363,15 +1363,17 @@ export default async function MyWorkPage({
 
           {showsOpportunities ? (
             <section id="opportunities" data-testid="therapist-referral-opportunities" className="grid min-w-0 gap-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex items-center gap-2">
-                <BriefcaseMedical size={18} className="text-blue" />
-                <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">New work</h2>
+            {session.role === "admin" ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <BriefcaseMedical size={18} className="text-blue" />
+                  <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">New work</h2>
+                </div>
+                {availableOpportunities.length > 0 ? (
+                  <p className="text-sm text-slate-500">Showing {visibleOpportunities.length} of {availableOpportunities.length}</p>
+                ) : null}
               </div>
-              {availableOpportunities.length > 0 ? (
-                <p className="text-sm text-slate-500">Showing {visibleOpportunities.length} of {availableOpportunities.length}</p>
-              ) : null}
-            </div>
+            ) : null}
             {visibleOpportunities.map((referral: TherapistOpportunityReferral) => (
               <OpportunityCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} />
             ))}
@@ -1524,10 +1526,12 @@ export default async function MyWorkPage({
           ) : null}
 
           {showsMore ? <section id="more" className="grid min-w-0 gap-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={18} className="text-blue" />
-              <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">More</h2>
-            </div>
+            {session.role === "admin" ? (
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-blue" />
+                <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">More</h2>
+              </div>
+            ) : null}
             <details className="rounded-lg border border-line bg-white">
               <summary className="cursor-pointer list-none p-4 font-semibold text-ink [&::-webkit-details-marker]:hidden">
                 Done and recent work
