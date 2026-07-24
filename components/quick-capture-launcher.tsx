@@ -11,7 +11,7 @@ type QuickCaptureLauncherProps = {
 export function QuickCaptureLauncher({ role }: QuickCaptureLauncherProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const isAdmin = role === "admin";
-  const launcherOffsetClass = isAdmin ? "bottom-5" : "bottom-20";
+  const launcherOffsetClass = "bottom-20";
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -21,6 +21,8 @@ export function QuickCaptureLauncher({ role }: QuickCaptureLauncherProps) {
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, []);
+
+  if (isAdmin) return null;
 
   return (
     <>

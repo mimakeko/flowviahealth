@@ -178,6 +178,10 @@ export default async function AdminReferralsPage({
   const now = new Date();
   const sevenDaysFromNow = new Date(now);
   sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date(startOfToday);
+  endOfToday.setDate(endOfToday.getDate() + 1);
 
   if (selectedStatus) referralFilters.push({ status: selectedStatus });
   if (selectedTherapistId === "unassigned") referralFilters.push({ assignedTherapistId: null });
@@ -187,7 +191,7 @@ export default async function AdminReferralsPage({
   }
 
   const prisma = getPrismaClient();
-  const [referrals, therapists, contactedNotScheduled, scheduledVisitsNextSevenDays, pastScheduledVisits, optedOutContacts, unassignedReferrals, smokeTestRecords, archiveCandidates, capacityCautions] = await Promise.all([
+  const [referrals, therapists, contactedNotScheduled, scheduledVisitsNextSevenDays, todayVisits, pastScheduledVisits, optedOutContacts, unassignedReferrals, smokeTestRecords, archiveCandidates, capacityCautions] = await Promise.all([
     prisma.patientReferral.findMany({
       orderBy: { createdAt: "desc" },
       select: {
@@ -244,6 +248,20 @@ export default async function AdminReferralsPage({
             scheduledAt: {
               gte: now,
               lte: sevenDaysFromNow,
+            },
+            status: { in: ["scheduled", "in_progress"] },
+          },
+        ],
+      },
+    }),
+    prisma.visit.count({
+      where: {
+        AND: [
+          activeWorkflowVisitWhere(),
+          {
+            scheduledAt: {
+              gte: startOfToday,
+              lt: endOfToday,
             },
             status: { in: ["scheduled", "in_progress"] },
           },
@@ -411,19 +429,12 @@ export default async function AdminReferralsPage({
     unassignedReferrals,
     upcomingNextSevenDays: scheduledVisitsNextSevenDays,
   });
-  const needsReviewCount = qualityRows.filter((referral: ReferralListQualityRow) => referral.intakeQuality.readinessLevel !== "ready").length;
+  const needsAttentionCount = qualityRows.filter((referral: ReferralListQualityRow) => hasReferralReviewSignal(referral)).length;
   const readyForSchedulingCount = qualityRows.filter((referral: ReferralListQualityRow) => referral.workflowState.canCreateVisit).length;
-  const waitingContactCount = qualityRows.filter((referral: ReferralListQualityRow) => referral.status === "new").length;
-  const blockedSafetyCount = qualityRows.filter((referral: ReferralListQualityRow) => (
-    referral.intakeQuality.readinessLevel === "blocked" ||
-    referral.intakeQuality.duplicateCandidates.length > 0 ||
-    referral.smsConsentStatus === "opted_out"
-  )).length;
   const summaryCards = [
-    { label: "Needs review", value: needsReviewCount, href: "/admin/referrals?group=needs_intake_review" },
-    { label: "Ready for scheduling", value: readyForSchedulingCount, href: "/admin/referrals?group=ready_scheduling" },
-    { label: "Waiting contact", value: waitingContactCount, href: "/admin/referrals?status=new" },
-    { label: "Blocked / safety", value: blockedSafetyCount, href: "/admin/referrals?group=possible_duplicate" },
+    { label: "Needs attention", value: needsAttentionCount, href: "/admin/referrals?group=needs_intake_review" },
+    { label: "Ready to move", value: readyForSchedulingCount, href: "/admin/referrals?group=ready_scheduling" },
+    { label: "Today", value: todayVisits, href: "/admin/scheduling" },
   ];
   const mobileReferralRows = [...displayedReferralRows].sort((a, b) => Number(hasReferralReviewSignal(b)) - Number(hasReferralReviewSignal(a)));
   const initialMobileReferralRows = mobileReferralRows.slice(0, 12);
@@ -439,13 +450,13 @@ export default async function AdminReferralsPage({
               Small field-pilot referral queue. Full addresses are intentionally excluded from this list view.
             </p>
           </div>
-          <Link href="/admin/referrals/new" className="btn-primary">
+          <Link href="/admin/referrals/new" className="btn-secondary w-fit">
             <Plus size={18} />
-            New referral
+            Add referral
           </Link>
         </div>
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid gap-3 sm:grid-cols-3">
           {summaryCards.map((card) => (
             <Link key={card.label} href={card.href} className="rounded-lg border border-line bg-white p-4 transition hover:border-blue/40 hover:bg-slate-50">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{card.label}</p>
