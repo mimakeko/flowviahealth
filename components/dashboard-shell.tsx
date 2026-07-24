@@ -4,13 +4,11 @@ import {
   CalendarClock,
   CalendarSearch,
   ClipboardList,
-  Database,
   FolderArchive,
   FilePlus2,
   HeartPulse,
   Home,
   LayoutDashboard,
-  LockKeyhole,
   MessageSquareText,
   ScrollText,
   ShieldAlert,
@@ -153,7 +151,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             ) : null}
           </div>
         </div>
-        <div className={`${isFieldTherapist ? "hidden" : isWorkspace ? "hidden lg:block" : ""} border-t border-amber-200 bg-amber-50`}>
+        <div className={`${isAdmin || isFieldTherapist ? "hidden" : isWorkspace ? "hidden lg:block" : ""} border-t border-amber-200 bg-amber-50`}>
           <div className={`container-page flex flex-wrap items-center gap-2 py-2 text-xs font-semibold text-amber-950 ${isAdmin ? "min-h-9 sm:min-h-11" : "min-h-11"}`}>
             <ShieldAlert size={16} />
             <span className={isAdmin ? "sm:hidden" : ""}>{isAdmin ? "Pilot mode" : dataMode.warningLabel}</span>
@@ -184,40 +182,18 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
             renderNavigation()
           )}
 
-          <details className={`${isAdmin ? "mt-3 lg:hidden" : "hidden"} rounded-lg border border-amber-200 bg-amber-50 text-sm leading-6 text-amber-950`}>
+          <details className={`${isAdmin ? "mt-3" : "hidden"} rounded-lg border border-line bg-white text-sm leading-6 text-slate-700`}>
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 font-semibold [&::-webkit-details-marker]:hidden">
-              <span>Pilot details</span>
+              <span>System details</span>
               <ShieldAlert size={16} />
             </summary>
-            <div className="grid gap-3 border-t border-amber-200 p-4 text-xs leading-5">
-              <p>{dataMode.warningLabel}. Real patient use remains blocked until auth/RBAC, PHI policy, retention, backups, and incident response are approved.</p>
+            <div className="grid gap-3 border-t border-line p-4 text-xs leading-5">
+              <p className="font-semibold text-amber-950">{dataMode.warningLabel} · {dataMode.safeLabel}</p>
+              <p>Real patient use remains blocked until auth/RBAC, PHI policy, retention, backups, and incident response are approved.</p>
               <p>Signed pilot sessions enforce admin and therapist route access. Operational cards and work queues read from Prisma/Postgres when gates are open.</p>
             </div>
           </details>
 
-          <div className="mt-5 hidden rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 lg:block">
-            <div className="flex items-center gap-2 font-semibold">
-              <ShieldAlert size={17} />
-              {dataMode.warningLabel}
-            </div>
-            <p className="mt-2 text-xs leading-5">Real patient use remains blocked until auth/RBAC, PHI policy, retention, backups, and incident response are approved.</p>
-          </div>
-
-          <div className="mt-3 hidden rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600 lg:block">
-            <div className="flex items-center gap-2 font-semibold text-ink">
-              <LockKeyhole size={16} />
-              Access boundary
-            </div>
-            <p className="mt-2">Signed pilot sessions enforce admin and therapist route access. This is still not final enterprise auth.</p>
-          </div>
-
-          <div className="mt-3 hidden rounded-lg border border-line bg-slate-50 p-4 text-xs leading-5 text-slate-600 lg:block">
-            <div className="flex items-center gap-2 font-semibold text-ink">
-              <Database size={16} />
-              Cloud data
-            </div>
-            <p className="mt-2">Operational cards and work queues read from Prisma/Postgres when gates are open.</p>
-          </div>
         </aside>
 
         <main id="main-content" className={`${isContentFirst && !isFieldTherapist ? "order-1 lg:order-2" : ""} min-w-0 pb-24 lg:pb-10`}>

@@ -90,13 +90,13 @@ export default async function DashboardPage() {
   const hasAttention = snapshot.unassignedReferrals > 0 || snapshot.contactedNotScheduled > 0 || snapshot.pastScheduledVisits > 0 || snapshot.optedOutSmsConsent > 0;
 
   return (
-    <div className="grid gap-8">
-      <header className="flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
+    <div className="grid gap-6 sm:gap-8">
+      <header className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold tracking-[-.03em] text-ink sm:text-4xl">Operations</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">The work that needs a decision, the work ready to move, and today&apos;s schedule.</p>
+          <h1 className="text-2xl font-semibold tracking-[-.03em] text-ink sm:text-3xl">Work</h1>
+          <p className="mt-1 hidden max-w-2xl text-sm leading-6 text-slate-600 sm:block">Needs attention, ready to move, and today&apos;s schedule.</p>
         </div>
-        <Link href="/admin/referrals/new" className="btn-primary min-h-12"><FilePlus2 aria-hidden="true" size={18} />New referral</Link>
+        <Link href="/admin/referrals/new" className="btn-secondary min-h-11 w-full sm:w-auto"><FilePlus2 aria-hidden="true" size={17} />Add referral</Link>
       </header>
 
       <AdminSection title="Needs attention">
