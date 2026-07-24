@@ -398,6 +398,7 @@ test("therapist mobile field UI keeps decisions and navigation within reach", as
   for (const label of ["Home", "Opportunities", "Schedule", "More"]) {
     await expect(fieldNavigation.getByRole("link", { name: label, exact: true })).toBeVisible();
   }
+  await expect(fieldNavigation.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
 
   const quickCapture = page.getByTestId("quick-capture-launcher");
   await expect(quickCapture).toBeVisible();
