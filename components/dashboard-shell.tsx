@@ -68,7 +68,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
   const pilotAccess = getPilotOperationsAccessState();
   const messagesAccess = getAdminMessagesAccessState();
   const dataMode = getFlowviaDataModeStatus();
-  const isAdmin = section === "admin";
+  const isAdmin = session.role === "admin";
   const isWorkspace = section === "workspace";
   const isTherapist = session.role === "therapist";
   const isFieldTherapist = isTherapist && isWorkspace;
