@@ -27,12 +27,14 @@ export function MobileFieldNavigation() {
       <div className="mx-auto grid max-w-lg grid-cols-4">
         {items.map((item) => {
           const Icon = item.icon;
+          const itemHash = item.href.replace("/my-work", "");
           const isActive = hash === "" ? item.href === "/my-work" : item.href.endsWith(hash);
           return (
             <Link
               key={item.label}
               href={item.href}
               aria-current={isActive ? "page" : undefined}
+              onClick={() => setHash(itemHash)}
               className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-semibold transition focus:outline-none focus:ring-4 focus:ring-blue/15 ${
                 isActive
                   ? "bg-ice font-bold text-blue shadow-sm"
