@@ -73,6 +73,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
   const isAdmin = section === "admin";
   const isWorkspace = section === "workspace";
   const isTherapist = session.role === "therapist";
+  const isFieldTherapist = isTherapist && isWorkspace;
   const isContentFirst = isAdmin || isWorkspace || section === "dashboard";
   const renderNavigation = () => (
     <nav aria-label="Internal workspace navigation" className="grid gap-1">
@@ -104,11 +105,11 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
       <a href="#main-content" className="sr-only z-[100] rounded bg-white px-4 py-2 text-blue focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to workspace</a>
 
       <header className="border-b border-line bg-white">
-        <div className={`container-page flex flex-col lg:flex-row lg:items-center lg:justify-between ${isAdmin ? "min-h-[58px] gap-2 py-3 sm:min-h-[74px] sm:gap-4 sm:py-4" : "min-h-[74px] gap-4 py-4"}`}>
+        <div className={`container-page flex flex-col lg:flex-row lg:items-center lg:justify-between ${isAdmin ? "min-h-[58px] gap-2 py-3 sm:min-h-[74px] sm:gap-4 sm:py-4" : isFieldTherapist ? "min-h-16 items-center py-3 lg:min-h-[74px] lg:gap-4 lg:py-4" : "min-h-[74px] gap-4 py-4"}`}>
           <Link href="/dashboard" aria-label="Flowvia internal dashboard" className="inline-flex w-fit">
             <LogoLockup compact />
           </Link>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className={`${isFieldTherapist ? "hidden lg:flex" : "flex"} flex-wrap items-center gap-2`}>
             <span className={`min-h-9 items-center rounded-lg border border-line bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 ${isAdmin ? "hidden sm:inline-flex" : "inline-flex"}`}>
               {roleLabel(session.role)} · {session.email}
             </span>
@@ -224,7 +225,7 @@ export function DashboardShell({ children, section, session }: DashboardShellPro
         </main>
       </div>
       <QuickCaptureLauncher role={session.role} />
-      {isTherapist ? <MobileFieldNavigation /> : null}
+      {isFieldTherapist ? <MobileFieldNavigation /> : null}
     </div>
   );
 }

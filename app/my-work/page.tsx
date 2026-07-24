@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   BriefcaseMedical,
@@ -36,6 +37,7 @@ import {
 import { getReferralWorkflowState, type ReferralWorkflowState } from "@/lib/pilot/referral-workflow-state";
 import { recommendTherapists, type TherapistRecommendation } from "@/lib/pilot/therapist-recommendation";
 import { requirePilotSession } from "@/lib/pilot/auth";
+import { logoutAction } from "@/app/logout/actions";
 import { getBlockedOperationalNoteRedirectSearch } from "@/lib/pilot/note-guardrail";
 import {
   getAllowedTherapistFieldVisitActions,
@@ -91,6 +93,19 @@ const DISPLAY_LIMITS = {
   todayVisits: 2,
   upcomingVisits: 2,
 } as const;
+
+const FIELD_DESTINATIONS = [
+  { href: "/my-work", label: "Home", view: "home" },
+  { href: "/my-work?view=opportunities", label: "Opportunities", view: "opportunities" },
+  { href: "/my-work?view=schedule", label: "Schedule", view: "schedule" },
+  { href: "/my-work?view=more", label: "More", view: "more" },
+] as const;
+
+type FieldWorkspaceView = (typeof FIELD_DESTINATIONS)[number]["view"];
+
+function getFieldWorkspaceView(value: string | undefined): FieldWorkspaceView {
+  return FIELD_DESTINATIONS.some((destination) => destination.view === value) ? value as FieldWorkspaceView : "home";
+}
 
 type TherapistAction = (typeof THERAPIST_ACTIONS)[number];
 
@@ -499,12 +514,12 @@ function NextFieldActionPanel({ action }: { action: NextFieldAction }) {
         ? action.referral.workflowState?.label || referralWorkLabel(action.referral)
         : "Clear";
   const href = action.kind === "visit"
-    ? `#${visitDomId(action.visit.id)}`
+    ? `/my-work?view=schedule#${visitDomId(action.visit.id)}`
     : action.kind === "opportunity"
-      ? `#opportunity-${action.referral.id}`
+      ? `/my-work?view=opportunities#opportunity-${action.referral.id}`
       : action.kind === "referral"
-        ? `#referral-${action.referral.id}`
-        : "#more";
+        ? `/my-work#referral-${action.referral.id}`
+        : "/my-work?view=more";
 
   return (
     <section id="next-field-action" className="min-w-0 rounded-lg border border-blue/20 bg-white p-4 shadow-[0_14px_34px_rgba(10,37,64,0.08)] sm:p-5" data-field-next-action="true">
@@ -1091,12 +1106,17 @@ async function therapistVisitAction(formData: FormData) {
 export default async function MyWorkPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ error?: string; noteCategory?: string; noteDestination?: string; noteSuggestion?: string; success?: string; therapistId?: string }>;
+  searchParams?: Promise<{ error?: string; noteCategory?: string; noteDestination?: string; noteSuggestion?: string; success?: string; therapistId?: string; view?: string }>;
 }) {
   requirePilotOperationsAccess();
 
   const session = await requirePilotSession(["admin", "therapist"], "/my-work");
   const params = await searchParams;
+  const fieldView = session.role === "therapist" ? getFieldWorkspaceView(params?.view) : "home";
+  const showsHome = session.role === "admin" || fieldView === "home";
+  const showsOpportunities = session.role === "admin" || fieldView === "opportunities";
+  const showsSchedule = session.role === "admin" || fieldView === "schedule";
+  const showsMore = session.role === "admin" || fieldView === "more";
   const prisma = getPrismaClient();
   const therapists = session.role === "admin"
     ? await prisma.therapist.findMany({
@@ -1240,12 +1260,37 @@ export default async function MyWorkPage({
   const visibleAssignedWorkReferrals = assignedWorkReferrals.slice(0, DISPLAY_LIMITS.assignedWork);
   const hiddenAssignedWorkReferrals = assignedWorkReferrals.slice(DISPLAY_LIMITS.assignedWork);
   const hasScheduledVisits = todayVisits.length > 0 || upcomingVisits.length > 0;
+  const fieldHeading = fieldView === "home" ? "Today" : fieldView === "opportunities" ? "New work" : fieldView === "schedule" ? "Schedule" : "More";
+  const fieldSubtitle = fieldView === "home"
+    ? todayLabel
+    : fieldView === "opportunities"
+      ? "Referrals that need a decision."
+      : fieldView === "schedule"
+        ? "Today and upcoming visits."
+        : "Recent work and account actions.";
 
   return (
     <div>
       <div className="border-b border-line pb-4 sm:pb-6">
-        <h1 className="text-2xl font-semibold tracking-[-.03em] text-ink sm:text-4xl">Today</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Your next visit, new work, and only the items that need attention.</p>
+        <h1 className="text-2xl font-semibold tracking-[-.03em] text-ink sm:text-4xl">{session.role === "therapist" ? fieldHeading : "Today"}</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{session.role === "therapist" ? fieldSubtitle : "Your next visit, new work, and only the items that need attention."}</p>
+        {session.role === "therapist" ? (
+          <nav aria-label="Field destinations" className="mt-4 hidden grid-cols-4 gap-2 lg:grid">
+            {FIELD_DESTINATIONS.map((destination) => {
+              const isActive = destination.view === fieldView;
+              return (
+                <Link
+                  key={destination.view}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-semibold transition ${isActive ? "bg-ice text-blue" : "border border-line bg-white text-slate-600 hover:bg-mist hover:text-ink"}`}
+                  href={destination.href}
+                >
+                  {destination.label}
+                </Link>
+              );
+            })}
+          </nav>
+        ) : null}
       </div>
 
       <BlockedNoteAlert searchParams={params} />
@@ -1276,36 +1321,27 @@ export default async function MyWorkPage({
 
       {selectedTherapistId ? (
         <div className="mt-4 grid min-w-0 gap-4 sm:mt-8 sm:gap-5" data-therapist-field-workspace="phone-ipad">
-          <section className="grid min-w-0 gap-3 border-b border-line pb-4 sm:gap-4 sm:pb-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-teal">{todayLabel}</p>
-                <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600 sm:leading-6">{workdaySummary}</p>
-              </div>
-
-              {session.role === "admin" ? (
-                <>
-                  <form className="hidden gap-2 sm:grid sm:min-w-72">
-                    <label className="text-sm font-semibold text-ink">
-                      Demo therapist
-                      <select className="field" name="therapistId" defaultValue={selectedTherapistId || ""}>
-                        {therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
-                      </select>
-                    </label>
-                    <button className="btn-secondary min-h-11 justify-center" type="submit"><BriefcaseMedical size={17} />Load work</button>
-                  </form>
-                </>
-              ) : (
-                <div className="rounded-lg border border-line bg-slate-50 p-3 text-sm">
-                  <p className="font-semibold text-ink">{selectedTherapistName || "Therapist record not linked"}</p>
-                  <p className="mt-1 text-slate-600">Signed in as {session.email}.</p>
+          {session.role === "admin" ? (
+            <section className="grid min-w-0 gap-3 border-b border-line pb-4 sm:gap-4 sm:pb-5">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-teal">{todayLabel}</p>
+                  <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600 sm:leading-6">{workdaySummary}</p>
                 </div>
-              )}
-            </div>
+                <form className="hidden gap-2 sm:grid sm:min-w-72">
+                  <label className="text-sm font-semibold text-ink">
+                    Demo therapist
+                    <select className="field" name="therapistId" defaultValue={selectedTherapistId || ""}>
+                      {therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}
+                    </select>
+                  </label>
+                  <button className="btn-secondary min-h-11 justify-center" type="submit"><BriefcaseMedical size={17} />Load work</button>
+                </form>
+              </div>
+            </section>
+          ) : null}
 
-          </section>
-
-          <NextFieldActionPanel action={nextAction} />
+          {showsHome ? <NextFieldActionPanel action={nextAction} /> : null}
 
           {session.role === "admin" ? (
             <details className="rounded-lg border border-line bg-slate-50 text-sm sm:hidden">
@@ -1325,7 +1361,8 @@ export default async function MyWorkPage({
             </details>
           ) : null}
 
-          <section id="opportunities" data-testid="therapist-referral-opportunities" className="grid min-w-0 gap-4">
+          {showsOpportunities ? (
+            <section id="opportunities" data-testid="therapist-referral-opportunities" className="grid min-w-0 gap-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex items-center gap-2">
                 <BriefcaseMedical size={18} className="text-blue" />
@@ -1353,73 +1390,93 @@ export default async function MyWorkPage({
             {availableOpportunities.length === 0 ? (
               <p className="rounded-lg border border-line bg-white p-4 text-sm leading-6 text-slate-600 sm:p-5">No new opportunities.</p>
             ) : null}
-          </section>
+            </section>
+          ) : null}
 
-          <section id="schedule" className="grid gap-5">
-          {hasScheduledVisits ? (
-            <>
-              <FieldVisitSection
-                icon={CalendarClock}
-                id="today"
-                queue="today"
-                selectedTherapistId={selectedTherapistId}
-                showEmptyState={upcomingVisits.length > 0}
-                smsConsentByPhone={smsConsentByPhone}
-                title="Today"
-                visibleLimit={DISPLAY_LIMITS.todayVisits}
-                visits={todayVisits}
-              />
+          {showsSchedule ? (
+            <section id="schedule" className="grid gap-5">
+              {hasScheduledVisits ? (
+                <>
+                  <FieldVisitSection
+                    icon={CalendarClock}
+                    id="today"
+                    queue="today"
+                    selectedTherapistId={selectedTherapistId}
+                    showEmptyState={upcomingVisits.length > 0}
+                    smsConsentByPhone={smsConsentByPhone}
+                    title="Today"
+                    visibleLimit={DISPLAY_LIMITS.todayVisits}
+                    visits={todayVisits}
+                  />
 
-              <FieldVisitSection
-                icon={Clock3}
-                id="upcoming"
-                queue="upcoming"
-                selectedTherapistId={selectedTherapistId}
-                showEmptyState={todayVisits.length > 0}
-                smsConsentByPhone={smsConsentByPhone}
-                title="Upcoming"
-                visibleLimit={DISPLAY_LIMITS.upcomingVisits}
-                visits={upcomingVisits}
-              />
-            </>
-          ) : (
-            <NoScheduledVisitsState />
-          )}
-          </section>
+                  <FieldVisitSection
+                    icon={Clock3}
+                    id="upcoming"
+                    queue="upcoming"
+                    selectedTherapistId={selectedTherapistId}
+                    showEmptyState={todayVisits.length > 0}
+                    smsConsentByPhone={smsConsentByPhone}
+                    title="Upcoming"
+                    visibleLimit={DISPLAY_LIMITS.upcomingVisits}
+                    visits={upcomingVisits}
+                  />
+                </>
+              ) : (
+                <NoScheduledVisitsState />
+              )}
+            </section>
+          ) : null}
 
-          {needsAttentionItems.length > 0 ? (
+          {showsHome && needsAttentionItems.length > 0 ? (
             <section id="attention" className="grid min-w-0 gap-3 sm:gap-4">
               <div className="flex items-center gap-2">
                 <CircleAlert size={18} className="text-blue" />
                 <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Needs attention</h2>
               </div>
-              <div className="grid gap-3">
-                {visibleNeedsAttentionItems.map((item: NeedsAttentionItem) => (
-                  <div key={item.label} className="rounded-lg border border-line bg-white p-4 text-sm">
-                    <p className="font-semibold text-ink">{item.label}</p>
-                    <p className="mt-1 leading-6 text-slate-600">{item.detail}</p>
+              {session.role === "therapist" ? (
+                <details className="rounded-lg border border-line bg-white">
+                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                    <span>Review {needsAttentionItems.length} item{needsAttentionItems.length === 1 ? "" : "s"}</span>
+                    <span className="text-xs font-semibold text-blue">Details</span>
+                  </summary>
+                  <div className="grid gap-3 border-t border-line p-4">
+                    {needsAttentionItems.map((item: NeedsAttentionItem) => (
+                      <div key={item.label} className="text-sm">
+                        <p className="font-semibold text-ink">{item.label}</p>
+                        <p className="mt-1 leading-6 text-slate-600">{item.detail}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-                {hiddenNeedsAttentionItems.length > 0 ? (
-                  <details className="rounded-lg border border-line bg-white">
-                    <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
-                      View {hiddenNeedsAttentionItems.length} more attention item{hiddenNeedsAttentionItems.length === 1 ? "" : "s"}
-                    </summary>
-                    <div className="grid gap-3 border-t border-line p-4">
-                      {hiddenNeedsAttentionItems.map((item: NeedsAttentionItem) => (
-                        <div key={item.label} className="text-sm">
-                          <p className="font-semibold text-ink">{item.label}</p>
-                          <p className="mt-1 leading-6 text-slate-600">{item.detail}</p>
-                        </div>
-                      ))}
+                </details>
+              ) : (
+                <div className="grid gap-3">
+                  {visibleNeedsAttentionItems.map((item: NeedsAttentionItem) => (
+                    <div key={item.label} className="rounded-lg border border-line bg-white p-4 text-sm">
+                      <p className="font-semibold text-ink">{item.label}</p>
+                      <p className="mt-1 leading-6 text-slate-600">{item.detail}</p>
                     </div>
-                  </details>
-                ) : null}
-              </div>
+                  ))}
+                  {hiddenNeedsAttentionItems.length > 0 ? (
+                    <details className="rounded-lg border border-line bg-white">
+                      <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                        View {hiddenNeedsAttentionItems.length} more attention item{hiddenNeedsAttentionItems.length === 1 ? "" : "s"}
+                      </summary>
+                      <div className="grid gap-3 border-t border-line p-4">
+                        {hiddenNeedsAttentionItems.map((item: NeedsAttentionItem) => (
+                          <div key={item.label} className="text-sm">
+                            <p className="font-semibold text-ink">{item.label}</p>
+                            <p className="mt-1 leading-6 text-slate-600">{item.detail}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                </div>
+              )}
             </section>
           ) : null}
 
-          {assignedWorkReferrals.length > 0 ? (
+          {showsHome && assignedWorkReferrals.length > 0 ? (
             <section id="assigned" className="grid min-w-0 gap-3 sm:gap-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div className="flex items-center gap-2">
@@ -1428,29 +1485,45 @@ export default async function MyWorkPage({
                 </div>
                 <p className="text-sm text-slate-500">{assignedWorkReferrals.length} active item{assignedWorkReferrals.length === 1 ? "" : "s"}</p>
               </div>
-              {visibleAssignedWorkReferrals.map((referral: TherapistWorkReferral) => (
-                <AssignedReferralCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} />
-              ))}
-              {hiddenAssignedWorkReferrals.length > 0 ? (
+              {session.role === "therapist" ? (
                 <details className="rounded-lg border border-line bg-white">
-                  <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
-                    Show assigned work ({hiddenAssignedWorkReferrals.length} more)
+                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                    <span>Review assigned work</span>
+                    <span className="text-xs font-semibold text-blue">{assignedWorkReferrals.length} items</span>
                   </summary>
                   <div className="grid gap-4 border-t border-line p-4">
-                    {hiddenAssignedWorkReferrals.map((referral: TherapistWorkReferral) => (
+                    {assignedWorkReferrals.map((referral: TherapistWorkReferral) => (
                       <AssignedReferralCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} />
                     ))}
                   </div>
                 </details>
-              ) : null}
+              ) : (
+                <>
+                  {visibleAssignedWorkReferrals.map((referral: TherapistWorkReferral) => (
+                    <AssignedReferralCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} />
+                  ))}
+                  {hiddenAssignedWorkReferrals.length > 0 ? (
+                    <details className="rounded-lg border border-line bg-white">
+                      <summary className="cursor-pointer list-none p-4 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                        Show assigned work ({hiddenAssignedWorkReferrals.length} more)
+                      </summary>
+                      <div className="grid gap-4 border-t border-line p-4">
+                        {hiddenAssignedWorkReferrals.map((referral: TherapistWorkReferral) => (
+                          <AssignedReferralCard key={referral.id} referral={referral} selectedTherapistId={selectedTherapistId} />
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                </>
+              )}
             </section>
-          ) : (
+          ) : showsHome ? (
             <section id="assigned">
               <FieldWorkspaceEmptyState stateKey="referrals" />
             </section>
-          )}
+          ) : null}
 
-          <section id="more" className="grid min-w-0 gap-4">
+          {showsMore ? <section id="more" className="grid min-w-0 gap-4">
             <div className="flex items-center gap-2">
               <CheckCircle2 size={18} className="text-blue" />
               <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">More</h2>
@@ -1475,7 +1548,15 @@ export default async function MyWorkPage({
                 ) : null}
               </div>
             </details>
-          </section>
+            {session.role === "therapist" ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Link href="/" className="btn-secondary min-h-11 justify-center">Public site</Link>
+                <form action={logoutAction}>
+                  <button className="btn-secondary min-h-11 w-full justify-center" type="submit">Logout</button>
+                </form>
+              </div>
+            ) : null}
+          </section> : null}
         </div>
       ) : null}
     </div>

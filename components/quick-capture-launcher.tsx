@@ -57,7 +57,7 @@ export function QuickCaptureLauncher({ role }: QuickCaptureLauncherProps) {
                 Add visit
               </Link>
             ) : null}
-            <Link href={isAdmin ? "/admin/referrals/new" : "/my-work#schedule"} onClick={() => dialogRef.current?.close()} className="flex min-h-14 items-center gap-3 rounded-xl border border-line px-4 text-sm font-semibold text-ink transition hover:border-blue/40 hover:bg-ice focus:outline-none focus:ring-4 focus:ring-blue/15 motion-reduce:transition-none">
+            <Link href={isAdmin ? "/admin/referrals/new" : "/my-work?view=schedule"} onClick={() => dialogRef.current?.close()} className="flex min-h-14 items-center gap-3 rounded-xl border border-line px-4 text-sm font-semibold text-ink transition hover:border-blue/40 hover:bg-ice focus:outline-none focus:ring-4 focus:ring-blue/15 motion-reduce:transition-none">
               <StickyNote aria-hidden="true" className="text-blue" size={20} />
               {isAdmin ? "Add operational note" : "Find a visit to add a note"}
             </Link>

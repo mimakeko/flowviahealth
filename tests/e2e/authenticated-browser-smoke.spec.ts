@@ -338,7 +338,11 @@ test("authenticated Flowvia dashboard smoke is read-only and local", async ({ pa
       await login(page, therapistEmail, therapistPassword, "/my-work");
       await expect(page).toHaveURL(/\/my-work|\/dashboard/);
       await gotoProtected(page, "/my-work");
-      await expectAnyText(page, [/Today/i, /Next up/i, /New work/i], "therapist /my-work");
+      await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
+      await expect(page.getByTestId("next-field-action")).toBeVisible();
+      await expect(page.getByTestId("therapist-referral-opportunities")).toHaveCount(0);
+      await gotoProtected(page, "/my-work?view=opportunities");
+      await expect(page.getByRole("heading", { name: "New work", exact: true })).toBeVisible();
       await expect(page.getByTestId("therapist-referral-opportunities")).toBeVisible();
       if (await page.locator("[data-therapist-recommendation]").count()) {
         await expect(page.locator("[data-therapist-recommendation]").first()).toBeVisible();
@@ -402,9 +406,14 @@ test("therapist mobile field UI keeps decisions and navigation within reach", as
   for (const label of ["Opportunities", "Schedule", "More"]) {
     await expect(fieldNavigation.getByRole("link", { name: label, exact: true })).not.toHaveAttribute("aria-current", "page");
   }
+  await expect(page.getByTestId("next-field-action")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Open next visit|Open work|Review later/i })).toBeVisible();
   await fieldNavigation.getByRole("link", { name: "Opportunities", exact: true }).click();
+  await expect(page).toHaveURL(/\/my-work\?view=opportunities/);
   await expect(fieldNavigation.getByRole("link", { name: "Opportunities", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(fieldNavigation.getByRole("link", { name: "Home", exact: true })).not.toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "New work", exact: true })).toBeVisible();
+  await expect(page.getByTestId("next-field-action")).toHaveCount(0);
 
   const quickCapture = page.getByTestId("quick-capture-launcher");
   await expect(quickCapture).toBeVisible();
@@ -415,7 +424,9 @@ test("therapist mobile field UI keeps decisions and navigation within reach", as
   await quickCapture.click();
   const captureDialog = page.getByRole("dialog", { name: /Add or capture/i });
   await expect(captureDialog).toBeVisible();
-  await expect(captureDialog.getByRole("link", { name: /Find a visit to add a note/i })).toBeVisible();
+  const findVisitLink = captureDialog.getByRole("link", { name: /Find a visit to add a note/i });
+  await expect(findVisitLink).toBeVisible();
+  await expect(findVisitLink).toHaveAttribute("href", "/my-work?view=schedule");
   await expect(captureDialog.getByRole("link", { name: /New referral/i })).toHaveCount(0);
   const captureCloseButton = captureDialog.getByRole("button", { name: /Close add or capture/i });
   await expect(captureCloseButton).toBeVisible();
