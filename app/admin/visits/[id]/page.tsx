@@ -305,7 +305,7 @@ export default async function VisitDetailPage({
                 </span>
               ))}
             </div>
-            <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+            <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <div>
                 <p className="font-semibold text-ink">Current status</p>
                 <p className="mt-1 text-slate-600">{statusLabel(visit.status)}</p>

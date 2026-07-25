@@ -537,7 +537,7 @@ export default async function NewVisitPage({
               Manual review required
             </span>
           </div>
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <div className="rounded-lg bg-white/70 p-3">
               <dt className="font-semibold text-ink">Referral status</dt>
               <dd className="mt-1">

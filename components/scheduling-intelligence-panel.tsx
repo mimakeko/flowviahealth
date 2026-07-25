@@ -59,7 +59,7 @@ export function SchedulingIntelligencePanel({
         </span>
       </div>
 
-      <dl className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
         {readiness ? (
           <div className="rounded-lg border border-line bg-slate-50 p-3">
             <dt className="font-semibold text-ink">Readiness</dt>

@@ -1080,14 +1080,14 @@ export default async function ReferralDetailPage({
         <h2 className="text-xl font-semibold tracking-[-.02em] text-ink">Visits</h2>
         <div className="mt-5 space-y-5">
           {referralVisits.map((visit: ReferralDetailVisit) => (
-            <form key={visit.id} action={saveVisitAction} className="grid gap-4 rounded-lg border border-line p-4 md:grid-cols-4">
+            <form key={visit.id} action={saveVisitAction} className="grid gap-4 rounded-lg border border-line p-4 sm:grid-cols-2">
               <input type="hidden" name="referralId" value={referral.id} />
               <input type="hidden" name="visitId" value={visit.id} />
               <label className="text-sm font-semibold text-ink">Scheduled<input className="field" name="scheduledAt" type="datetime-local" defaultValue={dateTimeLocalValue(visit.scheduledAt)} /></label>
               <label className="text-sm font-semibold text-ink">Status<select className="field" name="status" defaultValue={visit.status}>{VISIT_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
               <label className="text-sm font-semibold text-ink">Therapist<select className="field" name="therapistId" defaultValue={visit.therapistId || ""}><option value="">Unassigned</option>{therapistOptions.map((therapist: TherapistOption) => <option key={therapist.id} value={therapist.id}>{therapist.name}</option>)}</select></label>
               <label className="text-sm font-semibold text-ink">Operational note<input className="field" name="notes" defaultValue={visit.notes || ""} /></label>
-              <div className="md:col-span-4"><button className="btn-secondary" type="submit"><Save size={18} />Update visit</button></div>
+              <div className="sm:col-span-2"><button className="btn-secondary" type="submit"><Save size={18} />Update visit</button></div>
             </form>
           ))}
           {referralVisits.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No visits created yet.</p> : null}
