@@ -215,7 +215,7 @@ export default async function AdminVisitsPage({
         </Link>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2">
         {summaryCards.map((card) => (
           <Link key={card.label} href={card.href} className="rounded-lg border border-line bg-white p-4 transition hover:border-blue/40 hover:bg-slate-50">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{card.label}</p>

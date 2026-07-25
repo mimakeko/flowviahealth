@@ -74,7 +74,7 @@ export default async function AdminMessagesPage() {
           </div>
         </div>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-3">
+        <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <div className="rounded-lg border border-line bg-white p-5">
             <div className="flex items-center gap-3 text-sm font-semibold text-slate-600"><MessageSquareText size={18} />Enrollments</div>
             <p className="mt-3 text-3xl font-semibold text-ink">{snapshot.enrollments.length}</p>
@@ -98,7 +98,7 @@ export default async function AdminMessagesPage() {
 
         <details className="mt-4 rounded-lg border border-line bg-white p-5">
           <summary className="cursor-pointer text-sm font-semibold text-ink">Cloud staging and policy detail</summary>
-          <dl className="mt-3 grid gap-2 text-sm md:grid-cols-2 xl:grid-cols-4">
+          <dl className="mt-3 grid gap-2 text-sm md:grid-cols-2">
             <div className="flex justify-between gap-3"><dt>Deploy target</dt><dd className="font-semibold text-ink">{deployTarget}</dd></div>
             <div className="flex justify-between gap-3"><dt>Data mode</dt><dd className="font-semibold text-ink">{dataMode.safeLabel}</dd></div>
             <div className="flex justify-between gap-3"><dt>Real SMS gate</dt><dd className="font-semibold text-ink">{telnyx.realSmsTestsEnabled ? "On" : "Off"}</dd></div>

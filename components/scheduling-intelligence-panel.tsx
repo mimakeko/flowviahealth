@@ -88,14 +88,14 @@ export function SchedulingIntelligencePanel({
       ) : null}
 
       {allCards.length > 0 ? (
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="mt-4 grid gap-3">
           {allCards.map((card) => <SchedulingReadinessCard key={`${card.label}-${card.nextAction}`} card={card} />)}
         </div>
       ) : null}
 
       {windows.length > 0 ? <div className="mt-4"><SchedulingWindowList enableUseWindowAction={enableUseWindowAction} windows={windows} /></div> : null}
 
-      <dl className="mt-4 grid gap-2 border-t border-line pt-4 text-xs text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
+      <dl className="mt-4 grid gap-2 border-t border-line pt-4 text-xs text-slate-600 sm:grid-cols-2">
         <div className="flex justify-between gap-3"><dt>Source</dt><dd className="font-semibold text-ink">deterministic</dd></div>
         <div className="flex justify-between gap-3"><dt>External maps/geocoding</dt><dd className="font-semibold text-ink">Disabled</dd></div>
         <div className="flex justify-between gap-3"><dt>Travel-time APIs</dt><dd className="font-semibold text-ink">Disabled</dd></div>

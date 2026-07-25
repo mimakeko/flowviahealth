@@ -60,7 +60,7 @@ export function OperationsAssistantPanel({
       </div>
 
       {cards.length > 0 ? (
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="mt-4 grid gap-3">
           {cards.map((card) => <OperationsAssistantCard key={`${card.label}-${card.nextAction}`} card={card} />)}
         </div>
       ) : null}

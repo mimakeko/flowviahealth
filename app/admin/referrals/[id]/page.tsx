@@ -858,7 +858,7 @@ export default async function ReferralDetailPage({
                 </div>
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {Object.entries(intakeQuality.checklist).map(([key, value]) => (
                   <p key={key} className={`rounded-md px-3 py-2 text-sm font-semibold ring-1 ${value ? "bg-emerald-50 text-emerald-900 ring-emerald-200" : "bg-amber-50 text-amber-950 ring-amber-200"}`}>
                     {value ? "Ready" : "Review"} · {key.replace(/([A-Z])/g, " $1").replace(/^has /, "").replace(/^status /, "status ").toLowerCase()}
@@ -923,15 +923,11 @@ export default async function ReferralDetailPage({
           </details>
 
           <section data-testid="therapist-recommendations" className="mt-5 rounded-lg border border-line bg-white p-5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <p className="eyebrow">Therapist recommendations</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">Recommended therapists</h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Use these as staffing suggestions only. The assigned therapist, fit label, and short reason stay visible; supporting detail is tucked behind “Why this fits.”</p>
-              </div>
-              <span className="inline-flex w-fit rounded-md bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">Manual staffing review</span>
+            <div>
+              <p className="eyebrow">Therapist recommendations</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">Recommended therapists</h2>
             </div>
-            <div className="mt-4 grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
+            <div data-testid="therapist-recommendation-list" className="mt-4 grid gap-3">
               {recommendationCards.map((recommendation) => <TherapistRecommendationCard key={recommendation.therapistId} recommendation={recommendation} />)}
             </div>
             {recommendationCards.length === 0 ? <p className="mt-4 rounded-lg bg-white p-4 text-sm text-slate-600 ring-1 ring-line">No therapist candidates are available.</p> : null}
@@ -948,7 +944,7 @@ export default async function ReferralDetailPage({
                 {opportunityStatusLabel}
               </span>
             </div>
-            <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+            <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
               {opportunitySummaryItems.map((item) => (
                 <div key={item.label} className="min-w-0 rounded-lg border border-line bg-slate-50 p-3">
                   <dt className="font-semibold text-ink">{item.label}</dt>

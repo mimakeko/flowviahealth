@@ -328,7 +328,7 @@ export default async function AdminDataStewardshipPage({
         <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-950">{errorMessage}</p>
       ) : null}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2">
         {cards.map((card) => (
           <article key={card.label} className={`rounded-lg border p-5 ${cardToneClassName(card.tone)}`}>
             <p className="text-sm font-semibold text-slate-600">{card.label}</p>

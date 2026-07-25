@@ -286,7 +286,7 @@ export default async function AdminAuditPage({
       </div>
 
       <form className="rounded-lg border border-line bg-white p-5">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <label className="text-sm font-semibold text-ink">
             Category
             <select className="field" name="category" defaultValue={selectedCategory}>

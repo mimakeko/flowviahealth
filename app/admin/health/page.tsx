@@ -301,7 +301,7 @@ export default async function AdminHealthPage() {
         </section>
       ) : null}
 
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-8 grid gap-4 sm:grid-cols-2">
         {statusMetrics.map((item) => (
           <HealthCard key={item.metric.label} icon={item.icon} metric={item.metric} />
         ))}

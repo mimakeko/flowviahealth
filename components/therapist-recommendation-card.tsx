@@ -8,6 +8,7 @@ export function TherapistRecommendationBadge({ recommendation }: { recommendatio
   return (
     <span
       data-therapist-recommendation={recommendation.fitLevel}
+      data-testid="therapist-recommendation-fit"
       className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ${therapistRecommendationClassName(recommendation)}`}
     >
       {therapistRecommendationDisplayLabel(recommendation)}
@@ -21,11 +22,11 @@ export function TherapistRecommendationCard({ recommendation }: { recommendation
   const hasHiddenDetails = recommendation.eligibility.reasons.length > 0 || supportingReasons.length > 0 || recommendation.missingData.length > 0 || recommendation.uncertainty.reasons.length > 0;
 
   return (
-    <article data-therapist-recommendation={recommendation.fitLevel} className="min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="break-words text-base font-semibold text-ink">{recommendation.therapistName}</p>
-          <p className="mt-2 break-words text-sm leading-6 text-slate-700">{primaryExplanation}</p>
+    <article data-testid="therapist-recommendation-card" data-therapist-recommendation={recommendation.fitLevel} className="min-w-0 rounded-lg border border-line bg-white p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
+        <div className="min-w-0 flex-1">
+          <p data-testid="therapist-recommendation-name" className="text-base font-semibold text-ink">{recommendation.therapistName}</p>
+          <p data-testid="therapist-recommendation-reason" className="mt-2 text-sm leading-6 text-slate-700">{primaryExplanation}</p>
         </div>
         <TherapistRecommendationBadge recommendation={recommendation} />
       </div>
