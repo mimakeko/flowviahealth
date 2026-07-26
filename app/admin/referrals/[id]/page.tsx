@@ -927,7 +927,7 @@ export default async function ReferralDetailPage({
               <p className="eyebrow">Therapist recommendations</p>
               <h2 className="mt-2 text-2xl font-semibold tracking-[-.02em] text-ink">Recommended therapists</h2>
             </div>
-            <div data-testid="therapist-recommendation-list" className="mt-4 grid gap-3">
+            <div data-testid="therapist-recommendation-list" className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr))]">
               {recommendationCards.map((recommendation) => <TherapistRecommendationCard key={recommendation.therapistId} recommendation={recommendation} />)}
             </div>
             {recommendationCards.length === 0 ? <p className="mt-4 rounded-lg bg-white p-4 text-sm text-slate-600 ring-1 ring-line">No therapist candidates are available.</p> : null}

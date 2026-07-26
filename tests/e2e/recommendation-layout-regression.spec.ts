@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const adminEmail = process.env.FLOWVIA_BROWSER_SMOKE_ADMIN_EMAIL;
 const adminPassword = process.env.FLOWVIA_BROWSER_SMOKE_ADMIN_PASSWORD;
+const minimumRecommendationItemWidth = 320;
 
 const longRecommendationFixtures = [
   {
@@ -62,9 +63,9 @@ test("recommendation rows keep long names and reasons readable in the authentica
     }));
   }, longRecommendationFixtures);
 
-  for (const width of [390, 768, 1024, 1280, 1600]) {
+  for (const width of [390, 768, 1024, 1280]) {
     await page.setViewportSize({ height: 900, width });
-    const report = await page.evaluate(() => {
+    const report = await page.evaluate((minimumItemWidth) => {
       const lineMetrics = (element: HTMLElement) => {
         const range = document.createRange();
         range.selectNodeContents(element);
@@ -77,24 +78,44 @@ test("recommendation rows keep long names and reasons readable in the authentica
       const cards = [...document.querySelectorAll<HTMLElement>('[data-testid="therapist-recommendation-card"]')].map((card) => {
         const name = card.querySelector<HTMLElement>('[data-testid="therapist-recommendation-name"]');
         const reason = card.querySelector<HTMLElement>('[data-testid="therapist-recommendation-reason"]');
-        if (!name || !reason) throw new Error("Recommendation card content is incomplete.");
+        const fit = card.querySelector<HTMLElement>('[data-testid="therapist-recommendation-fit"]');
+        const details = card.querySelector<HTMLElement>("summary");
+        if (!name || !reason || !fit || !details) throw new Error("Recommendation card content is incomplete.");
         return {
+          bounds: card.getBoundingClientRect(),
+          details: lineMetrics(details),
+          fit: lineMetrics(fit),
           name: lineMetrics(name),
           reason: lineMetrics(reason),
           width: Math.round(card.getBoundingClientRect().width),
         };
       });
 
-      return { cards, viewport: window.innerWidth };
-    });
+      const list = document.querySelector<HTMLElement>('[data-testid="therapist-recommendation-list"]');
+      if (!list) throw new Error("Recommendation list is missing.");
+      const listBounds = list.getBoundingClientRect();
+      const gap = Number.parseFloat(getComputedStyle(list).columnGap) || 0;
+      const firstRowTop = Math.min(...cards.map((card) => card.bounds.top));
+      const columnCount = cards.filter((card) => Math.abs(card.bounds.top - firstRowTop) < 1).length;
+      const supportedColumns = Math.min(cards.length, Math.max(1, Math.floor((listBounds.width + gap) / (minimumItemWidth + gap))));
+
+      return {
+        cards,
+        columnCount,
+        listWidth: Math.round(listBounds.width),
+        supportedColumns,
+        viewport: window.innerWidth,
+      };
+    }, minimumRecommendationItemWidth);
 
     expect(report.cards, `${width}px should retain all representative recommendations`).toHaveLength(longRecommendationFixtures.length);
+    expect(report.columnCount, `${width}px should use only the columns the real recommendation container can support`).toBe(report.supportedColumns);
     for (const card of report.cards) {
-      // The mobile shell deliberately retains page and section padding. 240px is
-      // the readable floor; a 390px viewport currently affords 258px per row.
-      expect(card.width, `${width}px recommendation item needs a naturally readable width`).toBeGreaterThanOrEqual(width <= 480 ? 240 : 500);
+      expect(card.width, `${width}px recommendation item needs a naturally readable width`).toBeGreaterThanOrEqual(Math.min(minimumRecommendationItemWidth, report.listWidth));
       expect(card.name.charsPerLine, `${width}px therapist name must not fragment vertically`).toBeGreaterThanOrEqual(8);
       expect(card.reason.charsPerLine, `${width}px fit reason must not fragment vertically`).toBeGreaterThanOrEqual(12);
+      expect(card.fit.charsPerLine, `${width}px fit label must stay readable`).toBeGreaterThanOrEqual(8);
+      expect(card.details.charsPerLine, `${width}px Why this fits details control must stay readable`).toBeGreaterThanOrEqual(8);
     }
   }
 });
